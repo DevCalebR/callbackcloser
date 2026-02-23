@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionStatus {
+  INACTIVE
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum LeadStatus {
+  NEW
+  QUALIFIED
+  CONTACTED
+  BOOKED
+}
+
+enum SmsConversationState {
+  NOT_STARTED
+  AWAITING_SERVICE
+  AWAITING_URGENCY
+  AWAITING_ZIP
+  AWAITING_BEST_TIME
+  AWAITING_NAME
+  COMPLETED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageParticipant {
+  LEAD
+  OWNER
+}
+
+model Business {
+  id                          String             @id @default(cuid())
+  ownerClerkId                String             @unique
+  name                        String
+  forwardingNumber            String
+  notifyPhone                 String?
+  missedCallSeconds           Int                @default(20)
+  serviceLabel1               String             @default("Repair")
+  serviceLabel2               String             @default("Install")
+  serviceLabel3               String             @default("Maintenance")
+  timezone                    String             @default("America/New_York")
+  twilioPhoneNumber           String?            @unique
+  twilioPhoneNumberSid        String?            @unique
+  twilioWebhookSyncedAt       DateTime?
+  stripeCustomerId            String?            @unique
+  stripeSubscriptionId        String?
+  stripePriceId               String?
+  subscriptionStatus          SubscriptionStatus @default(INACTIVE)
+  subscriptionStatusUpdatedAt DateTime?
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @updatedAt
+  calls                       Call[]
+  leads                       Lead[]
+  messages                    Message[]
+
+  @@index([subscriptionStatus])
+}
+
+model Call {
+  id                     String   @id @default(cuid())
+  businessId             String
+  twilioCallSid          String   @unique
+  parentCallSid          String?
+  dialCallSid            String?  @unique
+  fromPhone              String
+  fromPhoneNormalized    String
+  toPhone                String
+  toPhoneNormalized      String
+  dialCallStatus         String?
+  status                 String
+  callDurationSeconds    Int?
+  dialCallDurationSeconds Int?
+  answered               Boolean  @default(false)
+  missed                 Boolean  @default(false)
+  rawPayload             Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  business               Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  lead                   Lead?
+
+  @@index([businessId, createdAt])
+  @@index([businessId, fromPhoneNormalized])
+}
+
+model Lead {
+  id                  String               @id @default(cuid())
+  businessId          String
+  callId              String?              @unique
+  callerPhone         String
+  callerPhoneNormalized String
+  status              LeadStatus           @default(NEW)
+  billingRequired     Boolean              @default(false)
+  smsState            SmsConversationState @default(NOT_STARTED)
+  serviceRequested    String?
+  serviceSelectionRaw String?
+  urgency             String?
+  zipCode             String?
+  bestTime            String?
+  contactName         String?
+  ownerNotifiedAt     DateTime?
+  smsStartedAt        DateTime?
+  smsCompletedAt      DateTime?
+  lastInboundAt       DateTime?
+  lastOutboundAt      DateTime?
+  lastInteractionAt   DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  business            Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  call                Call?                @relation(fields: [callId], references: [id], onDelete: SetNull)
+  messages            Message[]
+
+  @@index([businessId, status])
+  @@index([businessId, billingRequired])
+  @@index([businessId, callerPhoneNormalized])
+  @@index([businessId, smsState])
+  @@index([createdAt])
+}
+
+model Message {
+  id             String             @id @default(cuid())
+  businessId     String
+  leadId         String?
+  twilioSid      String?            @unique
+  direction      MessageDirection
+  participant    MessageParticipant @default(LEAD)
+  fromPhone      String
+  toPhone        String
+  body           String
+  status         String?
+  rawPayload     Json?
+  twilioCreatedAt DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  business       Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  lead           Lead?              @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, createdAt])
+  @@index([leadId, createdAt])
+  @@index([direction])
+}
