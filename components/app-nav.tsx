@@ -14,7 +14,7 @@ const navItems = [
   { href: '/app/billing', label: 'Billing' },
 ];
 
-export function AppNav({ business }: { business: Business | null }) {
+export function AppNav({ business, demoMode = false }: { business: Business | null; demoMode?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -48,7 +48,13 @@ export function AppNav({ business }: { business: Business | null }) {
         </nav>
         <div className="flex items-center gap-3">
           {business && <p className="hidden text-sm text-muted-foreground sm:block">{business.name}</p>}
-          <UserButton afterSignOutUrl="/" />
+          {demoMode ? (
+            <div className="rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
+              Demo Workspace
+            </div>
+          ) : (
+            <UserButton afterSignOutUrl="/" />
+          )}
         </div>
       </div>
       <div className="container flex gap-2 pb-3 md:hidden">

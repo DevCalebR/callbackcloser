@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import { Manrope } from 'next/font/google';
 
+import { validateServerEnv } from '@/lib/env.server';
+
 import './globals.css';
 
 const manrope = Manrope({
@@ -15,6 +17,8 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  validateServerEnv();
+
   return (
     <ClerkProvider>
       <html lang="en">

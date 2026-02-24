@@ -1,5 +1,7 @@
+import { getConfiguredAppBaseUrl } from '@/lib/env.server';
+
 export function getAppBaseUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  return getConfiguredAppBaseUrl() || 'http://localhost:3000';
 }
 
 export function absoluteUrl(path: string) {

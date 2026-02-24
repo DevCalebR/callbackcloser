@@ -1,5 +1,7 @@
 import twilio from 'twilio';
 
+import { getConfiguredAppBaseUrl } from '@/lib/env.server';
+
 let twilioClient: ReturnType<typeof twilio> | null = null;
 
 export type TwilioWebhookConfig = {
@@ -24,14 +26,14 @@ export function getTwilioClient() {
 }
 
 export function getTwilioWebhookConfig(): TwilioWebhookConfig {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (!appUrl) {
+  const appBaseUrl = getConfiguredAppBaseUrl();
+  if (!appBaseUrl) {
     throw new Error('Missing NEXT_PUBLIC_APP_URL');
   }
 
   let parsed: URL;
   try {
-    parsed = new URL(appUrl);
+    parsed = new URL(appBaseUrl);
   } catch {
     throw new Error('NEXT_PUBLIC_APP_URL must be a valid URL');
   }
@@ -45,15 +47,15 @@ export function getTwilioWebhookConfig(): TwilioWebhookConfig {
     throw new Error('Missing TWILIO_WEBHOOK_AUTH_TOKEN');
   }
 
-  const appBaseUrl = parsed.toString().replace(/\/$/, '');
+  const normalizedBaseUrl = parsed.toString().replace(/\/$/, '');
   const buildUrl = (path: string) => {
-    const next = new URL(path, `${appBaseUrl}/`);
+    const next = new URL(path, `${normalizedBaseUrl}/`);
     next.searchParams.set('webhook_token', webhookToken);
     return next.toString();
   };
 
   return {
-    appBaseUrl,
+    appBaseUrl: normalizedBaseUrl,
     voiceUrl: buildUrl('/api/twilio/voice'),
     smsUrl: buildUrl('/api/twilio/sms'),
     statusUrl: buildUrl('/api/twilio/status'),

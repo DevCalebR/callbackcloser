@@ -8,6 +8,7 @@ import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { formatDateTime, leadStatusLabels, leadStatusOrder, smsStateLabels } from '@/lib/lead-presenters';
+import { getPortfolioDemoBlockedCount, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { isSubscriptionActive } from '@/lib/subscription';
 import { cn } from '@/lib/utils';
 
@@ -16,23 +17,26 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Recor
   const rawFilter = typeof searchParams?.status === 'string' ? searchParams.status.toUpperCase() : 'ALL';
   const statusFilter = Object.values(LeadStatus).includes(rawFilter as LeadStatus) ? (rawFilter as LeadStatus) : null;
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
+  const demoMode = isPortfolioDemoMode();
 
-  const [leads, blockedCount] = await Promise.all([
-    db.lead.findMany({
-      where: {
-        businessId: business.id,
-        ...(statusFilter ? { status: statusFilter } : {}),
-      },
-      include: {
-        messages: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
-      orderBy: [{ createdAt: 'desc' }],
-    }),
-    db.lead.count({ where: { businessId: business.id, billingRequired: true } }),
-  ]);
+  const [leads, blockedCount] = demoMode
+    ? [getPortfolioDemoLeads(statusFilter), getPortfolioDemoBlockedCount()]
+    : await Promise.all([
+        db.lead.findMany({
+          where: {
+            businessId: business.id,
+            ...(statusFilter ? { status: statusFilter } : {}),
+          },
+          include: {
+            messages: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+          orderBy: [{ createdAt: 'desc' }],
+        }),
+        db.lead.count({ where: { businessId: business.id, billingRequired: true } }),
+      ]);
 
   return (
     <div className="space-y-6">

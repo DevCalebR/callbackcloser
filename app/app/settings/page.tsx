@@ -1,5 +1,6 @@
 import { requireBusiness } from '@/lib/auth';
 import { formatPhoneForDisplay } from '@/lib/phone';
+import { getPortfolioDemoTwilioNumbers, getPortfolioDemoWebhookConfig, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getTwilioClient, getTwilioWebhookConfig } from '@/lib/twilio';
 import { saveBusinessSettingsAction, buyTwilioNumberAction, connectExistingTwilioNumberAction, resyncTwilioWebhooksAction } from '@/app/app/settings/actions';
 import { CopyValueButton } from '@/components/copy-value-button';
@@ -10,6 +11,7 @@ import { Label } from '@/components/ui/label';
 
 export default async function SettingsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
+  const demoMode = isPortfolioDemoMode();
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const saved = searchParams?.saved === '1';
   const numberBought = searchParams?.numberBought === '1';
@@ -26,25 +28,33 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       }
     | undefined;
 
-  try {
-    twilioWebhookConfig = getTwilioWebhookConfig();
-  } catch (twilioError) {
-    twilioWebhookConfigError = twilioError instanceof Error ? twilioError.message : 'Failed to compute Twilio webhook URLs';
+  if (demoMode) {
+    twilioWebhookConfig = getPortfolioDemoWebhookConfig();
+  } else {
+    try {
+      twilioWebhookConfig = getTwilioWebhookConfig();
+    } catch (twilioError) {
+      twilioWebhookConfigError = twilioError instanceof Error ? twilioError.message : 'Failed to compute Twilio webhook URLs';
+    }
   }
 
   let existingTwilioNumberError: string | undefined;
   let existingTwilioNumbers: Array<{ sid: string; phoneNumber: string; friendlyName: string | null }> = [];
 
-  try {
-    const client = getTwilioClient();
-    const numbers = await client.incomingPhoneNumbers.list({ limit: 50 });
-    existingTwilioNumbers = numbers.map((number) => ({
-      sid: number.sid,
-      phoneNumber: number.phoneNumber,
-      friendlyName: number.friendlyName || null,
-    }));
-  } catch (twilioError) {
-    existingTwilioNumberError = twilioError instanceof Error ? twilioError.message : 'Failed to load Twilio incoming phone numbers';
+  if (demoMode) {
+    existingTwilioNumbers = getPortfolioDemoTwilioNumbers();
+  } else {
+    try {
+      const client = getTwilioClient();
+      const numbers = await client.incomingPhoneNumbers.list({ limit: 50 });
+      existingTwilioNumbers = numbers.map((number) => ({
+        sid: number.sid,
+        phoneNumber: number.phoneNumber,
+        friendlyName: number.friendlyName || null,
+      }));
+    } catch (twilioError) {
+      existingTwilioNumberError = twilioError instanceof Error ? twilioError.message : 'Failed to load Twilio incoming phone numbers';
+    }
   }
 
   const selectedExistingNumberSid = business.twilioPhoneNumberSid || existingTwilioNumbers[0]?.sid || '';

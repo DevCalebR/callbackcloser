@@ -3,6 +3,10 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 const isProtectedRoute = createRouteMatcher(['/app(.*)', '/api/stripe/checkout(.*)', '/api/stripe/portal(.*)']);
 
 export default clerkMiddleware(async (auth, req) => {
+  if (process.env.PORTFOLIO_DEMO_MODE === '1') {
+    return;
+  }
+
   if (isProtectedRoute(req)) {
     await auth.protect();
   }

@@ -44,7 +44,7 @@ npm install
 
 ### 2. Create and configure Postgres
 
-Create a Postgres database named `callbackcloser` (or any name you prefer), then set `DATABASE_URL` in `.env`.
+Create a Postgres database named `callbackcloser` (or any name you prefer), then set `DATABASE_URL` in `.env.local`.
 
 Example:
 
@@ -54,7 +54,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/callbackcloser?schema
 
 ### 3. Fill in environment variables
 
-Copy `.env.example` to `.env` if needed, then fill all required values.
+Copy `.env.example` to `.env.local` if needed, then fill all required values.
 
 Required categories:
 
@@ -89,7 +89,7 @@ Open `http://localhost:3000`, sign up, then go to `/app/onboarding` if not redir
 ## Clerk Setup (Required)
 
 1. Create a Clerk application.
-2. Copy these values into `.env`:
+2. Copy these values into `.env.local`:
    - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
    - `CLERK_SECRET_KEY`
 3. In Clerk dashboard, add redirect URLs (local + production):
@@ -140,7 +140,7 @@ Set the resulting endpoint signing secret as:
 stripe listen --forward-to localhost:3000/api/stripe/webhook
 ```
 
-Copy the printed webhook signing secret into `.env`.
+Copy the printed webhook signing secret into `.env.local`.
 
 ## Twilio Setup (Required)
 
@@ -225,7 +225,7 @@ Prisma models included:
 
 1. Push repo to Git.
 2. Import project in Vercel.
-3. Add all environment variables from `.env`.
+3. Add all environment variables from `.env.local` (or from your secret manager).
 4. Set `NEXT_PUBLIC_APP_URL` to your production origin, e.g. `https://app.example.com`.
 5. Run Prisma migrations against your production database:
    - Either via CI/CD step: `npx prisma migrate deploy`
@@ -252,3 +252,4 @@ Prisma models included:
 - Twilio webhook verification is a shared-secret check (header + query fallback), not full `X-Twilio-Signature` verification.
 - Outbound lead/owner messages are sent via Twilio REST API so their `twilioSid` can be persisted.
 - For simplicity, this MVP assumes one owner-managed business per Clerk user.
+- Folders matching `upwork_pack*`, `portfolio_*`, and `upwork_gallery_images/` are generated export/demo artifacts and are not part of the app source; they are ignored by Git/TypeScript/ESLint.

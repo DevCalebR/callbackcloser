@@ -1,5 +1,6 @@
 # secrets
 .env
+.env.local
 .env.*
 !.env.example
 
@@ -8,6 +9,15 @@ node_modules
 .next
 out
 .vercel
+upwork_pack*/
+upwork_pack*.zip
+upwork_gallery_images/
+portfolio_*/
+scripts/__pycache__/
+scripts/make_upwork_pack.py
+scripts/capture_portfolio_demo_video.py
+scripts/capture_portfolio_screenshots.py
+scripts/prepare_upwork_gallery_images.py
 
 # logs
 npm-debug.log*

@@ -20,5 +20,15 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "upwork_pack",
+    "upwork_pack 2",
+    "upwork_pack*",
+    "upwork_pack*/**",
+    "upwork_gallery_images",
+    "upwork_gallery_images/**",
+    "portfolio_*",
+    "portfolio_*/**"
+  ]
 }

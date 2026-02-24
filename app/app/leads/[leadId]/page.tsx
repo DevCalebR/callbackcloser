@@ -10,18 +10,21 @@ import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { formatDateTime, leadStatusLabels, leadStatusOrder, smsStateLabels } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
+import { getPortfolioDemoLeadDetail, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
 export default async function LeadDetailPage({ params, searchParams }: { params: { leadId: string }; searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
-  const lead = await db.lead.findFirst({
-    where: { id: params.leadId, businessId: business.id },
-    include: {
-      call: true,
-      messages: {
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-  });
+  const lead = isPortfolioDemoMode()
+    ? getPortfolioDemoLeadDetail(params.leadId)
+    : await db.lead.findFirst({
+        where: { id: params.leadId, businessId: business.id },
+        include: {
+          call: true,
+          messages: {
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
 
   if (!lead) notFound();
 
