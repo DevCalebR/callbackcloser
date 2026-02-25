@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { buildNextPublicAppUrlErrorMessage, resolveConfiguredAppBaseUrl } from './app-url.ts';
+
 type EnvSpec = {
   name: string;
   provider: 'Vercel' | 'Database' | 'Clerk' | 'Stripe' | 'Twilio';
@@ -29,31 +31,45 @@ const ENV_SPECS: EnvSpec[] = [
 ];
 
 let validated = false;
+let appUrlFallbackWarningLogged = false;
+let appUrlConfigErrorLogged = false;
 
 function isNextBuildPrerenderPhase() {
   return process.env.NEXT_PHASE === 'phase-production-build';
 }
 
+function logAppUrlFallbackWarning(resolution: ReturnType<typeof resolveConfiguredAppBaseUrl>) {
+  if (appUrlFallbackWarningLogged || !resolution.usedFallback || !resolution.sourceUsed) return;
+  appUrlFallbackWarningLogged = true;
+
+  console.warn('NEXT_PUBLIC_APP_URL is missing or invalid; using Vercel fallback app URL', {
+    sourceUsed: resolution.sourceUsed,
+    nextPublicAppUrlState: resolution.nextPublicAppUrlState,
+    vercelEnv: process.env.VERCEL_ENV ?? null,
+  });
+}
+
 function getMissingEnvVars() {
-  return ENV_SPECS.filter((spec) => spec.requiredInProduction && !process.env[spec.name]?.trim());
+  return ENV_SPECS.filter((spec) => {
+    if (!spec.requiredInProduction) return false;
+    if (spec.name === 'NEXT_PUBLIC_APP_URL') return false;
+    return !process.env[spec.name]?.trim();
+  });
 }
 
 function validateAppUrl() {
-  const raw = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (!raw) return;
-
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new Error(
-      'Invalid environment configuration: NEXT_PUBLIC_APP_URL must be a valid absolute URL (e.g. https://app.example.com).'
-    );
+  const resolution = resolveConfiguredAppBaseUrl();
+  if (resolution.appUrlResolved) {
+    logAppUrlFallbackWarning(resolution);
+    return;
   }
 
-  if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
-    throw new Error('Invalid environment configuration: NEXT_PUBLIC_APP_URL must use https:// in production.');
+  const message = buildNextPublicAppUrlErrorMessage(resolution);
+  if (!appUrlConfigErrorLogged) {
+    appUrlConfigErrorLogged = true;
+    console.error(message);
   }
+  throw new Error(message);
 }
 
 function validateDatabaseUrl() {
@@ -99,9 +115,12 @@ export function validateServerEnv() {
 }
 
 export function getConfiguredAppBaseUrl() {
-  const raw = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (!raw) return null;
-  return raw.replace(/\/$/, '');
+  const resolution = resolveConfiguredAppBaseUrl();
+  if (resolution.appUrlResolved) {
+    logAppUrlFallbackWarning(resolution);
+  }
+  return resolution.appUrlResolved;
 }
 
 export const productionEnvSpecs = ENV_SPECS;
+export { resolveConfiguredAppBaseUrl };

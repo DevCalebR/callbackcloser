@@ -12,7 +12,7 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 
 | Variable | Visibility | Required | Provider / Owner | Notes |
 |---|---|---:|---|---|
-| `NEXT_PUBLIC_APP_URL` | Public (`NEXT_PUBLIC_`) | Yes | Vercel | Canonical app URL. Must be `https://` in production. Used for redirects and Twilio webhook sync URLs. |
+| `NEXT_PUBLIC_APP_URL` | Public (`NEXT_PUBLIC_`) | Yes | Vercel | Canonical app URL. Must be a full absolute `https://` URL in Vercel Production/Preview (for example `https://callbackcloser.com`). Used for redirects and Twilio webhook sync URLs. |
 | `DATABASE_URL` | Server-only | Yes | Neon / Vercel | Prisma runtime connection string. Use the **Neon pooled (`-pooler`) URL** for app/serverless runtime. Include `sslmode=require`. |
 | `DIRECT_DATABASE_URL` | Server-only | Yes (for Prisma migrations / deploys) | Neon / Vercel | Prisma direct connection for migrations (`directUrl`). Use the **Neon direct (non-`-pooler`) endpoint** with `sslmode=require`. |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Public (`NEXT_PUBLIC_`) | Yes | Clerk / Vercel | Clerk frontend key. |
@@ -22,8 +22,8 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Public (`NEXT_PUBLIC_`) | Optional (future client-side Stripe usage) | Stripe / Vercel | Included in template for completeness. |
 | `STRIPE_SECRET_KEY` | Server-only | Yes | Stripe / Vercel | Server Stripe API key. |
 | `STRIPE_WEBHOOK_SECRET` | Server-only | Yes | Stripe / Vercel | Endpoint signing secret for `/api/stripe/webhook`. |
-| `STRIPE_PRICE_STARTER` | Server-only | Yes | Stripe / Vercel | Starter plan Price ID. |
-| `STRIPE_PRICE_PRO` | Server-only | Yes | Stripe / Vercel | Pro plan Price ID. |
+| `STRIPE_PRICE_STARTER` | Server-only | Yes | Stripe / Vercel | Starter plan Price ID. Also used for conversation usage-limit tier mapping. |
+| `STRIPE_PRICE_PRO` | Server-only | Yes | Stripe / Vercel | Pro plan Price ID. Also used for conversation usage-limit tier mapping. |
 | `TWILIO_ACCOUNT_SID` | Server-only | Yes | Twilio / Vercel | Twilio account SID. |
 | `TWILIO_AUTH_TOKEN` | Server-only | Yes | Twilio / Vercel | Twilio auth token. |
 | `TWILIO_WEBHOOK_AUTH_TOKEN` | Server-only | Yes | App-generated secret / Vercel | Shared secret used by Twilio webhook auth checks. |
@@ -34,8 +34,10 @@ The app now validates required server env vars at runtime in production via `lib
 
 - Missing required vars throw a clear startup error with the variable names and provider hints.
 - `NEXT_PUBLIC_APP_URL` must be a valid absolute URL and use `https://` in production.
+- If `NEXT_PUBLIC_APP_URL` is missing or invalid, the app will try a safe fallback from Vercel system env vars (`VERCEL_URL` / `VERCEL_PROJECT_PRODUCTION_URL`) to avoid auth-page crashes, but you should still set `NEXT_PUBLIC_APP_URL` explicitly.
 - `DATABASE_URL` is checked for Neon compatibility (`sslmode=require`) when using a `neon.tech` host.
 - `DIRECT_DATABASE_URL` is used by Prisma for direct migration connections (`directUrl`) and should be set in Vercel for builds/deploy workflows that run Prisma commands.
+- `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` are required in production so the app can map active subscriptions to Starter/Pro usage limits.
 
 ## Vercel: Preview vs Production
 
@@ -65,3 +67,18 @@ Twilio webhook syncing uses `NEXT_PUBLIC_APP_URL`. If you run webhook sync actio
 - Redeploy the app (or trigger a new deployment)
 - Re-run Twilio webhook sync if the production app URL changed
 - Verify Stripe webhook endpoint is pointing at the correct environment URL
+
+## Troubleshooting: "NEXT_PUBLIC_APP_URL must be a valid absolute URL"
+
+If sign-in/sign-up or other server-rendered pages fail in production with an error about `NEXT_PUBLIC_APP_URL`:
+
+1. In Vercel, open **Project Settings -> Environment Variables**.
+2. Set `NEXT_PUBLIC_APP_URL` in the correct environment (`Production` and/or `Preview`) to a full URL including `https://`.
+   - Example: `https://callbackcloser.com`
+3. Redeploy.
+
+Notes:
+
+- A value like `callbackcloser.com` (missing `https://`) is invalid.
+- A stale preview URL can break redirects/webhook sync behavior; update it when needed.
+- For debugging, `/api/debug/env` returns the resolved app URL source in non-production. In production, protect it by setting `DEBUG_ENV_ENDPOINT_TOKEN` and calling `/api/debug/env?token=...`.

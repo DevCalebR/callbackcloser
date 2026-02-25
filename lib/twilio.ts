@@ -1,6 +1,6 @@
 import twilio from 'twilio';
 
-import { getConfiguredAppBaseUrl } from '@/lib/env.server';
+import { getConfiguredAppBaseUrl, resolveConfiguredAppBaseUrl } from '@/lib/env.server';
 
 let twilioClient: ReturnType<typeof twilio> | null = null;
 
@@ -28,18 +28,23 @@ export function getTwilioClient() {
 export function getTwilioWebhookConfig(): TwilioWebhookConfig {
   const appBaseUrl = getConfiguredAppBaseUrl();
   if (!appBaseUrl) {
-    throw new Error('Missing NEXT_PUBLIC_APP_URL');
+    const resolution = resolveConfiguredAppBaseUrl();
+    const state = resolution.nextPublicAppUrlState === 'missing' ? 'missing' : 'invalid';
+    throw new Error(
+      `Missing Twilio webhook app URL: NEXT_PUBLIC_APP_URL is ${state} and no Vercel fallback URL is available. ` +
+        'Set NEXT_PUBLIC_APP_URL to an absolute https URL (for example https://callbackcloser.com).'
+    );
   }
 
   let parsed: URL;
   try {
     parsed = new URL(appBaseUrl);
   } catch {
-    throw new Error('NEXT_PUBLIC_APP_URL must be a valid URL');
+    throw new Error('Configured app URL must be a valid absolute URL');
   }
 
   if (parsed.protocol !== 'https:') {
-    throw new Error('NEXT_PUBLIC_APP_URL must use https:// for Twilio webhooks');
+    throw new Error('Configured app URL must use https:// for Twilio webhooks');
   }
 
   const webhookToken = process.env.TWILIO_WEBHOOK_AUTH_TOKEN?.trim();
