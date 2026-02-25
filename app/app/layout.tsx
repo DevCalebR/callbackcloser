@@ -5,6 +5,8 @@ import { AppNav } from '@/components/app-nav';
 import { db } from '@/lib/db';
 import { getPortfolioDemoBusiness, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   if (isPortfolioDemoMode()) {
     return (

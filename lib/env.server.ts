@@ -30,6 +30,10 @@ const ENV_SPECS: EnvSpec[] = [
 
 let validated = false;
 
+function isNextBuildPrerenderPhase() {
+  return process.env.NEXT_PHASE === 'phase-production-build';
+}
+
 function getMissingEnvVars() {
   return ENV_SPECS.filter((spec) => spec.requiredInProduction && !process.env[spec.name]?.trim());
 }
@@ -75,6 +79,7 @@ function validateDatabaseUrl() {
 export function validateServerEnv() {
   if (validated) return;
   if (process.env.NODE_ENV !== 'production') return;
+  if (isNextBuildPrerenderPhase()) return;
 
   const missing = getMissingEnvVars();
   if (missing.length > 0) {
