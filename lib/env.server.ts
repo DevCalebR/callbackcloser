@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { buildNextPublicAppUrlErrorMessage, resolveConfiguredAppBaseUrl } from './app-url.ts';
+import { buildNextPublicAppUrlErrorMessage, resolveConfiguredAppBaseUrl } from './app-url';
 
 type EnvSpec = {
   name: string;
