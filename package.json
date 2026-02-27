@@ -6,13 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "node --test --experimental-strip-types --experimental-specifier-resolution=node tests/twilio-*.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
+    "db:smoke": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/db_smoke.ts",
     "db:studio": "prisma studio",
+    "env:check": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/check_env.ts",
+    "webhooks:print": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/print_webhook_urls.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

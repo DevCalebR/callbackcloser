@@ -9,6 +9,7 @@ node_modules
 .next
 out
 .vercel
+tsconfig.tsbuildinfo
 upwork_pack*/
 upwork_pack*.zip
 upwork_gallery_images/

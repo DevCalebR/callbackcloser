@@ -66,34 +66,40 @@ model Business {
   calls                       Call[]
   leads                       Lead[]
   messages                    Message[]
+  smsConsents                 SmsConsent[]
 
   @@index([subscriptionStatus])
 }
 
 model Call {
-  id                     String   @id @default(cuid())
-  businessId             String
-  twilioCallSid          String   @unique
-  parentCallSid          String?
-  dialCallSid            String?  @unique
-  fromPhone              String
-  fromPhoneNormalized    String
-  toPhone                String
-  toPhoneNormalized      String
-  dialCallStatus         String?
-  status                 String
-  callDurationSeconds    Int?
-  dialCallDurationSeconds Int?
-  answered               Boolean  @default(false)
-  missed                 Boolean  @default(false)
-  rawPayload             Json?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  business               Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  lead                   Lead?
+  id                       String   @id @default(cuid())
+  businessId               String
+  twilioCallSid            String   @unique
+  parentCallSid            String?
+  dialCallSid              String?  @unique
+  fromPhone                String
+  fromPhoneNormalized      String
+  toPhone                  String
+  toPhoneNormalized        String
+  dialCallStatus           String?
+  status                   String
+  callDurationSeconds      Int?
+  dialCallDurationSeconds  Int?
+  recordingSid             String?
+  recordingUrl             String?
+  recordingStatus          String?
+  recordingDurationSeconds Int?
+  answered                 Boolean  @default(false)
+  missed                   Boolean  @default(false)
+  rawPayload               Json?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  business                 Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  lead                     Lead?
 
   @@index([businessId, createdAt])
   @@index([businessId, fromPhoneNormalized])
+  @@index([recordingSid])
 }
 
 model Lead {
@@ -151,4 +157,23 @@ model Message {
   @@index([businessId, createdAt])
   @@index([leadId, createdAt])
   @@index([direction])
+}
+
+model SmsConsent {
+  id               String    @id @default(cuid())
+  businessId       String
+  phoneNormalized  String
+  phoneRawLastSeen String?
+  optedOut         Boolean   @default(false)
+  optedOutAt       DateTime?
+  optedInAt        DateTime?
+  lastKeyword      String?
+  lastMessageSid   String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  business         Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, phoneNormalized])
+  @@index([businessId, optedOut])
+  @@index([phoneNormalized])
 }

@@ -32,7 +32,9 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - Lead dashboard + filters + lead detail transcript + status updates
 - Stripe billing page + checkout + billing portal
 - Stripe webhook sync for subscription status gating
-- Shared-secret Twilio webhook protection (header check, plus query fallback for MVP)
+- SMS compliance commands (`STOP` / `START` / `HELP`) with DB-backed opt-out state
+- Call recording enabled on forwarded calls + recording metadata captured on callbacks
+- Twilio webhook protection: shared token (header/query) plus optional `X-Twilio-Signature` validation
 
 ## Local Setup
 
@@ -85,6 +87,23 @@ npm run dev
 ```
 
 Open `http://localhost:3000`, sign up, then go to `/app/onboarding` if not redirected automatically.
+
+### 6. Recommended local verification
+
+```bash
+npm run env:check
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Optional helper commands:
+
+```bash
+npm run webhooks:print
+npm run db:smoke
+```
 
 ## Clerk Setup (Required)
 
@@ -151,6 +170,7 @@ Set:
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_WEBHOOK_AUTH_TOKEN` (your shared secret used by this app)
+- `TWILIO_VALIDATE_SIGNATURE` (optional, set to `true` to enforce `X-Twilio-Signature` validation)
 
 ### Twilio number provisioning (recommended)
 
@@ -163,6 +183,12 @@ Set:
 
 If you configure a Twilio number manually in the Twilio Console, use:
 
+You can print the exact URLs from your current env with:
+
+```bash
+npm run webhooks:print
+```
+
 - **Voice webhook (A CALL COMES IN)**
   - Method: `POST`
   - URL: `https://YOUR_DOMAIN/api/twilio/voice?webhook_token=YOUR_TWILIO_WEBHOOK_AUTH_TOKEN`
@@ -170,9 +196,13 @@ If you configure a Twilio number manually in the Twilio Console, use:
   - Method: `POST`
   - URL: `https://YOUR_DOMAIN/api/twilio/sms?webhook_token=YOUR_TWILIO_WEBHOOK_AUTH_TOKEN`
 
+The `/api/twilio/status` callback URL is set automatically by the TwiML returned from `/api/twilio/voice` (the `<Dial action="...">` URL includes the same `webhook_token`).
+
 Notes:
 
-- The app also supports a shared-secret **header** check (`x-callbackcloser-webhook-token`) for MVP verification.
+- The app supports a shared-secret **header** check (`x-callbackcloser-webhook-token`) plus query fallback (`webhook_token=...`) for console-based setup.
+- Optional: set `TWILIO_VALIDATE_SIGNATURE=true` to require Twilio `X-Twilio-Signature` validation (recommended in production).
+- When signature validation is enabled, production requests fail closed if the signature is missing/invalid.
 - Some Twilio Console surfaces do not expose custom header configuration, so query param fallback is supported for direct console setup.
 - `/api/twilio/status` is called automatically by the TwiML generated from `/api/twilio/voice`.
 
@@ -183,15 +213,19 @@ Notes:
 - Looks up the `Business` by called Twilio number (`To`)
 - Returns TwiML `<Dial>` to `business.forwardingNumber`
 - Uses `timeout = business.missedCallSeconds`
-- Sets dial action callback to `/api/twilio/status`
+- Enables call recording on `<Dial>` (`record-from-answer-dual`)
+- Sets both dial action callback and recording status callback to `/api/twilio/status`
+- Returns `401` for invalid/missing webhook auth token and logs a structured webhook event
 
 ### Dial status: `/api/twilio/status`
 
 - Records/upserts `Call`
 - Marks answered vs missed using `DialCallStatus`
+- Captures recording metadata when Twilio sends recording status callbacks (`RecordingSid`, `RecordingUrl`, `RecordingStatus`, `RecordingDuration`)
 - Creates missed-call `Lead` if needed (idempotent)
 - Starts SMS flow only when billing is active
 - If billing inactive: lead is still recorded and `billingRequired=true`
+- Duplicate/retried callbacks are safe: `Call` is upserted by `twilioCallSid`, `Lead` is reused by `callId`, and an already-started SMS thread (`smsStartedAt`) is not started again
 
 ### SMS: `/api/twilio/sms`
 
@@ -204,6 +238,33 @@ State machine steps (persisted on `Lead.smsState`):
 5. Optional name
 
 After ZIP is collected, the owner receives a summary SMS + lead link (if `notifyPhone` is set).
+
+Compliance handling:
+
+- Inbound `STOP` / `STOPALL` / `UNSUBSCRIBE` / `CANCEL` / `END` / `QUIT` marks the sender opted-out in DB and returns a confirmation
+- Inbound `START` / `YES` / `UNSTOP` clears opt-out and confirms
+- Inbound `HELP` returns a help message with app name + instructions
+- Future outbound SMS to an opted-out recipient is suppressed until they opt back in (`START`)
+
+Security / idempotency notes:
+
+- Invalid webhook token -> `401`
+- Duplicate inbound SMS retries with the same `MessageSid` are deduped via `Message.twilioSid` and ignored after persistence check
+- Webhook handlers log structured events (`callSid` / `messageSid`, event type, decision)
+
+## How Recordings Work
+
+Current behavior:
+
+- Forwarded calls are recorded via TwiML `<Dial record="record-from-answer-dual">`
+- The app stores recording metadata on `Call` (`recordingSid`, `recordingUrl`, `recordingStatus`, `recordingDurationSeconds`) when Twilio posts recording callbacks to `/api/twilio/status`
+- The app does **not** proxy/download recording audio files; recordings remain hosted in Twilio unless you add a separate ingestion/storage pipeline
+
+Where to access recordings:
+
+- Twilio Console -> Monitor -> Calls (or Call Logs / Recordings, depending on account UI)
+- Database (`Call.recording*` fields) for metadata lookup / correlation
+- The app does not currently surface recordings in the dashboard UI
 
 ## Billing Gating Behavior
 
@@ -221,17 +282,22 @@ Prisma models included:
 - `Message`
 - `Call`
 
-## Deploying to Vercel
+## Production Setup (Vercel)
 
 1. Push repo to Git.
 2. Import project in Vercel.
 3. Add all environment variables from `.env.local` (or from your secret manager).
+   - Quick check: `npm run env:check`
 4. Set `NEXT_PUBLIC_APP_URL` to your production origin, e.g. `https://app.example.com`.
 5. Run Prisma migrations against your production database:
    - Either via CI/CD step: `npx prisma migrate deploy`
    - Or manually once after deploy
 6. Configure Stripe webhook to the Vercel domain.
 7. Configure Twilio phone number webhooks (or buy the number through the app after deploy).
+   - Helper: `npm run webhooks:print` (redacts the shared token by default)
+8. Confirm `NEXT_PUBLIC_APP_URL` is set in both `Production` and (if used) `Preview`, and includes `https://`.
+9. Optionally set `DEBUG_ENV_ENDPOINT_TOKEN`, then verify app URL resolution:
+   - `https://YOUR_DOMAIN/api/debug/env?token=YOUR_DEBUG_ENV_ENDPOINT_TOKEN`
 
 ## Useful Routes
 
@@ -249,7 +315,29 @@ Prisma models included:
 
 ## Notes / MVP Constraints
 
-- Twilio webhook verification is a shared-secret check (header + query fallback), not full `X-Twilio-Signature` verification.
+- Twilio webhook verification supports shared-token checks (header + query fallback) and optional `X-Twilio-Signature` validation (env-gated).
 - Outbound lead/owner messages are sent via Twilio REST API so their `twilioSid` can be persisted.
 - For simplicity, this MVP assumes one owner-managed business per Clerk user.
 - Folders matching `upwork_pack*`, `portfolio_*`, and `upwork_gallery_images/` are generated export/demo artifacts and are not part of the app source; they are ignored by Git/TypeScript/ESLint.
+
+## Troubleshooting
+
+### "Invalid environment configuration: NEXT_PUBLIC_APP_URL ..."
+
+- Set `NEXT_PUBLIC_APP_URL` in Vercel -> Project Settings -> Environment Variables (Production and Preview as needed)
+- Use a full URL including `https://` (for example `https://callbackcloser.com`)
+- After updating env vars, redeploy
+- Optional: use `/api/debug/env` (token-protected in production) to confirm which app URL source was resolved
+
+### Twilio webhooks returning 401
+
+- If using shared-token mode: confirm `TWILIO_WEBHOOK_AUTH_TOKEN` is set on the app and the same token is in Twilio webhook URLs (`?webhook_token=...`) or a supported header
+- If using signature mode: confirm `TWILIO_VALIDATE_SIGNATURE=true`, `TWILIO_AUTH_TOKEN` matches the Twilio account token, and Twilio is calling the exact production URL
+- Reprint expected URLs with `npm run webhooks:print`
+- Re-sync webhooks from `/app/settings` after changing `NEXT_PUBLIC_APP_URL` or the webhook token
+
+### Prisma CLI says env var is missing
+
+- Keep app envs in `.env.local`
+- Create a root `.env` (gitignored) with `DATABASE_URL` and `DIRECT_DATABASE_URL` for Prisma CLI
+- See `docs/DB_NEON_PRISMA.md`

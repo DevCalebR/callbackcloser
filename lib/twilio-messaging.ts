@@ -2,6 +2,8 @@ import { Prisma, MessageParticipant } from '@prisma/client';
 
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
+import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
 import { getTwilioClient } from '@/lib/twilio';
 
 export async function persistInboundMessage(params: {
@@ -61,6 +63,21 @@ export async function sendAndPersistOutboundMessage(params: {
 }) {
   const from = normalizePhoneNumber(params.fromPhone) || params.fromPhone;
   const to = normalizePhoneNumber(params.toPhone) || params.toPhone;
+  const participant = params.participant ?? 'LEAD';
+
+  if (await isSmsRecipientOptedOut({ businessId: params.businessId, phone: to })) {
+    logTwilioWarn('messaging', 'outbound_suppressed_opted_out', {
+      decision: 'suppress_opted_out',
+      businessId: params.businessId,
+      leadId: params.leadId ?? null,
+      participant,
+      toPhone: to,
+    });
+    return {
+      suppressed: true as const,
+      reason: 'recipient_opted_out' as const,
+    };
+  }
 
   const client = getTwilioClient();
   const sent = await client.messages.create({
@@ -75,7 +92,7 @@ export async function sendAndPersistOutboundMessage(params: {
       leadId: params.leadId ?? null,
       twilioSid: sent.sid,
       direction: 'OUTBOUND',
-      participant: params.participant ?? 'LEAD',
+      participant,
       fromPhone: from,
       toPhone: to,
       body: params.body,
@@ -84,7 +101,15 @@ export async function sendAndPersistOutboundMessage(params: {
     },
   });
 
-  return { sent, message };
+  logTwilioInfo('messaging', 'outbound_sent_and_persisted', {
+    decision: 'sent',
+    messageSid: sent.sid,
+    businessId: params.businessId,
+    leadId: params.leadId ?? null,
+    participant,
+  });
+
+  return { suppressed: false as const, sent, message };
 }
 
 export function buildOwnerNotificationMessage(params: {
