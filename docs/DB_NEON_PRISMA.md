@@ -73,3 +73,8 @@ Recommended:
 
 Using the pooled `-pooler` URL for Prisma migrations can cause migration problems or connection behavior issues. Keep migrations on `DIRECT_DATABASE_URL` (direct endpoint) and runtime on `DATABASE_URL` (pooled endpoint).
 
+## Backup / Restore Operations
+
+For production backup cadence, restore drills, and incident recovery workflow, use:
+
+- `docs/BACKUP_RESTORE_RUNBOOK.md`

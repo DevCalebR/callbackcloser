@@ -19,6 +19,14 @@
 7. Verify Stripe webhook endpoint still points to the correct production URL.
 8. Run a live Twilio smoke test (call + missed call + SMS reply + STOP/START).
 
+## Backup + Restore
+
+- Canonical procedure: `docs/BACKUP_RESTORE_RUNBOOK.md`
+- Minimum policy:
+  - Neon PITR enabled for production.
+  - Logical backup artifacts retained for 30+ days.
+  - Restore drill executed monthly with recorded evidence.
+
 ## Rotate `TWILIO_WEBHOOK_AUTH_TOKEN` (shared webhook token)
 
 1. Generate a new random token (do not reuse old values).
