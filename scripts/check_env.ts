@@ -11,6 +11,7 @@ type EnvRequirement = {
 const loadedFiles = loadLocalEnvFiles();
 
 const signatureValidationEnabled = readBooleanEnv('TWILIO_VALIDATE_SIGNATURE');
+const productionNodeEnv = process.env.NODE_ENV === 'production';
 
 const requirements: EnvRequirement[] = [
   { name: 'NEXT_PUBLIC_APP_URL', required: true, reason: 'Canonical app URL / webhook URL generation' },
@@ -26,23 +27,32 @@ const requirements: EnvRequirement[] = [
   { name: 'TWILIO_AUTH_TOKEN', required: true, reason: 'Twilio API access / signature validation' },
   {
     name: 'TWILIO_WEBHOOK_AUTH_TOKEN',
-    required: !signatureValidationEnabled,
-    reason: signatureValidationEnabled
-      ? 'Optional when TWILIO_VALIDATE_SIGNATURE=true (still recommended for local/dev token-based testing)'
-      : 'Twilio shared-token webhook protection',
+    required: true,
+    reason: 'Twilio shared-token local/dev fallback + webhook URL tooling',
   },
-  { name: 'TWILIO_VALIDATE_SIGNATURE', required: false, reason: 'Optional: enable X-Twilio-Signature validation' },
+  {
+    name: 'TWILIO_VALIDATE_SIGNATURE',
+    required: productionNodeEnv,
+    reason: productionNodeEnv
+      ? 'Required in production: must enable X-Twilio-Signature validation'
+      : 'Optional in non-production',
+  },
   { name: 'DEBUG_ENV_ENDPOINT_TOKEN', required: false, reason: 'Optional debug endpoint token' },
   { name: 'PORTFOLIO_DEMO_MODE', required: false, reason: 'Optional demo mode' },
 ];
 
 const missing = requirements.filter((item) => item.required && !process.env[item.name]?.trim());
+const configErrors: string[] = [];
+
+if (productionNodeEnv && !signatureValidationEnabled) {
+  configErrors.push('TWILIO_VALIDATE_SIGNATURE must be true when NODE_ENV=production');
+}
 
 console.log('CallbackCloser env check');
 console.log(`- Loaded env files: ${loadedFiles.join(', ') || '(none)'}`);
 console.log(`- TWILIO_VALIDATE_SIGNATURE: ${signatureValidationEnabled ? 'enabled' : 'disabled'}`);
 
-if (missing.length === 0) {
+if (missing.length === 0 && configErrors.length === 0) {
   console.log('- Result: PASS (all required env vars are present)');
   process.exit(0);
 }
@@ -50,5 +60,8 @@ if (missing.length === 0) {
 console.log('- Result: FAIL (missing required env vars)');
 for (const item of missing) {
   console.log(`  - ${item.name}`);
+}
+for (const message of configErrors) {
+  console.log(`  - ${message}`);
 }
 process.exit(1);

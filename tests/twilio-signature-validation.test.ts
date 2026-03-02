@@ -80,3 +80,35 @@ test('falls back to shared token in non-production when signature validation is 
     }
   );
 });
+
+test('rejects shared-token auth mode in production when signature validation is disabled', () => {
+  withEnv(
+    {
+      NODE_ENV: 'production',
+      TWILIO_VALIDATE_SIGNATURE: 'false',
+      TWILIO_AUTH_TOKEN: 'twilio-auth-token',
+      TWILIO_WEBHOOK_AUTH_TOKEN: 'prod-token',
+    },
+    () => {
+      const params = { MessageSid: 'SM321', From: '+15551230000', To: '+15557654321' };
+      const request = new Request('https://example.com/api/twilio/sms?webhook_token=prod-token');
+      assert.equal(hasValidTwilioWebhookRequest(request, params), false);
+    }
+  );
+});
+
+test('does not allow shared-token fallback in production when signature is missing', () => {
+  withEnv(
+    {
+      NODE_ENV: 'production',
+      TWILIO_VALIDATE_SIGNATURE: 'true',
+      TWILIO_AUTH_TOKEN: 'twilio-auth-token',
+      TWILIO_WEBHOOK_AUTH_TOKEN: 'prod-token',
+    },
+    () => {
+      const params = { CallSid: 'CA555', From: '+15550000000', To: '+15551111111' };
+      const request = new Request('https://example.com/api/twilio/voice?webhook_token=prod-token');
+      assert.equal(hasValidTwilioWebhookRequest(request, params), false);
+    }
+  );
+});

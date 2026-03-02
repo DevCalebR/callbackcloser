@@ -92,6 +92,20 @@ function validateDatabaseUrl() {
   }
 }
 
+function parseBooleanFlag(value: string | undefined) {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function validateTwilioWebhookSecurityMode() {
+  if (!parseBooleanFlag(process.env.TWILIO_VALIDATE_SIGNATURE)) {
+    throw new Error(
+      'Invalid environment configuration: production requires TWILIO_VALIDATE_SIGNATURE=true so Twilio webhooks enforce X-Twilio-Signature validation.'
+    );
+  }
+}
+
 export function validateServerEnv() {
   if (validated) return;
   if (process.env.NODE_ENV !== 'production') return;
@@ -109,6 +123,7 @@ export function validateServerEnv() {
     );
   }
 
+  validateTwilioWebhookSecurityMode();
   validateAppUrl();
   validateDatabaseUrl();
   validated = true;
