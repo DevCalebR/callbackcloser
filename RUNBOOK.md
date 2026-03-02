@@ -42,12 +42,23 @@
 - Vercel runtime logs:
   - API route logs for `/api/twilio/voice`, `/api/twilio/status`, `/api/twilio/sms`
   - Look for structured prefixes: `twilio.voice`, `twilio.status`, `twilio.sms`, `twilio.messaging`, `twilio.webhook-auth`
+  - Look for centralized error events: `app.error` (includes `correlationId`, `source`, `event`, and metadata)
 - Twilio Console:
   - Phone Number webhook logs / Debugger
   - Call Logs and Recordings
   - Messaging logs
 - Neon:
   - Query activity / connection issues (if DB errors occur)
+
+## Observability + Alerts
+
+- Every Twilio/Stripe webhook response now includes `X-Correlation-Id`.
+- For incident triage, capture the correlation ID from provider delivery logs and search Vercel logs for that ID.
+- Optional alert wiring:
+  1. Set `ALERT_WEBHOOK_URL` in Vercel (Slack/PagerDuty/incident gateway endpoint).
+  2. Optionally set `ALERT_WEBHOOK_TOKEN` if your endpoint requires bearer auth.
+  3. Optionally set `ALERT_WEBHOOK_TIMEOUT_MS` (default `4000`).
+  4. Redeploy and induce a safe synthetic webhook failure in non-production to confirm alert delivery.
 
 ## Common Failure Modes
 
@@ -67,4 +78,3 @@
   - `DATABASE_URL` / `DIRECT_DATABASE_URL` swapped
   - Missing `sslmode=require`
   - `DIRECT_DATABASE_URL` accidentally using Neon pooler host
-

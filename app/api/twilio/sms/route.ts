@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 
 import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
+import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
@@ -49,6 +50,8 @@ function rateLimitSmsResponse(retryAfterSeconds: number) {
 
 export async function POST(request: Request) {
   let messageSid: string | null = null;
+  const correlationId = getCorrelationIdFromRequest(request);
+  const withCorrelation = (response: Response) => withCorrelationIdHeader(response, correlationId);
   try {
     const formData = await request.formData();
     const payload = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -64,18 +67,19 @@ export async function POST(request: Request) {
       });
       if (!rateLimit.allowed) {
         logTwilioWarn('sms', 'webhook_unauthorized_rate_limited', {
+          correlationId,
           eventType: 'inbound_sms',
           decision: 'reject_429',
           clientIp,
         });
-        return new NextResponse(
+        return withCorrelation(new NextResponse(
           JSON.stringify({ error: 'Too many unauthorized requests' }),
           { status: 429, headers: { 'Content-Type': 'application/json', ...buildRateLimitHeaders(rateLimit) } }
-        );
+        ));
       }
 
-      logTwilioWarn('sms', 'webhook_unauthorized', { decision: 'reject_401' });
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      logTwilioWarn('sms', 'webhook_unauthorized', { correlationId, decision: 'reject_401' });
+      return withCorrelation(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
     }
 
     const authRateLimit = consumeRateLimit({
@@ -85,6 +89,7 @@ export async function POST(request: Request) {
     });
     if (!authRateLimit.allowed) {
       logTwilioWarn('sms', 'webhook_rate_limited', {
+        correlationId,
         eventType: 'inbound_sms',
         decision: 'reject_429',
         accountSid: accountSid || null,
@@ -94,7 +99,7 @@ export async function POST(request: Request) {
       Object.entries(buildRateLimitHeaders(authRateLimit)).forEach(([name, value]) => {
         response.headers.set(name, value);
       });
-      return response;
+      return withCorrelation(response);
     }
 
     const to = normalizePhoneNumber(formField(formData, 'To'));
@@ -104,6 +109,7 @@ export async function POST(request: Request) {
 
     logTwilioInfo('sms', 'webhook_received', {
       messageSid,
+      correlationId,
       eventType: 'inbound_sms',
       decision: 'processing',
     });
@@ -111,20 +117,22 @@ export async function POST(request: Request) {
     if (!to || !from) {
       logTwilioWarn('sms', 'missing_required_fields', {
         messageSid,
+        correlationId,
         eventType: 'inbound_sms',
         decision: 'noop_missing_to_or_from',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     const business = await findBusinessByTwilioNumber(to);
     if (!business) {
       logTwilioWarn('sms', 'business_not_found', {
         messageSid,
+        correlationId,
         eventType: 'inbound_sms',
         decision: 'noop_business_not_found',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     const inbound = await persistInboundMessage({
@@ -148,6 +156,7 @@ export async function POST(request: Request) {
     if (compliance.handled) {
       logTwilioInfo('sms', 'compliance_keyword_handled', {
         messageSid,
+        correlationId,
         eventType: 'inbound_sms',
         businessId: business.id,
         command: compliance.command,
@@ -155,18 +164,19 @@ export async function POST(request: Request) {
         duplicateInbound: inbound.duplicate,
         decision: 'reply_compliance_message',
       });
-      return xmlOk(compliance.replyText);
+      return withCorrelation(xmlOk(compliance.replyText));
     }
 
     if (inbound.duplicate) {
       logTwilioInfo('sms', 'duplicate_message_retry', {
         messageSid,
+        correlationId,
         eventType: 'inbound_sms',
         businessId: business.id,
         leadId: null,
         decision: 'noop_duplicate',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     const lead =
@@ -186,11 +196,12 @@ export async function POST(request: Request) {
     if (!lead) {
       logTwilioInfo('sms', 'no_matching_lead', {
         messageSid,
+        correlationId,
         eventType: 'inbound_sms',
         businessId: business.id,
         decision: 'noop_no_lead_thread',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     await db.message.update({
@@ -209,6 +220,7 @@ export async function POST(request: Request) {
     if (!isSubscriptionActive(business.subscriptionStatus) || lead.billingRequired || !business.twilioPhoneNumber) {
       logTwilioInfo('sms', 'automation_blocked', {
         messageSid,
+        correlationId,
         eventType: 'inbound_sms',
         businessId: business.id,
         leadId: lead.id,
@@ -218,7 +230,7 @@ export async function POST(request: Request) {
             ? 'noop_billing_required'
             : 'noop_missing_twilio_number',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     const transition = advanceLeadConversation(lead, body, business);
@@ -237,6 +249,7 @@ export async function POST(request: Request) {
 
     logTwilioInfo('sms', 'state_machine_transition', {
       messageSid,
+      correlationId,
       eventType: 'inbound_sms',
       businessId: business.id,
       leadId: updatedLead.id,
@@ -272,6 +285,7 @@ export async function POST(request: Request) {
         if (ownerSend.suppressed) {
           logTwilioWarn('sms', 'owner_notification_suppressed', {
             messageSid,
+            correlationId,
             eventType: 'inbound_sms',
             businessId: business.id,
             leadId: updatedLead.id,
@@ -284,6 +298,7 @@ export async function POST(request: Request) {
           });
           logTwilioInfo('sms', 'owner_notification_sent', {
             messageSid,
+            correlationId,
             eventType: 'inbound_sms',
             businessId: business.id,
             leadId: updatedLead.id,
@@ -296,6 +311,7 @@ export async function POST(request: Request) {
           'owner_notification_failed',
           {
             messageSid,
+            correlationId,
             eventType: 'inbound_sms',
             businessId: business.id,
             leadId: updatedLead.id,
@@ -318,6 +334,7 @@ export async function POST(request: Request) {
       if (leadSend.suppressed) {
         logTwilioWarn('sms', 'lead_reply_suppressed', {
           messageSid,
+          correlationId,
           eventType: 'inbound_sms',
           businessId: business.id,
           leadId: updatedLead.id,
@@ -334,6 +351,7 @@ export async function POST(request: Request) {
 
         logTwilioInfo('sms', 'lead_reply_sent', {
           messageSid,
+          correlationId,
           eventType: 'inbound_sms',
           businessId: business.id,
           leadId: updatedLead.id,
@@ -346,6 +364,7 @@ export async function POST(request: Request) {
         'lead_reply_send_failed',
         {
           messageSid,
+          correlationId,
           eventType: 'inbound_sms',
           businessId: business.id,
           leadId: updatedLead.id,
@@ -355,9 +374,9 @@ export async function POST(request: Request) {
       );
     }
 
-    return xmlOk();
+    return withCorrelation(xmlOk());
   } catch (error) {
-    logTwilioError('sms', 'route_error', { messageSid, eventType: 'inbound_sms', decision: 'return_retryable_503' }, error);
-    return retryableErrorResponse();
+    logTwilioError('sms', 'route_error', { messageSid, correlationId, eventType: 'inbound_sms', decision: 'return_retryable_503' }, error);
+    return withCorrelation(retryableErrorResponse());
   }
 }

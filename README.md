@@ -35,6 +35,7 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - SMS compliance commands (`STOP` / `START` / `HELP`) with DB-backed opt-out state
 - Call recording enabled on forwarded calls + recording metadata captured on callbacks
 - Twilio webhook protection: production-enforced `X-Twilio-Signature` validation, with shared-token fallback only in non-production
+- Webhook observability baseline: correlation IDs (`X-Correlation-Id`), centralized `app.error` reporting, optional alert webhook dispatch
 
 ## Local Setup
 

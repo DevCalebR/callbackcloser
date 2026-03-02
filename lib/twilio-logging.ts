@@ -1,3 +1,5 @@
+import { reportApplicationError } from './observability.ts';
+
 type TwilioLogRoute = 'voice' | 'sms' | 'status' | 'messaging' | 'webhook-auth';
 type TwilioLogLevel = 'info' | 'warn' | 'error';
 
@@ -24,5 +26,14 @@ export function logTwilioWarn(route: TwilioLogRoute, event: string, fields: Twil
 }
 
 export function logTwilioError(route: TwilioLogRoute, event: string, fields: TwilioLogFields = {}, error?: unknown) {
-  write('error', route, event, error ? { ...fields, error: errorMessage(error) } : fields);
+  const payload = error ? { ...fields, error: errorMessage(error) } : fields;
+  const observedError = error ?? (typeof payload.error === 'string' ? payload.error : undefined);
+  write('error', route, event, payload);
+  reportApplicationError({
+    source: `twilio.${route}`,
+    event,
+    correlationId: typeof fields.correlationId === 'string' ? fields.correlationId : 'n/a',
+    error: observedError,
+    metadata: payload,
+  });
 }

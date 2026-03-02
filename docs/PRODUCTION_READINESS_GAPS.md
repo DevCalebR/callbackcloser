@@ -297,3 +297,50 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
     - `80a23c3`
+
+- 2026-03-02 - G8 (DONE)
+  - Branch: `hardening/g8-observability`
+  - What changed:
+    - Added shared observability primitives in `lib/observability.ts`:
+      - request correlation ID extraction (`x-correlation-id` / `x-request-id`)
+      - response correlation header injection (`X-Correlation-Id`)
+      - centralized structured error reporting (`app.error`)
+      - optional alert webhook dispatch (`ALERT_WEBHOOK_URL`, optional bearer token + timeout)
+    - Wired Twilio webhook routes to include correlation IDs in key logs and responses:
+      - `app/api/twilio/voice/route.ts`
+      - `app/api/twilio/status/route.ts`
+      - `app/api/twilio/sms/route.ts`
+    - Wired Stripe webhook route for centralized error reporting + correlation header:
+      - `app/api/stripe/webhook/route.ts`
+    - Upgraded `lib/twilio-logging.ts` error path to feed centralized reporting (`app.error`) while preserving existing `twilio.*` logs.
+    - Added observability unit tests in `tests/observability.test.ts`.
+    - Documented alert/correlation operations in:
+      - `.env.example`
+      - `docs/PRODUCTION_ENV.md`
+      - `RUNBOOK.md`
+      - `README.md`
+  - Ops notes:
+    - Correlation IDs can now be traced from provider delivery attempts to Vercel logs.
+    - Alerts are wired as an optional webhook sink and do not block request handling.
+  - Commands run + results:
+    - `npm test` -> PASS (30/30)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `lib/observability.ts`
+    - `lib/twilio-logging.ts`
+    - `app/api/twilio/voice/route.ts`
+    - `app/api/twilio/status/route.ts`
+    - `app/api/twilio/sms/route.ts`
+    - `app/api/stripe/webhook/route.ts`
+    - `tests/observability.test.ts`
+    - `.env.example`
+    - `docs/PRODUCTION_ENV.md`
+    - `RUNBOOK.md`
+    - `README.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `PENDING`
