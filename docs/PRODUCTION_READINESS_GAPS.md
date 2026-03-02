@@ -344,3 +344,36 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
     - `119c217`
+
+- 2026-03-02 - G9 (DONE)
+  - Branch: `hardening/g9-backup-restore-runbook`
+  - What changed:
+    - Added dedicated production backup/restore runbook:
+      - `docs/BACKUP_RESTORE_RUNBOOK.md`
+      - defines RPO/RTO targets, backup cadence, retention expectations, and incident restore sequence.
+    - Added explicit monthly restore drill procedure with command-level verification:
+      - logical backup command (`pg_dump` + gzip)
+      - restore command (`psql` replay into restore target)
+      - Prisma + app smoke checks (`prisma validate`, `npm run db:smoke`)
+      - key table-count verification commands for `Business`, `Lead`, `Message`, `Call`.
+    - Added drill evidence template (date/operator/artifact/result/duration/follow-up) to enforce auditable restore history.
+    - Linked backup/restore operations from existing ops docs:
+      - `RUNBOOK.md`
+      - `docs/DB_NEON_PRISMA.md`
+  - Ops notes:
+    - This closes the documentation + drill-checklist gap for data recovery readiness.
+    - Actual production drill execution remains an operational action and should be recorded using the included template.
+  - Commands run + results:
+    - `npm test` -> PASS (30/30)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `docs/BACKUP_RESTORE_RUNBOOK.md`
+    - `RUNBOOK.md`
+    - `docs/DB_NEON_PRISMA.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `PENDING`
