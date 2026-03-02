@@ -35,6 +35,8 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - SMS compliance commands (`STOP` / `START` / `HELP`) with DB-backed opt-out state
 - Call recording enabled on forwarded calls + recording metadata captured on callbacks
 - Twilio webhook protection: production-enforced `X-Twilio-Signature` validation, with shared-token fallback only in non-production
+- Webhook observability baseline: correlation IDs (`X-Correlation-Id`), centralized `app.error` reporting, optional alert webhook dispatch
+- Production guardrail: `PORTFOLIO_DEMO_MODE` is blocked in production unless `ALLOW_PRODUCTION_DEMO_MODE=true` is explicitly set
 
 ## Local Setup
 
@@ -64,6 +66,7 @@ Required categories:
 - Stripe keys + price IDs + webhook secret
 - Twilio credentials + webhook auth token
 - Database URL
+- Optional rate-limit tuning vars (defaults are built in)
 
 ### 4. Run Prisma migrations / generate client
 
@@ -249,6 +252,7 @@ Compliance handling:
 Security / idempotency notes:
 
 - Invalid webhook token -> `401`
+- Unauthorized webhook bursts are rate-limited with `429` (`Retry-After` + `X-RateLimit-*` headers)
 - Duplicate inbound SMS retries with the same `MessageSid` are deduped via `Message.twilioSid` and ignored after persistence check
 - Webhook handlers log structured events (`callSid` / `messageSid`, event type, decision)
 
@@ -302,6 +306,9 @@ Prisma models included:
 ## Useful Routes
 
 - `/` - landing page
+- `/terms` - terms of service
+- `/privacy` - privacy policy
+- `/refund` - refund policy
 - `/sign-in` - Clerk sign-in
 - `/sign-up` - Clerk sign-up
 - `/app/onboarding` - create business record

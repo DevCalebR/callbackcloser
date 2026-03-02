@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { buildNextPublicAppUrlErrorMessage, resolveConfiguredAppBaseUrl } from './app-url';
+import { enforcePortfolioDemoGuardrail } from './portfolio-demo-guardrail';
 
 type EnvSpec = {
   name: string;
@@ -124,6 +125,7 @@ export function validateServerEnv() {
   }
 
   validateTwilioWebhookSecurityMode();
+  enforcePortfolioDemoGuardrail(process.env);
   validateAppUrl();
   validateDatabaseUrl();
   validated = true;

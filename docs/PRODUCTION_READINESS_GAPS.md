@@ -192,3 +192,264 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
     - `433cd34`
+
+- 2026-03-02 - G2 (DONE)
+  - Branch: `hardening/g2-webhook-retry-semantics`
+  - What changed:
+    - Updated Twilio webhook route fatal-error behavior:
+      - `app/api/twilio/status/route.ts` now returns retryable `503` on fatal route errors and on initial missed-call SMS send failures.
+      - `app/api/twilio/sms/route.ts` now returns retryable `503` on fatal route errors.
+    - Added shared helper `lib/twilio-webhook-retry.ts` to standardize retryable response shape/status.
+    - Added replay-oriented tests in `tests/twilio-webhook-retry.test.ts` to verify deterministic retry response semantics for both status and sms paths.
+  - Idempotency notes:
+    - Existing idempotent guards remain in place (`Call` upsert by `twilioCallSid`, `Lead` reuse by `callId`, inbound message dedupe by `Message.twilioSid`).
+    - Returning `503` on fatal/transient failures allows provider retries without introducing duplicate durable records.
+  - Commands run + results:
+    - `npm test` -> PASS (22/22)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `app/api/twilio/status/route.ts`
+    - `app/api/twilio/sms/route.ts`
+    - `lib/twilio-webhook-retry.ts`
+    - `tests/twilio-webhook-retry.test.ts`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `d0dff5e`
+
+- 2026-03-02 - G3 (DONE)
+  - Branch: `hardening/g3-dedupe-usage-limit-notifications`
+  - What changed:
+    - Added durable usage-limit owner-notification claim marker to `Lead`:
+      - `usageLimitNotifiedAt` in `prisma/schema.prisma`
+      - migration: `prisma/migrations/20260302010000_add_usage_limit_notified_at/migration.sql`
+    - Added atomic claim helper `lib/usage-limit-notification.ts` using `updateMany where usageLimitNotifiedAt=null` so only one replay attempt can claim notification send ownership.
+    - Updated `app/api/twilio/status/route.ts` usage-limit branch to:
+      - short-circuit when notification was already recorded/claimed
+      - claim once before owner-notification send
+      - perform best-effort claim reset on send failure to allow retried delivery
+    - Updated demo lead factory defaults in `lib/portfolio-demo.ts` for new field compatibility.
+    - Added `tests/usage-limit-notification.test.ts` to verify first-claim/duplicate-replay behavior.
+  - Idempotency notes:
+    - Duplicate Twilio replay callbacks can no longer create repeated usage-limit owner notification sends for the same lead once claimed.
+    - Claim path is atomic at DB level (`updateMany` count gate) and replay-safe.
+  - Commands run + results:
+    - `npm test` -> PASS (23/23)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `app/api/twilio/status/route.ts`
+    - `lib/usage-limit-notification.ts`
+    - `lib/portfolio-demo.ts`
+    - `prisma/schema.prisma`
+    - `prisma/migrations/20260302010000_add_usage_limit_notified_at/migration.sql`
+    - `tests/usage-limit-notification.test.ts`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `6532134`
+
+- 2026-03-02 - G5 (DONE)
+  - Branch: `hardening/g5-rate-limiting`
+  - What changed:
+    - Added shared in-memory limiter utilities:
+      - `lib/rate-limit.ts` (bucket store, client IP extraction, rate-limit headers)
+      - `lib/rate-limit-config.ts` (env-tunable defaults)
+    - Added auth-aware webhook throttling:
+      - Twilio `voice/status/sms` routes now enforce:
+        - stricter unauthenticated burst limits
+        - higher limits for authorized provider traffic
+      - Stripe webhook now enforces:
+        - stricter invalid-signature burst limits
+        - higher limits for valid-signed webhook traffic
+    - Added middleware throttling for protected Stripe mutation APIs:
+      - `/api/stripe/checkout`
+      - `/api/stripe/portal`
+    - Added rate-limit unit tests in `tests/rate-limit.test.ts`.
+    - Documented optional rate-limit env knobs in `.env.example`, `README.md`, and `docs/PRODUCTION_ENV.md`.
+  - Safety notes:
+    - Twilio/Stripe normal traffic is protected by separate authorized-vs-unauthorized thresholds to reduce false positives.
+    - All 429 responses include `Retry-After` and `X-RateLimit-*` headers.
+  - Commands run + results:
+    - `npm test` -> PASS (26/26)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `lib/rate-limit.ts`
+    - `lib/rate-limit-config.ts`
+    - `middleware.ts`
+    - `app/api/twilio/voice/route.ts`
+    - `app/api/twilio/status/route.ts`
+    - `app/api/twilio/sms/route.ts`
+    - `app/api/stripe/webhook/route.ts`
+    - `tests/rate-limit.test.ts`
+    - `.env.example`
+    - `README.md`
+    - `docs/PRODUCTION_ENV.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `80a23c3`
+
+- 2026-03-02 - G8 (DONE)
+  - Branch: `hardening/g8-observability`
+  - What changed:
+    - Added shared observability primitives in `lib/observability.ts`:
+      - request correlation ID extraction (`x-correlation-id` / `x-request-id`)
+      - response correlation header injection (`X-Correlation-Id`)
+      - centralized structured error reporting (`app.error`)
+      - optional alert webhook dispatch (`ALERT_WEBHOOK_URL`, optional bearer token + timeout)
+    - Wired Twilio webhook routes to include correlation IDs in key logs and responses:
+      - `app/api/twilio/voice/route.ts`
+      - `app/api/twilio/status/route.ts`
+      - `app/api/twilio/sms/route.ts`
+    - Wired Stripe webhook route for centralized error reporting + correlation header:
+      - `app/api/stripe/webhook/route.ts`
+    - Upgraded `lib/twilio-logging.ts` error path to feed centralized reporting (`app.error`) while preserving existing `twilio.*` logs.
+    - Added observability unit tests in `tests/observability.test.ts`.
+    - Documented alert/correlation operations in:
+      - `.env.example`
+      - `docs/PRODUCTION_ENV.md`
+      - `RUNBOOK.md`
+      - `README.md`
+  - Ops notes:
+    - Correlation IDs can now be traced from provider delivery attempts to Vercel logs.
+    - Alerts are wired as an optional webhook sink and do not block request handling.
+  - Commands run + results:
+    - `npm test` -> PASS (30/30)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `lib/observability.ts`
+    - `lib/twilio-logging.ts`
+    - `app/api/twilio/voice/route.ts`
+    - `app/api/twilio/status/route.ts`
+    - `app/api/twilio/sms/route.ts`
+    - `app/api/stripe/webhook/route.ts`
+    - `tests/observability.test.ts`
+    - `.env.example`
+    - `docs/PRODUCTION_ENV.md`
+    - `RUNBOOK.md`
+    - `README.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `119c217`
+
+- 2026-03-02 - G9 (DONE)
+  - Branch: `hardening/g9-backup-restore-runbook`
+  - What changed:
+    - Added dedicated production backup/restore runbook:
+      - `docs/BACKUP_RESTORE_RUNBOOK.md`
+      - defines RPO/RTO targets, backup cadence, retention expectations, and incident restore sequence.
+    - Added explicit monthly restore drill procedure with command-level verification:
+      - logical backup command (`pg_dump` + gzip)
+      - restore command (`psql` replay into restore target)
+      - Prisma + app smoke checks (`prisma validate`, `npm run db:smoke`)
+      - key table-count verification commands for `Business`, `Lead`, `Message`, `Call`.
+    - Added drill evidence template (date/operator/artifact/result/duration/follow-up) to enforce auditable restore history.
+    - Linked backup/restore operations from existing ops docs:
+      - `RUNBOOK.md`
+      - `docs/DB_NEON_PRISMA.md`
+  - Ops notes:
+    - This closes the documentation + drill-checklist gap for data recovery readiness.
+    - Actual production drill execution remains an operational action and should be recorded using the included template.
+  - Commands run + results:
+    - `npm test` -> PASS (30/30)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `docs/BACKUP_RESTORE_RUNBOOK.md`
+    - `RUNBOOK.md`
+    - `docs/DB_NEON_PRISMA.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `2dc1d7c`
+
+- 2026-03-02 - G11 (DONE)
+  - Branch: `hardening/g11-production-demo-guardrail`
+  - What changed:
+    - Added shared production demo-mode guardrail logic in `lib/portfolio-demo-guardrail.ts`:
+      - detects production runtime (`NODE_ENV` / `VERCEL_ENV`)
+      - blocks `PORTFOLIO_DEMO_MODE` unless explicit override `ALLOW_PRODUCTION_DEMO_MODE=true`
+    - Enforced guardrail in production env validation:
+      - `lib/env.server.ts` now calls guardrail enforcement during `validateServerEnv()`
+    - Enforced guardrail at request layer:
+      - `middleware.ts` now returns `503` fail-safe when production demo mode is enabled without override
+      - break-glass override logs an explicit warning when enabled
+    - Extended env preflight checks:
+      - `scripts/check_env.ts` now fails when production demo mode is enabled without override
+    - Added focused guardrail tests:
+      - `tests/portfolio-demo-guardrail.test.ts`
+    - Updated env/docs to reflect break-glass requirement:
+      - `.env.example`
+      - `docs/PRODUCTION_ENV.md`
+      - `README.md`
+  - Safety notes:
+    - Production cannot silently run in portfolio-demo bypass mode anymore.
+    - Any intentional production demo-mode usage now requires explicit, auditable break-glass env activation.
+  - Commands run + results:
+    - `npm test` -> PASS (33/33)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `lib/portfolio-demo-guardrail.ts`
+    - `lib/env.server.ts`
+    - `middleware.ts`
+    - `scripts/check_env.ts`
+    - `tests/portfolio-demo-guardrail.test.ts`
+    - `.env.example`
+    - `docs/PRODUCTION_ENV.md`
+    - `README.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `fd9ca8e`
+
+- 2026-03-02 - G12 (DONE)
+  - Branch: `hardening/g12-legal-pages`
+  - What changed:
+    - Added public legal pages:
+      - `app/terms/page.tsx`
+      - `app/privacy/page.tsx`
+      - `app/refund/page.tsx`
+    - Added legal links to the public landing page footer:
+      - `app/page.tsx`
+    - Added lightweight route/content coverage test:
+      - `tests/legal-pages.test.ts`
+    - Updated route docs:
+      - `README.md`
+  - Verification notes:
+    - Build output confirms static generation for `/terms`, `/privacy`, and `/refund`.
+    - Landing page now exposes direct legal navigation links for compliance visibility.
+  - Commands run + results:
+    - `npm test` -> PASS (34/34)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `app/terms/page.tsx`
+    - `app/privacy/page.tsx`
+    - `app/refund/page.tsx`
+    - `app/page.tsx`
+    - `tests/legal-pages.test.ts`
+    - `README.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `91846f3`
