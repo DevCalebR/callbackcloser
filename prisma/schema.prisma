@@ -118,6 +118,7 @@ model Lead {
   bestTime            String?
   contactName         String?
   ownerNotifiedAt     DateTime?
+  usageLimitNotifiedAt DateTime?
   smsStartedAt        DateTime?
   smsCompletedAt      DateTime?
   lastInboundAt       DateTime?

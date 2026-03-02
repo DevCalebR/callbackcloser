@@ -12,6 +12,7 @@ import { extractTwilioRecordingMetadata } from '@/lib/twilio-recording';
 import { buildTwilioRetryableErrorResponse } from '@/lib/twilio-webhook-retry';
 import { hasValidTwilioWebhookRequest } from '@/lib/twilio-webhook';
 import { messagingTwiML } from '@/lib/twiml';
+import { claimUsageLimitNotification } from '@/lib/usage-limit-notification';
 import { describeUsageLimit, getConversationUsageForBusiness, isConversationLimitReached } from '@/lib/usage';
 
 export const runtime = 'nodejs';
@@ -272,7 +273,32 @@ export async function POST(request: Request) {
           },
         });
 
+        if (lead.usageLimitNotifiedAt) {
+          logTwilioInfo('status', 'usage_limit_owner_notify_already_recorded', {
+            callSid,
+            dialCallSid,
+            eventType: 'dial_status_callback',
+            businessId: business.id,
+            leadId: lead.id,
+            decision: 'noop_usage_limit_notification_already_recorded',
+          });
+          return xmlOk();
+        }
+
         if (business.notifyPhone) {
+          const claimed = await claimUsageLimitNotification(db, lead.id);
+          if (!claimed) {
+            logTwilioInfo('status', 'usage_limit_owner_notify_already_claimed', {
+              callSid,
+              dialCallSid,
+              eventType: 'dial_status_callback',
+              businessId: business.id,
+              leadId: lead.id,
+              decision: 'noop_usage_limit_notification_already_claimed',
+            });
+            return xmlOk();
+          }
+
           try {
             const notifyResult = await sendAndPersistOutboundMessage({
               businessId: business.id,
@@ -304,6 +330,18 @@ export async function POST(request: Request) {
               decision: 'owner_notification_sent',
             });
           } catch (notifyError) {
+            try {
+              await db.lead.update({
+                where: { id: lead.id },
+                data: {
+                  usageLimitNotifiedAt: null,
+                  lastInteractionAt: new Date(),
+                },
+              });
+            } catch {
+              // best-effort reset; retry may still be deduped if reset fails
+            }
+
             logTwilioError(
               'status',
               'usage_limit_owner_notify_failed',
