@@ -192,3 +192,30 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
     - `433cd34`
+
+- 2026-03-02 - G2 (DONE)
+  - Branch: `hardening/g2-webhook-retry-semantics`
+  - What changed:
+    - Updated Twilio webhook route fatal-error behavior:
+      - `app/api/twilio/status/route.ts` now returns retryable `503` on fatal route errors and on initial missed-call SMS send failures.
+      - `app/api/twilio/sms/route.ts` now returns retryable `503` on fatal route errors.
+    - Added shared helper `lib/twilio-webhook-retry.ts` to standardize retryable response shape/status.
+    - Added replay-oriented tests in `tests/twilio-webhook-retry.test.ts` to verify deterministic retry response semantics for both status and sms paths.
+  - Idempotency notes:
+    - Existing idempotent guards remain in place (`Call` upsert by `twilioCallSid`, `Lead` reuse by `callId`, inbound message dedupe by `Message.twilioSid`).
+    - Returning `503` on fatal/transient failures allows provider retries without introducing duplicate durable records.
+  - Commands run + results:
+    - `npm test` -> PASS (22/22)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `app/api/twilio/status/route.ts`
+    - `app/api/twilio/sms/route.ts`
+    - `lib/twilio-webhook-retry.ts`
+    - `tests/twilio-webhook-retry.test.ts`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - pending (added in immediate follow-up changelog commit)
