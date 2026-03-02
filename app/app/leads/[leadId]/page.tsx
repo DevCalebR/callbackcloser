@@ -92,7 +92,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
           <Card>
             <CardHeader>
               <CardTitle>Call Record</CardTitle>
-              <CardDescription>Twilio voice callback data for the originating call.</CardDescription>
+              <CardDescription>Twilio voice callback data and recording metadata for the originating call.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               {lead.call ? (
@@ -102,6 +102,17 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
                   <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Answered</span><span>{lead.call.answered ? 'Yes' : 'No'}</span></div>
                   <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Missed</span><span>{lead.call.missed ? 'Yes' : 'No'}</span></div>
                   <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Duration</span><span>{lead.call.callDurationSeconds ?? 0}s</span></div>
+                  <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Recording status</span><span>{lead.call.recordingStatus || 'not_available'}</span></div>
+                  <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Recording duration</span><span>{lead.call.recordingDurationSeconds ?? 0}s</span></div>
+                  <div className="pt-1">
+                    {lead.call.recordingUrl ? (
+                      <form action={`/api/leads/${lead.id}/recording`} method="get">
+                        <Button type="submit" variant="outline">Open recording</Button>
+                      </form>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Recording link unavailable until Twilio recording metadata is received.</p>
+                    )}
+                  </div>
                 </>
               ) : (
                 <p className="text-muted-foreground">No call record linked.</p>
