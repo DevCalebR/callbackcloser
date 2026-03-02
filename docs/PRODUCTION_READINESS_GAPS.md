@@ -219,3 +219,37 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
     - `d0dff5e`
+
+- 2026-03-02 - G3 (DONE)
+  - Branch: `hardening/g3-dedupe-usage-limit-notifications`
+  - What changed:
+    - Added durable usage-limit owner-notification claim marker to `Lead`:
+      - `usageLimitNotifiedAt` in `prisma/schema.prisma`
+      - migration: `prisma/migrations/20260302010000_add_usage_limit_notified_at/migration.sql`
+    - Added atomic claim helper `lib/usage-limit-notification.ts` using `updateMany where usageLimitNotifiedAt=null` so only one replay attempt can claim notification send ownership.
+    - Updated `app/api/twilio/status/route.ts` usage-limit branch to:
+      - short-circuit when notification was already recorded/claimed
+      - claim once before owner-notification send
+      - perform best-effort claim reset on send failure to allow retried delivery
+    - Updated demo lead factory defaults in `lib/portfolio-demo.ts` for new field compatibility.
+    - Added `tests/usage-limit-notification.test.ts` to verify first-claim/duplicate-replay behavior.
+  - Idempotency notes:
+    - Duplicate Twilio replay callbacks can no longer create repeated usage-limit owner notification sends for the same lead once claimed.
+    - Claim path is atomic at DB level (`updateMany` count gate) and replay-safe.
+  - Commands run + results:
+    - `npm test` -> PASS (23/23)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `app/api/twilio/status/route.ts`
+    - `lib/usage-limit-notification.ts`
+    - `lib/portfolio-demo.ts`
+    - `prisma/schema.prisma`
+    - `prisma/migrations/20260302010000_add_usage_limit_notified_at/migration.sql`
+    - `tests/usage-limit-notification.test.ts`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `6532134`

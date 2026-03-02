@@ -78,6 +78,7 @@ function makeLead(input: Partial<Lead> & Pick<Lead, 'id' | 'businessId' | 'calle
     bestTime: null,
     contactName: null,
     ownerNotifiedAt: null,
+    usageLimitNotifiedAt: null,
     smsStartedAt: null,
     smsCompletedAt: null,
     lastInboundAt: null,
