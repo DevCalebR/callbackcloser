@@ -23,6 +23,7 @@ Note: this file does not add or require new scripts.
 ## 3) Twilio / Stripe Preflight (Using Existing Commands + Provider Consoles)
 
 - [ ] Print expected Twilio webhook URLs: `npm run webhooks:print`
+- [ ] Run consolidated provider preflight report: `npm run preflight:providers`
 - [ ] Verify Twilio Console webhook targets match printed URLs.
 - [ ] Verify Stripe webhook endpoint points to `/api/stripe/webhook` on the target environment.
 - [ ] Replay or trigger Stripe test events (`checkout.session.completed`, `customer.subscription.*`, `invoice.payment_*`) in Stripe test mode.
