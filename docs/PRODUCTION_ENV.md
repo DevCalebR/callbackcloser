@@ -30,6 +30,12 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `TWILIO_VALIDATE_SIGNATURE` | Server-only | Yes (production) | Vercel | Must be `true` in production. Twilio webhooks require valid `X-Twilio-Signature` verification using `TWILIO_AUTH_TOKEN`; production fails closed otherwise. |
 | `DEBUG_ENV_ENDPOINT_TOKEN` | Server-only | Optional | Vercel | Protects `/api/debug/env` in production. If unset, the endpoint returns `404` in production. |
 | `PORTFOLIO_DEMO_MODE` | Server-only | Optional | Local / Vercel | Enables demo data/auth bypass mode for portfolio/demo screenshots. Keep disabled in production unless intentionally using demo mode. |
+| `RATE_LIMIT_WINDOW_MS` | Server-only | Optional | Vercel | Shared rate-limit window in milliseconds. Default `60000`. |
+| `RATE_LIMIT_TWILIO_AUTH_MAX` | Server-only | Optional | Vercel | Max Twilio webhook requests per window for valid/authorized traffic. Default `240`. |
+| `RATE_LIMIT_TWILIO_UNAUTH_MAX` | Server-only | Optional | Vercel | Max Twilio webhook requests per window for unauthorized traffic. Default `40`. |
+| `RATE_LIMIT_STRIPE_AUTH_MAX` | Server-only | Optional | Vercel | Max Stripe webhook requests per window for valid-signed traffic. Default `240`. |
+| `RATE_LIMIT_STRIPE_UNAUTH_MAX` | Server-only | Optional | Vercel | Max Stripe webhook requests per window for invalid-signature traffic. Default `40`. |
+| `RATE_LIMIT_PROTECTED_API_MAX` | Server-only | Optional | Vercel | Max requests per window for protected Stripe mutation APIs (`/api/stripe/checkout`, `/api/stripe/portal`). Default `80`. |
 
 ## Runtime Validation (Production)
 
@@ -44,6 +50,7 @@ The app now validates required server env vars at runtime in production via `lib
 - Twilio webhook auth behavior:
   - Production: `TWILIO_VALIDATE_SIGNATURE=true` is required and token-only auth is rejected
   - Non-production: signature mode can fall back to shared-token auth for local/dev workflows
+- Rate limiting defaults are tuned to avoid blocking normal Twilio/Stripe provider traffic while still throttling abusive bursts. Tune limits only if you observe false positives in logs.
 - `NEXT_PUBLIC_APP_URL` is the canonical value and should be set explicitly. If it is missing/invalid, the app can temporarily fall back to Vercel system env vars (`VERCEL_URL` / `VERCEL_PROJECT_PRODUCTION_URL`) to avoid auth-page crashes, but webhook/redirect behavior should still use an explicit `NEXT_PUBLIC_APP_URL`.
 
 ## Vercel: Preview vs Production

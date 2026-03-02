@@ -253,3 +253,47 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
     - `6532134`
+
+- 2026-03-02 - G5 (DONE)
+  - Branch: `hardening/g5-rate-limiting`
+  - What changed:
+    - Added shared in-memory limiter utilities:
+      - `lib/rate-limit.ts` (bucket store, client IP extraction, rate-limit headers)
+      - `lib/rate-limit-config.ts` (env-tunable defaults)
+    - Added auth-aware webhook throttling:
+      - Twilio `voice/status/sms` routes now enforce:
+        - stricter unauthenticated burst limits
+        - higher limits for authorized provider traffic
+      - Stripe webhook now enforces:
+        - stricter invalid-signature burst limits
+        - higher limits for valid-signed webhook traffic
+    - Added middleware throttling for protected Stripe mutation APIs:
+      - `/api/stripe/checkout`
+      - `/api/stripe/portal`
+    - Added rate-limit unit tests in `tests/rate-limit.test.ts`.
+    - Documented optional rate-limit env knobs in `.env.example`, `README.md`, and `docs/PRODUCTION_ENV.md`.
+  - Safety notes:
+    - Twilio/Stripe normal traffic is protected by separate authorized-vs-unauthorized thresholds to reduce false positives.
+    - All 429 responses include `Retry-After` and `X-RateLimit-*` headers.
+  - Commands run + results:
+    - `npm test` -> PASS (26/26)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `lib/rate-limit.ts`
+    - `lib/rate-limit-config.ts`
+    - `middleware.ts`
+    - `app/api/twilio/voice/route.ts`
+    - `app/api/twilio/status/route.ts`
+    - `app/api/twilio/sms/route.ts`
+    - `app/api/stripe/webhook/route.ts`
+    - `tests/rate-limit.test.ts`
+    - `.env.example`
+    - `README.md`
+    - `docs/PRODUCTION_ENV.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `PENDING`
