@@ -483,3 +483,35 @@ Dependencies: G4 (recommended)
     - `npm run env:check` -> PASS
   - Notes:
     - No functional regressions observed in local validation gates.
+
+- 2026-03-02 - G14 (DONE)
+  - Branch: `hardening/g14-recordings-ux`
+  - What changed:
+    - Added access-control helper for recording links in `lib/recording-access.ts`:
+      - only authenticated owner of the lead's business can open recordings
+      - blocks wrong-business and missing-recording cases
+    - Added server-mediated recording access route:
+      - `app/api/leads/[leadId]/recording/route.ts`
+      - validates auth + business ownership before redirecting to Twilio recording URL
+      - hides cross-business lead access behind `404`
+    - Updated lead detail UI (`app/app/leads/[leadId]/page.tsx`) to show:
+      - recording status
+      - recording duration
+      - gated `Open recording` action (uses server route, not raw URL)
+    - Added focused access-control tests in `tests/recording-access.test.ts`.
+    - Updated recording docs in `README.md` to reflect the in-app gated flow.
+  - Commands run + results:
+    - `npm test` -> PASS (38/38)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+  - Files touched:
+    - `lib/recording-access.ts`
+    - `app/api/leads/[leadId]/recording/route.ts`
+    - `app/app/leads/[leadId]/page.tsx`
+    - `tests/recording-access.test.ts`
+    - `README.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `4e8f4d8`
