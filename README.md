@@ -64,6 +64,7 @@ Required categories:
 - Stripe keys + price IDs + webhook secret
 - Twilio credentials + webhook auth token
 - Database URL
+- Optional rate-limit tuning vars (defaults are built in)
 
 ### 4. Run Prisma migrations / generate client
 
@@ -249,6 +250,7 @@ Compliance handling:
 Security / idempotency notes:
 
 - Invalid webhook token -> `401`
+- Unauthorized webhook bursts are rate-limited with `429` (`Retry-After` + `X-RateLimit-*` headers)
 - Duplicate inbound SMS retries with the same `MessageSid` are deduped via `Message.twilioSid` and ignored after persistence check
 - Webhook handlers log structured events (`callSid` / `messageSid`, event type, decision)
 

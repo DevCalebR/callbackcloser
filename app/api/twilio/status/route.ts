@@ -4,6 +4,8 @@ import { SubscriptionStatus } from '@prisma/client';
 import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
+import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
 import { getServicePrompt } from '@/lib/sms-state-machine';
 import { isSubscriptionActive } from '@/lib/subscription';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
@@ -41,16 +43,65 @@ function retryableErrorResponse() {
   return buildTwilioRetryableErrorResponse('status');
 }
 
+function rateLimitStatusResponse(retryAfterSeconds: number) {
+  return new NextResponse(messagingTwiML(), {
+    status: 429,
+    headers: {
+      'Content-Type': 'text/xml',
+      'Retry-After': String(retryAfterSeconds),
+    },
+  });
+}
+
 export async function POST(request: Request) {
   let callSid: string | null = null;
   let dialCallSid: string | null = null;
   try {
     const formData = await request.formData();
     const payload = Object.fromEntries(formData.entries()) as Record<string, string>;
+    const clientIp = getClientIpAddress(request);
+    const accountSid = formField(formData, 'AccountSid');
 
-    if (!hasValidTwilioWebhookRequest(request, payload)) {
+    const authorized = hasValidTwilioWebhookRequest(request, payload);
+    if (!authorized) {
+      const rateLimit = consumeRateLimit({
+        key: `twilio:status:unauth:${clientIp}`,
+        limit: RATE_LIMIT_TWILIO_UNAUTH_MAX,
+        windowMs: RATE_LIMIT_WINDOW_MS,
+      });
+      if (!rateLimit.allowed) {
+        logTwilioWarn('status', 'webhook_unauthorized_rate_limited', {
+          eventType: 'dial_status_callback',
+          decision: 'reject_429',
+          clientIp,
+        });
+        return new NextResponse(
+          JSON.stringify({ error: 'Too many unauthorized requests' }),
+          { status: 429, headers: { 'Content-Type': 'application/json', ...buildRateLimitHeaders(rateLimit) } }
+        );
+      }
+
       logTwilioWarn('status', 'webhook_unauthorized', { decision: 'reject_401' });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const authRateLimit = consumeRateLimit({
+      key: `twilio:status:auth:${accountSid || clientIp}`,
+      limit: RATE_LIMIT_TWILIO_AUTH_MAX,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    });
+    if (!authRateLimit.allowed) {
+      logTwilioWarn('status', 'webhook_rate_limited', {
+        eventType: 'dial_status_callback',
+        decision: 'reject_429',
+        accountSid: accountSid || null,
+        clientIp,
+      });
+      const response = rateLimitStatusResponse(authRateLimit.retryAfterSeconds);
+      Object.entries(buildRateLimitHeaders(authRateLimit)).forEach(([name, value]) => {
+        response.headers.set(name, value);
+      });
+      return response;
     }
 
     const to = normalizePhoneNumber(formField(formData, 'To'));

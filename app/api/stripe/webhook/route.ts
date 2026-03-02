@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
 import { db } from '@/lib/db';
+import { RATE_LIMIT_STRIPE_AUTH_MAX, RATE_LIMIT_STRIPE_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
+import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
 import { getStripe } from '@/lib/stripe';
 
 export const runtime = 'nodejs';
@@ -82,6 +84,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 }
 
 export async function POST(request: Request) {
+  const clientIp = getClientIpAddress(request);
   const signature = request.headers.get('stripe-signature');
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!signature || !webhookSecret) {
@@ -95,8 +98,38 @@ export async function POST(request: Request) {
   try {
     event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
   } catch (error) {
+    const unauthRateLimit = consumeRateLimit({
+      key: `stripe:webhook:unauth:${clientIp}`,
+      limit: RATE_LIMIT_STRIPE_UNAUTH_MAX,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    });
+    if (!unauthRateLimit.allowed) {
+      console.warn('Stripe webhook rate-limited (invalid signature burst)', {
+        clientIp,
+        decision: 'reject_429',
+      });
+      return NextResponse.json(
+        { error: 'Too many invalid webhook attempts' },
+        { status: 429, headers: buildRateLimitHeaders(unauthRateLimit) }
+      );
+    }
+
     const message = error instanceof Error ? error.message : 'Invalid webhook signature';
     return NextResponse.json({ error: message }, { status: 400 });
+  }
+
+  const authRateLimit = consumeRateLimit({
+    key: `stripe:webhook:auth:${clientIp}`,
+    limit: RATE_LIMIT_STRIPE_AUTH_MAX,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+  });
+  if (!authRateLimit.allowed) {
+    console.warn('Stripe webhook rate-limited', {
+      clientIp,
+      eventType: event.type,
+      decision: 'reject_429',
+    });
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429, headers: buildRateLimitHeaders(authRateLimit) });
   }
 
   try {
