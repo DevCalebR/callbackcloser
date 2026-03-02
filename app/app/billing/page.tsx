@@ -1,7 +1,18 @@
+import Link from 'next/link';
+
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
+import { db } from '@/lib/db';
+import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getConversationUsageForBusiness, resolveUsageTierFromSubscription } from '@/lib/usage';
+import {
+  describeAutomationBlockReason,
+  formatUsageSummary,
+  formatUsageTierLabel,
+  resolveAutomationBlockReason,
+} from '@/lib/usage-visibility';
 
 function planPrice(priceId: string | undefined) {
   return priceId ? 'Configured via Stripe Price ID' : 'Missing env var';
@@ -13,6 +24,24 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const proPriceId = process.env.STRIPE_PRICE_PRO;
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const checkout = typeof searchParams?.checkout === 'string' ? searchParams.checkout : undefined;
+  const demoMode = isPortfolioDemoMode();
+  const [blockedCount, usage] = demoMode
+    ? [getPortfolioDemoBlockedCount(), null]
+    : await Promise.all([
+        db.lead.count({ where: { businessId: business.id, billingRequired: true } }),
+        getConversationUsageForBusiness(business),
+      ]);
+  const usageTierLabel = formatUsageTierLabel(resolveUsageTierFromSubscription(business));
+  const usageSummary = usage ? formatUsageSummary(usage) : 'Unavailable in portfolio demo mode.';
+  const automationBlockReason = resolveAutomationBlockReason({
+    blockedCount,
+    subscriptionStatus: business.subscriptionStatus,
+    usage,
+  });
+  const automationStatusMessage = describeAutomationBlockReason(automationBlockReason, {
+    blockedCount,
+    usage: usage ?? undefined,
+  });
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -34,12 +63,29 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           <Badge variant={business.subscriptionStatus === 'ACTIVE' ? 'success' : 'outline'}>
             {business.subscriptionStatus.toLowerCase()}
           </Badge>
+          <Badge variant="outline">{usageTierLabel}</Badge>
+          <span className="text-muted-foreground">Usage: {usageSummary}</span>
           {business.stripeCustomerId ? <span className="text-muted-foreground">Customer: {business.stripeCustomerId}</span> : null}
           {business.stripeSubscriptionId ? <span className="text-muted-foreground">Subscription: {business.stripeSubscriptionId}</span> : null}
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <Card className={automationBlockReason === 'none' ? 'border-accent/40 bg-accent/20' : 'border-destructive/30 bg-destructive/5'}>
+        <CardHeader>
+          <CardTitle>Automation Status</CardTitle>
+          <CardDescription>Why missed-call follow-up is running or paused.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p>{automationStatusMessage}</p>
+          {automationBlockReason !== 'none' ? (
+            <Link href="#plan-options" className="inline-flex rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+              Upgrade Plan
+            </Link>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <div id="plan-options" className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Starter</CardTitle>
