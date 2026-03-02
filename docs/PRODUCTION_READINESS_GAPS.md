@@ -218,4 +218,4 @@ Dependencies: G4 (recommended)
     - `tests/twilio-webhook-retry.test.ts`
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
-    - pending (added in immediate follow-up changelog commit)
+    - `d0dff5e`
