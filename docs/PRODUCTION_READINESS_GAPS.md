@@ -483,3 +483,39 @@ Dependencies: G4 (recommended)
     - `npm run env:check` -> PASS
   - Notes:
     - No functional regressions observed in local validation gates.
+
+- 2026-03-02 - G15 (DONE)
+  - Branch: `hardening/g15-provider-preflight`
+  - What changed:
+    - Added provider preflight core checks in `lib/provider-preflight.ts`:
+      - Clerk URL/origin consistency validation
+      - Stripe webhook secret + endpoint reachability assumptions
+      - Twilio webhook target parity derivation from app URL (with optional explicit URL parity env checks)
+      - DB connectivity health check contract
+    - Added executable provider preflight command:
+      - `scripts/provider_preflight.ts`
+      - npm script: `npm run preflight:providers`
+    - Added focused tests with mocked DB behavior and env-driven parity cases:
+      - `tests/provider-preflight.test.ts`
+    - Updated operator docs/checklists to include provider preflight:
+      - `README.md`
+      - `docs/EXTERNAL_SETUP_CHECKLIST.md`
+      - `scripts/preflight_checklist.md`
+  - Commands run + results:
+    - `npm test` -> PASS (40/40)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run preflight:providers` -> FAIL (database unreachable from current runtime; script produced actionable fix output and correctly marked FAIL)
+  - Files touched:
+    - `lib/provider-preflight.ts`
+    - `scripts/provider_preflight.ts`
+    - `tests/provider-preflight.test.ts`
+    - `package.json`
+    - `README.md`
+    - `docs/EXTERNAL_SETUP_CHECKLIST.md`
+    - `scripts/preflight_checklist.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `2ced0fc`
