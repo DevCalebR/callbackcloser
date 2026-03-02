@@ -3,6 +3,7 @@ import { SubscriptionStatus } from '@prisma/client';
 
 import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
+import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
@@ -56,6 +57,8 @@ function rateLimitStatusResponse(retryAfterSeconds: number) {
 export async function POST(request: Request) {
   let callSid: string | null = null;
   let dialCallSid: string | null = null;
+  const correlationId = getCorrelationIdFromRequest(request);
+  const withCorrelation = (response: Response) => withCorrelationIdHeader(response, correlationId);
   try {
     const formData = await request.formData();
     const payload = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -71,18 +74,19 @@ export async function POST(request: Request) {
       });
       if (!rateLimit.allowed) {
         logTwilioWarn('status', 'webhook_unauthorized_rate_limited', {
+          correlationId,
           eventType: 'dial_status_callback',
           decision: 'reject_429',
           clientIp,
         });
-        return new NextResponse(
+        return withCorrelation(new NextResponse(
           JSON.stringify({ error: 'Too many unauthorized requests' }),
           { status: 429, headers: { 'Content-Type': 'application/json', ...buildRateLimitHeaders(rateLimit) } }
-        );
+        ));
       }
 
-      logTwilioWarn('status', 'webhook_unauthorized', { decision: 'reject_401' });
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      logTwilioWarn('status', 'webhook_unauthorized', { correlationId, decision: 'reject_401' });
+      return withCorrelation(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
     }
 
     const authRateLimit = consumeRateLimit({
@@ -92,6 +96,7 @@ export async function POST(request: Request) {
     });
     if (!authRateLimit.allowed) {
       logTwilioWarn('status', 'webhook_rate_limited', {
+        correlationId,
         eventType: 'dial_status_callback',
         decision: 'reject_429',
         accountSid: accountSid || null,
@@ -101,7 +106,7 @@ export async function POST(request: Request) {
       Object.entries(buildRateLimitHeaders(authRateLimit)).forEach(([name, value]) => {
         response.headers.set(name, value);
       });
-      return response;
+      return withCorrelation(response);
     }
 
     const to = normalizePhoneNumber(formField(formData, 'To'));
@@ -114,6 +119,7 @@ export async function POST(request: Request) {
     logTwilioInfo('status', 'webhook_received', {
       callSid,
       dialCallSid,
+      correlationId,
       eventType: 'dial_status_callback',
       dialCallStatus: dialCallStatus || null,
       recordingSid: recording?.recordingSid ?? null,
@@ -141,23 +147,25 @@ export async function POST(request: Request) {
 
       logTwilioInfo('status', 'recording_metadata_persisted_only', {
         callSid,
+        correlationId,
         eventType: 'recording_status_callback',
         recordingSid: recording?.recordingSid ?? null,
         recordingStatus: recording?.recordingStatus ?? null,
         decision: updated.count > 0 ? 'update_call_recording_metadata' : 'noop_call_not_found',
       });
 
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     if (!to || !callSid) {
       logTwilioWarn('status', 'missing_required_fields', {
         callSid,
         dialCallSid,
+        correlationId,
         eventType: 'dial_status_callback',
         decision: 'noop_missing_to_or_callSid',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     const business = await findBusinessByTwilioNumber(to);
@@ -165,10 +173,11 @@ export async function POST(request: Request) {
       logTwilioWarn('status', 'business_not_found', {
         callSid,
         dialCallSid,
+        correlationId,
         eventType: 'dial_status_callback',
         decision: 'noop_business_not_found',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     const answered = dialCallStatus.trim().toLowerCase() === 'completed';
@@ -211,6 +220,7 @@ export async function POST(request: Request) {
     logTwilioInfo('status', 'call_upserted', {
       callSid,
       dialCallSid,
+      correlationId,
       eventType: 'dial_status_callback',
       businessId: business.id,
       answered,
@@ -222,6 +232,7 @@ export async function POST(request: Request) {
       logTwilioInfo('status', 'recording_metadata_persisted', {
         callSid,
         dialCallSid,
+        correlationId,
         eventType: 'recording_status_callback',
         businessId: business.id,
         recordingSid: recording?.recordingSid ?? null,
@@ -234,11 +245,12 @@ export async function POST(request: Request) {
       logTwilioInfo('status', 'not_missed_noop', {
         callSid,
         dialCallSid,
+        correlationId,
         eventType: 'dial_status_callback',
         businessId: business.id,
         decision: 'noop_not_missed',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     const callerPhone = from || formField(formData, 'From');
@@ -260,6 +272,7 @@ export async function POST(request: Request) {
       logTwilioInfo('status', 'lead_created_for_missed_call', {
         callSid,
         dialCallSid,
+        correlationId,
         eventType: 'dial_status_callback',
         businessId: business.id,
         leadId: lead.id,
@@ -269,6 +282,7 @@ export async function POST(request: Request) {
       logTwilioInfo('status', 'lead_reused_for_retry', {
         callSid,
         dialCallSid,
+        correlationId,
         eventType: 'dial_status_callback',
         businessId: business.id,
         leadId: lead.id,
@@ -283,24 +297,26 @@ export async function POST(request: Request) {
       logTwilioInfo('status', 'billing_inactive_no_sms', {
         callSid,
         dialCallSid,
+        correlationId,
         eventType: 'dial_status_callback',
         businessId: business.id,
         leadId: lead.id,
         decision: 'noop_billing_inactive',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     if (!business.twilioPhoneNumber || lead.smsStartedAt) {
       logTwilioInfo('status', 'already_started_or_missing_twilio_number', {
         callSid,
         dialCallSid,
+        correlationId,
         eventType: 'dial_status_callback',
         businessId: business.id,
         leadId: lead.id,
         decision: lead.smsStartedAt ? 'noop_retry_sms_already_started' : 'noop_missing_twilio_number',
       });
-      return xmlOk();
+      return withCorrelation(xmlOk());
     }
 
     try {
@@ -309,6 +325,7 @@ export async function POST(request: Request) {
         logTwilioWarn('status', 'usage_limit_reached', {
           callSid,
           dialCallSid,
+          correlationId,
           eventType: 'dial_status_callback',
           businessId: business.id,
           leadId: lead.id,
@@ -328,12 +345,13 @@ export async function POST(request: Request) {
           logTwilioInfo('status', 'usage_limit_owner_notify_already_recorded', {
             callSid,
             dialCallSid,
+            correlationId,
             eventType: 'dial_status_callback',
             businessId: business.id,
             leadId: lead.id,
             decision: 'noop_usage_limit_notification_already_recorded',
           });
-          return xmlOk();
+          return withCorrelation(xmlOk());
         }
 
         if (business.notifyPhone) {
@@ -342,12 +360,13 @@ export async function POST(request: Request) {
             logTwilioInfo('status', 'usage_limit_owner_notify_already_claimed', {
               callSid,
               dialCallSid,
+              correlationId,
               eventType: 'dial_status_callback',
               businessId: business.id,
               leadId: lead.id,
               decision: 'noop_usage_limit_notification_already_claimed',
             });
-            return xmlOk();
+            return withCorrelation(xmlOk());
           }
 
           try {
@@ -365,16 +384,18 @@ export async function POST(request: Request) {
               logTwilioWarn('status', 'usage_limit_owner_notify_suppressed', {
                 callSid,
                 dialCallSid,
+                correlationId,
                 eventType: 'dial_status_callback',
                 businessId: business.id,
                 leadId: lead.id,
                 decision: 'owner_notification_suppressed_opted_out',
               });
-              return xmlOk();
+              return withCorrelation(xmlOk());
             }
             logTwilioInfo('status', 'usage_limit_owner_notified', {
               callSid,
               dialCallSid,
+              correlationId,
               eventType: 'dial_status_callback',
               businessId: business.id,
               leadId: lead.id,
@@ -399,6 +420,7 @@ export async function POST(request: Request) {
               {
                 callSid,
                 dialCallSid,
+                correlationId,
                 eventType: 'dial_status_callback',
                 businessId: business.id,
                 leadId: lead.id,
@@ -409,7 +431,7 @@ export async function POST(request: Request) {
           }
         }
 
-        return xmlOk();
+        return withCorrelation(xmlOk());
       }
 
       const prompt = getServicePrompt(business);
@@ -425,12 +447,13 @@ export async function POST(request: Request) {
         logTwilioWarn('status', 'initial_missed_call_sms_suppressed', {
           callSid,
           dialCallSid,
+          correlationId,
           eventType: 'dial_status_callback',
           businessId: business.id,
           leadId: lead.id,
           decision: 'skip_opted_out_recipient',
         });
-        return xmlOk();
+        return withCorrelation(xmlOk());
       }
 
       await db.lead.update({
@@ -447,6 +470,7 @@ export async function POST(request: Request) {
       logTwilioInfo('status', 'initial_missed_call_sms_started', {
         callSid,
         dialCallSid,
+        correlationId,
         eventType: 'dial_status_callback',
         businessId: business.id,
         leadId: lead.id,
@@ -459,6 +483,7 @@ export async function POST(request: Request) {
         {
           callSid,
           dialCallSid,
+          correlationId,
           eventType: 'dial_status_callback',
           businessId: business.id,
           leadId: lead.id,
@@ -473,17 +498,17 @@ export async function POST(request: Request) {
           lastInteractionAt: new Date(),
         },
       });
-      return retryableErrorResponse();
+      return withCorrelation(retryableErrorResponse());
     }
 
-    return xmlOk();
+    return withCorrelation(xmlOk());
   } catch (error) {
     logTwilioError(
       'status',
       'route_error',
-      { callSid, dialCallSid, eventType: 'dial_status_callback', decision: 'return_retryable_503' },
+      { callSid, dialCallSid, correlationId, eventType: 'dial_status_callback', decision: 'return_retryable_503' },
       error
     );
-    return retryableErrorResponse();
+    return withCorrelation(retryableErrorResponse());
   }
 }

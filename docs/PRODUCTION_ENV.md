@@ -36,6 +36,9 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `RATE_LIMIT_STRIPE_AUTH_MAX` | Server-only | Optional | Vercel | Max Stripe webhook requests per window for valid-signed traffic. Default `240`. |
 | `RATE_LIMIT_STRIPE_UNAUTH_MAX` | Server-only | Optional | Vercel | Max Stripe webhook requests per window for invalid-signature traffic. Default `40`. |
 | `RATE_LIMIT_PROTECTED_API_MAX` | Server-only | Optional | Vercel | Max requests per window for protected Stripe mutation APIs (`/api/stripe/checkout`, `/api/stripe/portal`). Default `80`. |
+| `ALERT_WEBHOOK_URL` | Server-only | Optional | Vercel / Ops | If set, critical application errors are POSTed to this webhook for alert fan-out (Slack/Pager/incident gateway). |
+| `ALERT_WEBHOOK_TOKEN` | Server-only | Optional | Vercel / Ops | Optional bearer token added to alert webhook requests as `Authorization: Bearer <token>`. |
+| `ALERT_WEBHOOK_TIMEOUT_MS` | Server-only | Optional | Vercel / Ops | Timeout for alert webhook dispatch. Default `4000` ms. |
 
 ## Runtime Validation (Production)
 
@@ -51,6 +54,7 @@ The app now validates required server env vars at runtime in production via `lib
   - Production: `TWILIO_VALIDATE_SIGNATURE=true` is required and token-only auth is rejected
   - Non-production: signature mode can fall back to shared-token auth for local/dev workflows
 - Rate limiting defaults are tuned to avoid blocking normal Twilio/Stripe provider traffic while still throttling abusive bursts. Tune limits only if you observe false positives in logs.
+- Error reporting emits structured `app.error` logs and, when configured, dispatches alert payloads to `ALERT_WEBHOOK_URL`.
 - `NEXT_PUBLIC_APP_URL` is the canonical value and should be set explicitly. If it is missing/invalid, the app can temporarily fall back to Vercel system env vars (`VERCEL_URL` / `VERCEL_PROJECT_PRODUCTION_URL`) to avoid auth-page crashes, but webhook/redirect behavior should still use an explicit `NEXT_PUBLIC_APP_URL`.
 
 ## Vercel: Preview vs Production

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
+import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
@@ -43,6 +44,8 @@ function rateLimitVoiceResponse(retryAfterSeconds: number) {
 
 export async function POST(request: Request) {
   let callSid: string | null = null;
+  const correlationId = getCorrelationIdFromRequest(request);
+  const withCorrelation = (response: NextResponse) => withCorrelationIdHeader(response, correlationId);
   try {
     const formData = await request.formData();
     const payload = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -58,18 +61,19 @@ export async function POST(request: Request) {
       if (!rateLimit.allowed) {
         logTwilioWarn('voice', 'webhook_unauthorized_rate_limited', {
           callSid,
+          correlationId,
           eventType: 'incoming_call',
           decision: 'reject_429',
           clientIp,
         });
-        return new NextResponse(
+        return withCorrelation(new NextResponse(
           JSON.stringify({ error: 'Too many unauthorized requests' }),
           { status: 429, headers: { 'Content-Type': 'application/json', ...buildRateLimitHeaders(rateLimit) } }
-        );
+        ));
       }
 
-      logTwilioWarn('voice', 'webhook_unauthorized', { decision: 'reject_401' });
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      logTwilioWarn('voice', 'webhook_unauthorized', { correlationId, decision: 'reject_401' });
+      return withCorrelation(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
     }
 
     const to = normalizePhoneNumber(formField(formData, 'To'));
@@ -85,6 +89,7 @@ export async function POST(request: Request) {
     if (!rateLimit.allowed) {
       logTwilioWarn('voice', 'webhook_rate_limited', {
         callSid,
+        correlationId,
         eventType: 'incoming_call',
         decision: 'reject_429',
         accountSid: accountSid || null,
@@ -94,11 +99,12 @@ export async function POST(request: Request) {
       Object.entries(buildRateLimitHeaders(rateLimit)).forEach(([name, value]) => {
         response.headers.set(name, value);
       });
-      return response;
+      return withCorrelation(response);
     }
 
     logTwilioInfo('voice', 'webhook_received', {
       callSid,
+      correlationId,
       eventType: 'incoming_call',
       decision: 'processing',
     });
@@ -107,6 +113,7 @@ export async function POST(request: Request) {
     if (!business) {
       logTwilioWarn('voice', 'business_not_found', {
         callSid,
+        correlationId,
         eventType: 'incoming_call',
         decision: 'respond_not_configured',
       });
@@ -115,7 +122,7 @@ export async function POST(request: Request) {
         response.say('Sorry, this number is not configured.');
         response.hangup();
       });
-      return new NextResponse(xml, { headers: { 'Content-Type': 'text/xml' } });
+      return withCorrelation(new NextResponse(xml, { headers: { 'Content-Type': 'text/xml' } }));
     }
 
     if (callSid) {
@@ -140,6 +147,7 @@ export async function POST(request: Request) {
 
       logTwilioInfo('voice', 'call_persisted', {
         callSid,
+        correlationId,
         eventType: 'incoming_call',
         businessId: business.id,
         decision: 'upsert_call',
@@ -160,18 +168,19 @@ export async function POST(request: Request) {
 
     logTwilioInfo('voice', 'twiml_returned', {
       callSid,
+      correlationId,
       eventType: 'incoming_call',
       businessId: business.id,
       decision: 'dial_forwarding_number_with_recording',
     });
 
-    return new NextResponse(xml, { headers: { 'Content-Type': 'text/xml' } });
+    return withCorrelation(new NextResponse(xml, { headers: { 'Content-Type': 'text/xml' } }));
   } catch (error) {
-    logTwilioError('voice', 'route_error', { callSid, eventType: 'incoming_call', decision: 'fallback_hangup' }, error);
+    logTwilioError('voice', 'route_error', { callSid, correlationId, eventType: 'incoming_call', decision: 'fallback_hangup' }, error);
     const xml = voiceTwiML((response) => {
       response.say('Sorry, we are having trouble connecting your call right now.');
       response.hangup();
     });
-    return new NextResponse(xml, { headers: { 'Content-Type': 'text/xml' } });
+    return withCorrelation(new NextResponse(xml, { headers: { 'Content-Type': 'text/xml' } }));
   }
 }
