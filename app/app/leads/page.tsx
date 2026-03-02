@@ -9,7 +9,13 @@ import { db } from '@/lib/db';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { formatDateTime, leadStatusLabels, leadStatusOrder, smsStateLabels } from '@/lib/lead-presenters';
 import { getPortfolioDemoBlockedCount, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
-import { isSubscriptionActive } from '@/lib/subscription';
+import { getConversationUsageForBusiness, resolveUsageTierFromSubscription } from '@/lib/usage';
+import {
+  describeAutomationBlockReason,
+  formatUsageSummary,
+  formatUsageTierLabel,
+  resolveAutomationBlockReason,
+} from '@/lib/usage-visibility';
 import { cn } from '@/lib/utils';
 
 export default async function LeadsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
@@ -19,8 +25,8 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Recor
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const demoMode = isPortfolioDemoMode();
 
-  const [leads, blockedCount] = demoMode
-    ? [getPortfolioDemoLeads(statusFilter), getPortfolioDemoBlockedCount()]
+  const [leads, blockedCount, usage] = demoMode
+    ? [getPortfolioDemoLeads(statusFilter), getPortfolioDemoBlockedCount(), null]
     : await Promise.all([
         db.lead.findMany({
           where: {
@@ -36,7 +42,20 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Recor
           orderBy: [{ createdAt: 'desc' }],
         }),
         db.lead.count({ where: { businessId: business.id, billingRequired: true } }),
+        getConversationUsageForBusiness(business),
       ]);
+  const usageTierLabel = formatUsageTierLabel(resolveUsageTierFromSubscription(business));
+  const usageSummary = usage ? formatUsageSummary(usage) : 'Unavailable in portfolio demo mode.';
+  const automationBlockReason = resolveAutomationBlockReason({
+    blockedCount,
+    subscriptionStatus: business.subscriptionStatus,
+    usage,
+  });
+  const automationBlockMessage = describeAutomationBlockReason(automationBlockReason, {
+    blockedCount,
+    usage: usage ?? undefined,
+  });
+  const automationBlockCta = automationBlockReason === 'usage_limit_reached' ? 'Upgrade Plan' : 'Open Billing';
 
   return (
     <div className="space-y-6">
@@ -64,8 +83,32 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Recor
         </div>
       </div>
 
-      {!isSubscriptionActive(business.subscriptionStatus) && blockedCount > 0 ? <UpgradeBanner blockedCount={blockedCount} /> : null}
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
+      {automationBlockReason !== 'none' && blockedCount > 0 ? (
+        <UpgradeBanner
+          blockedCount={blockedCount}
+          title="SMS follow-up is currently paused."
+          description={automationBlockMessage}
+          ctaLabel={automationBlockCta}
+        />
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Automation Overview</CardTitle>
+          <CardDescription>Current plan tier and monthly conversation usage.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 text-sm sm:grid-cols-3">
+          <div className="space-y-1">
+            <p className="text-xs uppercase text-muted-foreground">Plan Tier</p>
+            <p className="font-medium">{usageTierLabel}</p>
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <p className="text-xs uppercase text-muted-foreground">Current Period Usage</p>
+            <p className="font-medium">{usageSummary}</p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -483,3 +483,37 @@ Dependencies: G4 (recommended)
     - `npm run env:check` -> PASS
   - Notes:
     - No functional regressions observed in local validation gates.
+
+- 2026-03-02 - G13 (DONE)
+  - Branch: `hardening/g13-usage-visibility`
+  - What changed:
+    - Added usage-visibility presenter helpers in `lib/usage-visibility.ts` for:
+      - plan tier labels
+      - usage summary formatting
+      - automation block reason resolution (`billing_inactive`, `usage_limit_reached`, `billing_required`)
+      - user-facing blocked reason messages
+    - Updated leads dashboard UI (`app/app/leads/page.tsx`) to show:
+      - current plan tier
+      - current period usage (used/remaining)
+      - clear blocked-reason banner with billing/upgrade CTA when automation is paused
+    - Updated billing page UI (`app/app/billing/page.tsx`) to show:
+      - current plan tier
+      - current period usage
+      - explicit automation status messaging and upgrade CTA to plan options
+    - Extended `components/upgrade-banner.tsx` with configurable title/description/CTA so existing banner patterns are reused across blocked states.
+    - Added presenter/helper coverage in `tests/usage-visibility.test.ts`.
+  - Commands run + results:
+    - `npm test` -> PASS (38/38)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+  - Files touched:
+    - `lib/usage-visibility.ts`
+    - `app/app/leads/page.tsx`
+    - `app/app/billing/page.tsx`
+    - `components/upgrade-banner.tsx`
+    - `tests/usage-visibility.test.ts`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `92901ab`
