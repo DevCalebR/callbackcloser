@@ -1,14 +1,40 @@
 import { NextResponse } from 'next/server';
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 
+import {
+  getPortfolioDemoGuardrailErrorMessage,
+  isPortfolioDemoModeBlockedInProduction,
+  isPortfolioDemoModeEnabled,
+  isProductionDemoModeOverrideEnabled,
+} from '@/lib/portfolio-demo-guardrail';
 import { RATE_LIMIT_PROTECTED_API_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
 
 const isProtectedRoute = createRouteMatcher(['/app(.*)', '/api/stripe/checkout(.*)', '/api/stripe/portal(.*)']);
 const isProtectedApiMutationRoute = createRouteMatcher(['/api/stripe/checkout', '/api/stripe/portal']);
+let productionDemoGuardrailLogged = false;
+let productionDemoOverrideLogged = false;
 
 export default clerkMiddleware(async (auth, req) => {
-  if (process.env.PORTFOLIO_DEMO_MODE === '1') {
+  if (isPortfolioDemoModeBlockedInProduction(process.env)) {
+    if (!productionDemoGuardrailLogged) {
+      productionDemoGuardrailLogged = true;
+      console.error(getPortfolioDemoGuardrailErrorMessage(), {
+        nodeEnv: process.env.NODE_ENV ?? null,
+        vercelEnv: process.env.VERCEL_ENV ?? null,
+      });
+    }
+    return NextResponse.json({ error: getPortfolioDemoGuardrailErrorMessage() }, { status: 503 });
+  }
+
+  if (isPortfolioDemoModeEnabled(process.env)) {
+    if (isProductionDemoModeOverrideEnabled(process.env) && !productionDemoOverrideLogged) {
+      productionDemoOverrideLogged = true;
+      console.warn('Production demo mode override is enabled (break-glass).', {
+        nodeEnv: process.env.NODE_ENV ?? null,
+        vercelEnv: process.env.VERCEL_ENV ?? null,
+      });
+    }
     return;
   }
 
