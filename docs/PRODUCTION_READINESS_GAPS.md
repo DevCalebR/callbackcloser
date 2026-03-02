@@ -453,3 +453,19 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
     - `91846f3`
+
+- 2026-03-02 - Mainline Verification
+  - Scope:
+    - Verified post-merge mainline health after M0 + G12 merges were synced into `main`.
+    - Includes final sync merge commit: `da4793d` (PR #25).
+  - Commands run + results:
+    - `npm ci` -> PASS
+    - `npm test` -> PASS (34/34)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+  - Notes:
+    - CI compatibility fix applied during merge process:
+      - `.github/workflows/ci.yml` now uses Node 22
+      - non-production Clerk publishable-key fallback in `app/layout.tsx` prevents preview/build failures when placeholder envs are used
