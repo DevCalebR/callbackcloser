@@ -469,3 +469,17 @@ Dependencies: G4 (recommended)
     - CI compatibility fix applied during merge process:
       - `.github/workflows/ci.yml` now uses Node 22
       - non-production Clerk publishable-key fallback in `app/layout.tsx` prevents preview/build failures when placeholder envs are used
+
+- 2026-03-02 - Mainline Verification (Post PR #16-#24 merge audit)
+  - Scope:
+    - Re-verified mainline after confirming PR merge states and check health for M0 + G12 chain.
+    - This verification run was executed directly on latest `main` after `git pull --ff-only`.
+  - Commands run + results:
+    - `npm ci` -> PASS
+    - `npm test` -> PASS (34/34)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+  - Notes:
+    - No functional regressions observed in local validation gates.
