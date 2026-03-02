@@ -41,6 +41,10 @@ export default function RefundPolicyPage() {
 
         <footer className="text-sm text-muted-foreground">
           Support: <a className="underline" href="mailto:support@callbackcloser.com">support@callbackcloser.com</a> ·{' '}
+          <Link className="underline" href="/contact">
+            Contact
+          </Link>
+          {' '}·{' '}
           <Link className="underline" href="/">
             Back to home
           </Link>

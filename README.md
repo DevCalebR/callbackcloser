@@ -31,6 +31,7 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - Twilio SMS webhook (`/api/twilio/sms`) with lead qualification steps
 - Lead dashboard + filters + lead detail transcript + status updates
 - Stripe billing page + checkout + billing portal
+- Public purchase entry route (`/buy`) for external marketing-site links
 - Stripe webhook sync for subscription status gating
 - SMS compliance commands (`STOP` / `START` / `HELP`) with DB-backed opt-out state
 - Call recording enabled on forwarded calls + recording metadata captured on callbacks
@@ -303,12 +304,27 @@ Prisma models included:
 9. Optionally set `DEBUG_ENV_ENDPOINT_TOKEN`, then verify app URL resolution:
    - `https://YOUR_DOMAIN/api/debug/env?token=YOUR_DEBUG_ENV_ENDPOINT_TOKEN`
 
+## External Buy Link
+
+Use this URL for the Buy CTA on `getrelayworks.com`:
+
+- `https://YOUR_DOMAIN/buy`
+
+Optional plan-specific links:
+
+- `https://YOUR_DOMAIN/buy?plan=starter`
+- `https://YOUR_DOMAIN/buy?plan=pro`
+
+`/buy` handles auth/onboarding redirects and lands the user on `/app/billing`.
+
 ## Useful Routes
 
 - `/` - landing page
+- `/buy` - external purchase entry (redirects through auth/onboarding to billing)
 - `/terms` - terms of service
 - `/privacy` - privacy policy
 - `/refund` - refund policy
+- `/contact` - public support/contact page
 - `/sign-in` - Clerk sign-in
 - `/sign-up` - Clerk sign-up
 - `/app/onboarding` - create business record

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { isSubscriptionActive } from '@/lib/subscription';
 import { getConversationUsageForBusiness, resolveUsageTierFromSubscription } from '@/lib/usage';
 import {
   describeAutomationBlockReason,
@@ -18,12 +19,23 @@ function planPrice(priceId: string | undefined) {
   return priceId ? 'Configured via Stripe Price ID' : 'Missing env var';
 }
 
+function parseRequestedPlan(searchParams?: Record<string, string | string[] | undefined>) {
+  const rawPlan = searchParams?.plan;
+  const normalized = typeof rawPlan === 'string' ? rawPlan.trim().toLowerCase() : '';
+  if (normalized === 'starter' || normalized === 'pro') return normalized;
+  return null;
+}
+
 export default async function BillingPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
   const starterPriceId = process.env.STRIPE_PRICE_STARTER;
   const proPriceId = process.env.STRIPE_PRICE_PRO;
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const checkout = typeof searchParams?.checkout === 'string' ? searchParams.checkout : undefined;
+  const requestedPlan = parseRequestedPlan(searchParams);
+  const subscriptionActive = isSubscriptionActive(business.subscriptionStatus);
+  const checkoutSucceeded = checkout === 'success';
+  const checkoutCanceled = checkout === 'canceled';
   const demoMode = isPortfolioDemoMode();
   const [blockedCount, usage] = demoMode
     ? [getPortfolioDemoBlockedCount(), null]
@@ -51,8 +63,29 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
-      {checkout === 'success' ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Stripe checkout completed. Webhook sync may take a few seconds.</div> : null}
-      {checkout === 'canceled' ? <div className="rounded-md border bg-muted/40 p-3 text-sm">Checkout canceled.</div> : null}
+      {requestedPlan ? (
+        <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+          Selected plan: <strong>{requestedPlan === 'starter' ? 'Starter' : 'Pro'}</strong>. Continue checkout below.
+        </div>
+      ) : null}
+      {checkoutSucceeded && subscriptionActive ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          Subscription is active. Next steps: connect your Twilio number in <Link className="underline" href="/app/settings">Business Settings</Link>, then monitor new leads in{' '}
+          <Link className="underline" href="/app/leads">Dashboard</Link>.
+        </div>
+      ) : null}
+      {checkoutSucceeded && !subscriptionActive ? (
+        <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+          <p>Stripe checkout completed. Subscription status is still syncing from webhook events.</p>
+          <p className="text-muted-foreground">If this does not update shortly, refresh this page and verify `STRIPE_WEBHOOK_SECRET` + webhook endpoint configuration.</p>
+          <div>
+            <Link href="/app/billing">
+              <Button size="sm" variant="outline">Refresh Status</Button>
+            </Link>
+          </div>
+        </div>
+      ) : null}
+      {checkoutCanceled ? <div className="rounded-md border bg-muted/40 p-3 text-sm">Checkout canceled. You can restart anytime below.</div> : null}
 
       <Card>
         <CardHeader>
@@ -86,7 +119,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
       </Card>
 
       <div id="plan-options" className="grid gap-6 md:grid-cols-2">
-        <Card>
+        <Card className={requestedPlan === 'starter' ? 'border-primary/40 bg-primary/5' : ''}>
           <CardHeader>
             <CardTitle>Starter</CardTitle>
             <CardDescription>Basic missed-call SMS follow-up and dashboard access.</CardDescription>
@@ -103,7 +136,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           </CardFooter>
         </Card>
 
-        <Card>
+        <Card className={requestedPlan === 'pro' ? 'border-primary/40 bg-primary/5' : ''}>
           <CardHeader>
             <CardTitle>Pro</CardTitle>
             <CardDescription>Higher volume and premium support workflows.</CardDescription>

@@ -19,12 +19,12 @@ export default function LandingPage() {
               When a customer calls and nobody answers, CallbackCloser texts them instantly, captures the job details, and alerts the owner with a lead summary.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/app/leads">
-                <Button size="lg">Open App</Button>
+              <Link href="/buy">
+                <Button size="lg">Buy CallbackCloser</Button>
               </Link>
-              <Link href="/sign-up">
+              <Link href="/app/leads">
                 <Button size="lg" variant="outline">
-                  Create Account
+                  Open App
                 </Button>
               </Link>
             </div>
@@ -51,6 +51,9 @@ export default function LandingPage() {
           </Link>
           <Link className="underline underline-offset-4" href="/refund">
             Refund
+          </Link>
+          <Link className="underline underline-offset-4" href="/contact">
+            Contact
           </Link>
         </footer>
       </div>
