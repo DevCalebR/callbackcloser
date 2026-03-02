@@ -157,4 +157,4 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
     - `scripts/preflight_checklist.md`
   - Commit SHA:
-    - pending (added in immediate follow-up changelog commit)
+    - `3e09628`
