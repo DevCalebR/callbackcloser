@@ -11,8 +11,10 @@ test('legal public pages exist with required headings', () => {
   const terms = read('app/terms/page.tsx');
   const privacy = read('app/privacy/page.tsx');
   const refund = read('app/refund/page.tsx');
+  const contact = read('app/contact/page.tsx');
 
   assert.match(terms, /Terms of Service/);
   assert.match(privacy, /Privacy Policy/);
   assert.match(refund, /Refund Policy/);
+  assert.match(contact, /Contact/);
 });

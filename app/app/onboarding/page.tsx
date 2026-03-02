@@ -8,12 +8,31 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/db';
 
-export default async function OnboardingPage({ searchParams }: { searchParams?: { error?: string } }) {
+const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/leads';
+
+function resolveSafeNextPath(value: string | undefined) {
+  const nextPath = value?.trim();
+  if (!nextPath || !nextPath.startsWith('/') || nextPath.startsWith('//')) {
+    return DEFAULT_POST_ONBOARDING_REDIRECT;
+  }
+
+  if (nextPath === '/app') return DEFAULT_POST_ONBOARDING_REDIRECT;
+  if (!nextPath.startsWith('/app/')) return DEFAULT_POST_ONBOARDING_REDIRECT;
+  return nextPath;
+}
+
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
   const existing = await db.business.findUnique({ where: { ownerClerkId: userId } });
   if (existing) redirect('/app/leads');
+  const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
+  const nextPath = resolveSafeNextPath(typeof searchParams?.next === 'string' ? searchParams.next : undefined);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -27,12 +46,13 @@ export default async function OnboardingPage({ searchParams }: { searchParams?: 
           <CardDescription>Set the call forwarding and SMS qualification defaults.</CardDescription>
         </CardHeader>
         <CardContent>
-          {searchParams?.error ? (
+          {error ? (
             <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              {searchParams.error}
+              {error}
             </div>
           ) : null}
           <form action={saveOnboardingAction} className="grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="next" value={nextPath} />
             <div className="sm:col-span-2">
               <Label htmlFor="name">Business name</Label>
               <Input id="name" name="name" required placeholder="Acme Plumbing" />
