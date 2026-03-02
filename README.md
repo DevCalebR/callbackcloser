@@ -34,7 +34,7 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - Stripe webhook sync for subscription status gating
 - SMS compliance commands (`STOP` / `START` / `HELP`) with DB-backed opt-out state
 - Call recording enabled on forwarded calls + recording metadata captured on callbacks
-- Twilio webhook protection: shared token (header/query) plus optional `X-Twilio-Signature` validation
+- Twilio webhook protection: production-enforced `X-Twilio-Signature` validation, with shared-token fallback only in non-production
 
 ## Local Setup
 
@@ -170,7 +170,7 @@ Set:
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_WEBHOOK_AUTH_TOKEN` (your shared secret used by this app)
-- `TWILIO_VALIDATE_SIGNATURE` (optional, set to `true` to enforce `X-Twilio-Signature` validation)
+- `TWILIO_VALIDATE_SIGNATURE` (**required in production**, set to `true`)
 
 ### Twilio number provisioning (recommended)
 
@@ -200,9 +200,9 @@ The `/api/twilio/status` callback URL is set automatically by the TwiML returned
 
 Notes:
 
-- The app supports a shared-secret **header** check (`x-callbackcloser-webhook-token`) plus query fallback (`webhook_token=...`) for console-based setup.
-- Optional: set `TWILIO_VALIDATE_SIGNATURE=true` to require Twilio `X-Twilio-Signature` validation (recommended in production).
-- When signature validation is enabled, production requests fail closed if the signature is missing/invalid.
+- The app supports shared-secret checks (header/query) for non-production/local workflows.
+- Production requires `TWILIO_VALIDATE_SIGNATURE=true` and valid Twilio `X-Twilio-Signature`.
+- In production, token-only webhook auth is rejected and signature validation fails closed.
 - Some Twilio Console surfaces do not expose custom header configuration, so query param fallback is supported for direct console setup.
 - `/api/twilio/status` is called automatically by the TwiML generated from `/api/twilio/voice`.
 
@@ -315,7 +315,7 @@ Prisma models included:
 
 ## Notes / MVP Constraints
 
-- Twilio webhook verification supports shared-token checks (header + query fallback) and optional `X-Twilio-Signature` validation (env-gated).
+- Twilio webhook verification is env-gated: production enforces signature validation; shared-token checks are for non-production fallback/testing.
 - Outbound lead/owner messages are sent via Twilio REST API so their `twilioSid` can be persisted.
 - For simplicity, this MVP assumes one owner-managed business per Clerk user.
 - Folders matching `upwork_pack*`, `portfolio_*`, and `upwork_gallery_images/` are generated export/demo artifacts and are not part of the app source; they are ignored by Git/TypeScript/ESLint.
@@ -331,8 +331,8 @@ Prisma models included:
 
 ### Twilio webhooks returning 401
 
-- If using shared-token mode: confirm `TWILIO_WEBHOOK_AUTH_TOKEN` is set on the app and the same token is in Twilio webhook URLs (`?webhook_token=...`) or a supported header
-- If using signature mode: confirm `TWILIO_VALIDATE_SIGNATURE=true`, `TWILIO_AUTH_TOKEN` matches the Twilio account token, and Twilio is calling the exact production URL
+- In production: confirm `TWILIO_VALIDATE_SIGNATURE=true`, `TWILIO_AUTH_TOKEN` matches the Twilio account token, and Twilio is calling the exact production URL
+- In non-production token-mode tests: confirm `TWILIO_WEBHOOK_AUTH_TOKEN` is set on the app and the same token is in webhook requests (`?webhook_token=...`) or a supported header
 - Reprint expected URLs with `npm run webhooks:print`
 - Re-sync webhooks from `/app/settings` after changing `NEXT_PUBLIC_APP_URL` or the webhook token
 

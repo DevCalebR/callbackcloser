@@ -26,8 +26,8 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `STRIPE_PRICE_PRO` | Server-only | Yes | Stripe / Vercel | Pro plan Price ID. Also used for conversation usage-limit tier mapping. |
 | `TWILIO_ACCOUNT_SID` | Server-only | Yes | Twilio / Vercel | Twilio account SID. |
 | `TWILIO_AUTH_TOKEN` | Server-only | Yes | Twilio / Vercel | Twilio auth token. |
-| `TWILIO_WEBHOOK_AUTH_TOKEN` | Server-only | Yes (unless `TWILIO_VALIDATE_SIGNATURE=true`) | App-generated secret / Vercel | Shared secret used by Twilio webhook auth checks (header/query). Keep set for local/dev and console-based setup even if signature validation is enabled in production. |
-| `TWILIO_VALIDATE_SIGNATURE` | Server-only | Optional (recommended `true` in production) | Vercel | When `true`, Twilio webhooks require valid `X-Twilio-Signature` verification using `TWILIO_AUTH_TOKEN`. Production fails closed on missing/invalid signature. |
+| `TWILIO_WEBHOOK_AUTH_TOKEN` | Server-only | Yes | App-generated secret / Vercel | Shared secret used for local/dev token-mode checks and webhook URL tooling. In production, signature validation is enforced and token-only auth is rejected. |
+| `TWILIO_VALIDATE_SIGNATURE` | Server-only | Yes (production) | Vercel | Must be `true` in production. Twilio webhooks require valid `X-Twilio-Signature` verification using `TWILIO_AUTH_TOKEN`; production fails closed otherwise. |
 | `DEBUG_ENV_ENDPOINT_TOKEN` | Server-only | Optional | Vercel | Protects `/api/debug/env` in production. If unset, the endpoint returns `404` in production. |
 | `PORTFOLIO_DEMO_MODE` | Server-only | Optional | Local / Vercel | Enables demo data/auth bypass mode for portfolio/demo screenshots. Keep disabled in production unless intentionally using demo mode. |
 
@@ -41,9 +41,9 @@ The app now validates required server env vars at runtime in production via `lib
 - `DATABASE_URL` is checked for Neon compatibility (`sslmode=require`) when using a `neon.tech` host.
 - `DIRECT_DATABASE_URL` is used by Prisma for direct migration connections (`directUrl`) and should be set in Vercel for builds/deploy workflows that run Prisma commands.
 - `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` are required in production so the app can map active subscriptions to Starter/Pro usage limits.
-- Twilio webhook auth supports two modes:
-  - Shared token (default): `TWILIO_WEBHOOK_AUTH_TOKEN` required
-  - Signature mode: set `TWILIO_VALIDATE_SIGNATURE=true` to require `X-Twilio-Signature` verification using `TWILIO_AUTH_TOKEN`
+- Twilio webhook auth behavior:
+  - Production: `TWILIO_VALIDATE_SIGNATURE=true` is required and token-only auth is rejected
+  - Non-production: signature mode can fall back to shared-token auth for local/dev workflows
 - `NEXT_PUBLIC_APP_URL` is the canonical value and should be set explicitly. If it is missing/invalid, the app can temporarily fall back to Vercel system env vars (`VERCEL_URL` / `VERCEL_PROJECT_PRODUCTION_URL`) to avoid auth-page crashes, but webhook/redirect behavior should still use an explicit `NEXT_PUBLIC_APP_URL`.
 
 ## Vercel: Preview vs Production
@@ -70,9 +70,9 @@ Use separate values for `Preview` and `Production` where appropriate.
 
 Twilio webhook syncing uses `NEXT_PUBLIC_APP_URL`. If you run webhook sync actions in Preview, they will point Twilio to the Preview URL. In most teams, Twilio webhook sync should be done only from a controlled environment (local with tunnel or Production) to avoid accidental webhook target changes.
 
-### Recommended Twilio webhook auth configuration (Production)
+### Required Twilio webhook auth configuration (Production)
 
-1. Set `TWILIO_VALIDATE_SIGNATURE=true`.
+1. Set `TWILIO_VALIDATE_SIGNATURE=true` (required).
 2. Keep `TWILIO_AUTH_TOKEN` synced with the Twilio account auth token.
 3. Keep `TWILIO_WEBHOOK_AUTH_TOKEN` set as a backup for local/dev or manual token-based testing.
 4. Ensure Twilio points to the exact production URL (`NEXT_PUBLIC_APP_URL`) so signature validation uses the same URL Twilio signed.

@@ -158,3 +158,37 @@ Dependencies: G4 (recommended)
     - `scripts/preflight_checklist.md`
   - Commit SHA:
     - `3e09628`
+
+- 2026-03-02 - G1 (DONE)
+  - Branch: `hardening/g1-strict-twilio-verification`
+  - What changed:
+    - Enforced strict production Twilio webhook verification in `lib/twilio-webhook.ts`:
+      - production now rejects webhook requests when `TWILIO_VALIDATE_SIGNATURE` is not enabled
+      - production no longer allows token-only fallback when signature validation fails
+    - Added production startup guard in `lib/env.server.ts` requiring `TWILIO_VALIDATE_SIGNATURE=true`.
+    - Expanded webhook verification tests in `tests/twilio-signature-validation.test.ts` for:
+      - rejecting shared-token mode in production when signature mode is disabled
+      - rejecting token fallback in production when signature header is missing
+    - Updated docs to match strict production behavior:
+      - `README.md`
+      - `docs/PRODUCTION_ENV.md`
+      - `docs/EXTERNAL_SETUP_CHECKLIST.md`
+    - Updated `scripts/check_env.ts` to align env checks with strict production signature policy.
+  - Commands run + results:
+    - `npm test` -> PASS (20/20)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `lib/twilio-webhook.ts`
+    - `lib/env.server.ts`
+    - `tests/twilio-signature-validation.test.ts`
+    - `scripts/check_env.ts`
+    - `README.md`
+    - `docs/PRODUCTION_ENV.md`
+    - `docs/EXTERNAL_SETUP_CHECKLIST.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - pending (added in immediate follow-up changelog commit)
