@@ -377,3 +377,45 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
     - `2dc1d7c`
+
+- 2026-03-02 - G11 (DONE)
+  - Branch: `hardening/g11-production-demo-guardrail`
+  - What changed:
+    - Added shared production demo-mode guardrail logic in `lib/portfolio-demo-guardrail.ts`:
+      - detects production runtime (`NODE_ENV` / `VERCEL_ENV`)
+      - blocks `PORTFOLIO_DEMO_MODE` unless explicit override `ALLOW_PRODUCTION_DEMO_MODE=true`
+    - Enforced guardrail in production env validation:
+      - `lib/env.server.ts` now calls guardrail enforcement during `validateServerEnv()`
+    - Enforced guardrail at request layer:
+      - `middleware.ts` now returns `503` fail-safe when production demo mode is enabled without override
+      - break-glass override logs an explicit warning when enabled
+    - Extended env preflight checks:
+      - `scripts/check_env.ts` now fails when production demo mode is enabled without override
+    - Added focused guardrail tests:
+      - `tests/portfolio-demo-guardrail.test.ts`
+    - Updated env/docs to reflect break-glass requirement:
+      - `.env.example`
+      - `docs/PRODUCTION_ENV.md`
+      - `README.md`
+  - Safety notes:
+    - Production cannot silently run in portfolio-demo bypass mode anymore.
+    - Any intentional production demo-mode usage now requires explicit, auditable break-glass env activation.
+  - Commands run + results:
+    - `npm test` -> PASS (33/33)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `lib/portfolio-demo-guardrail.ts`
+    - `lib/env.server.ts`
+    - `middleware.ts`
+    - `scripts/check_env.ts`
+    - `tests/portfolio-demo-guardrail.test.ts`
+    - `.env.example`
+    - `docs/PRODUCTION_ENV.md`
+    - `README.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `fd9ca8e`

@@ -36,6 +36,7 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - Call recording enabled on forwarded calls + recording metadata captured on callbacks
 - Twilio webhook protection: production-enforced `X-Twilio-Signature` validation, with shared-token fallback only in non-production
 - Webhook observability baseline: correlation IDs (`X-Correlation-Id`), centralized `app.error` reporting, optional alert webhook dispatch
+- Production guardrail: `PORTFOLIO_DEMO_MODE` is blocked in production unless `ALLOW_PRODUCTION_DEMO_MODE=true` is explicitly set
 
 ## Local Setup
 
