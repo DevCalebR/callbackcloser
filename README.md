@@ -105,6 +105,7 @@ Optional helper commands:
 
 ```bash
 npm run webhooks:print
+npm run preflight:providers
 npm run db:smoke
 ```
 
@@ -292,6 +293,7 @@ Prisma models included:
 2. Import project in Vercel.
 3. Add all environment variables from `.env.local` (or from your secret manager).
    - Quick check: `npm run env:check`
+   - Provider parity check: `npm run preflight:providers`
 4. Set `NEXT_PUBLIC_APP_URL` to your production origin, e.g. `https://app.example.com`.
 5. Run Prisma migrations against your production database:
    - Either via CI/CD step: `npx prisma migrate deploy`
