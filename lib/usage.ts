@@ -1,6 +1,6 @@
 import type { Business } from '@prisma/client';
 
-import { isSubscriptionActive } from './subscription';
+import { isSubscriptionActive } from './subscription.ts';
 
 export const BILLING_TIME_ZONE = 'America/New_York' as const;
 

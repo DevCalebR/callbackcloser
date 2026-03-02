@@ -8,7 +8,7 @@ import {
   getCurrentMonthWindowUtc,
   isConversationLimitReached,
   resolveUsageTierFromSubscription,
-} from '../lib/usage';
+} from '../lib/usage.ts';
 
 test('getCurrentMonthWindowUtc uses America/New_York boundaries (EST month)', () => {
   const now = new Date('2026-02-15T12:00:00.000Z');

@@ -14,7 +14,7 @@ jobs:
       NEXT_PUBLIC_APP_URL: https://example.com
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/callbackcloser?sslmode=require
       DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/callbackcloser?sslmode=require
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_placeholder
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZXhhbXBsZS5jb20k
       CLERK_SECRET_KEY: sk_test_placeholder
       STRIPE_SECRET_KEY: sk_test_placeholder
       STRIPE_WEBHOOK_SECRET: whsec_placeholder
@@ -28,12 +28,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
+      - run: npm run env:check
+      - run: npm run db:validate
       - run: npm test
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
-
