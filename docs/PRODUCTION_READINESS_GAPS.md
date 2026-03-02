@@ -191,4 +191,4 @@ Dependencies: G4 (recommended)
     - `docs/EXTERNAL_SETUP_CHECKLIST.md`
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
-    - pending (added in immediate follow-up changelog commit)
+    - `433cd34`
