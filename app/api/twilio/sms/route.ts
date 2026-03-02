@@ -9,6 +9,7 @@ import { isSubscriptionActive } from '@/lib/subscription';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { handleInboundSmsComplianceCommand } from '@/lib/twilio-sms-compliance';
 import { buildOwnerNotificationMessage, persistInboundMessage, sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
+import { buildTwilioRetryableErrorResponse } from '@/lib/twilio-webhook-retry';
 import { hasValidTwilioWebhookRequest } from '@/lib/twilio-webhook';
 import { messagingTwiML } from '@/lib/twiml';
 import { absoluteUrl } from '@/lib/url';
@@ -28,6 +29,10 @@ function xmlOk(message?: string) {
     }),
     { headers: { 'Content-Type': 'text/xml' } }
   );
+}
+
+function retryableErrorResponse() {
+  return buildTwilioRetryableErrorResponse('sms');
 }
 
 export async function POST(request: Request) {
@@ -301,7 +306,7 @@ export async function POST(request: Request) {
 
     return xmlOk();
   } catch (error) {
-    logTwilioError('sms', 'route_error', { messageSid, eventType: 'inbound_sms', decision: 'return_xml_noop' }, error);
-    return xmlOk();
+    logTwilioError('sms', 'route_error', { messageSid, eventType: 'inbound_sms', decision: 'return_retryable_503' }, error);
+    return retryableErrorResponse();
   }
 }

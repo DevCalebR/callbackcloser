@@ -9,6 +9,7 @@ import { isSubscriptionActive } from '@/lib/subscription';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import { extractTwilioRecordingMetadata } from '@/lib/twilio-recording';
+import { buildTwilioRetryableErrorResponse } from '@/lib/twilio-webhook-retry';
 import { hasValidTwilioWebhookRequest } from '@/lib/twilio-webhook';
 import { messagingTwiML } from '@/lib/twiml';
 import { describeUsageLimit, getConversationUsageForBusiness, isConversationLimitReached } from '@/lib/usage';
@@ -33,6 +34,10 @@ function isMissedDialStatus(value: string) {
 
 function xmlOk() {
   return new NextResponse(messagingTwiML(), { headers: { 'Content-Type': 'text/xml' } });
+}
+
+function retryableErrorResponse() {
+  return buildTwilioRetryableErrorResponse('status');
 }
 
 export async function POST(request: Request) {
@@ -379,6 +384,7 @@ export async function POST(request: Request) {
           lastInteractionAt: new Date(),
         },
       });
+      return retryableErrorResponse();
     }
 
     return xmlOk();
@@ -386,9 +392,9 @@ export async function POST(request: Request) {
     logTwilioError(
       'status',
       'route_error',
-      { callSid, dialCallSid, eventType: 'dial_status_callback', decision: 'return_xml_noop' },
+      { callSid, dialCallSid, eventType: 'dial_status_callback', decision: 'return_retryable_503' },
       error
     );
-    return xmlOk();
+    return retryableErrorResponse();
   }
 }
