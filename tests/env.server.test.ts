@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { resolveConfiguredAppBaseUrl } from '../lib/app-url';
+import { resolveConfiguredAppBaseUrl } from '../lib/app-url.ts';
 
 test('falls back to VERCEL_URL when NEXT_PUBLIC_APP_URL is missing', () => {
   const resolution = resolveConfiguredAppBaseUrl({

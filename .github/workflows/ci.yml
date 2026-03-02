@@ -32,8 +32,9 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npm run env:check
+      - run: npm run db:validate
       - run: npm test
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
-
