@@ -419,3 +419,37 @@ Dependencies: G4 (recommended)
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
     - `fd9ca8e`
+
+- 2026-03-02 - G12 (DONE)
+  - Branch: `hardening/g12-legal-pages`
+  - What changed:
+    - Added public legal pages:
+      - `app/terms/page.tsx`
+      - `app/privacy/page.tsx`
+      - `app/refund/page.tsx`
+    - Added legal links to the public landing page footer:
+      - `app/page.tsx`
+    - Added lightweight route/content coverage test:
+      - `tests/legal-pages.test.ts`
+    - Updated route docs:
+      - `README.md`
+  - Verification notes:
+    - Build output confirms static generation for `/terms`, `/privacy`, and `/refund`.
+    - Landing page now exposes direct legal navigation links for compliance visibility.
+  - Commands run + results:
+    - `npm test` -> PASS (34/34)
+    - `npm run lint` -> PASS
+    - `npm run build` -> PASS
+    - `npm run typecheck` -> PASS
+    - `npm run env:check` -> PASS
+    - `npm run db:validate` -> PASS
+  - Files touched:
+    - `app/terms/page.tsx`
+    - `app/privacy/page.tsx`
+    - `app/refund/page.tsx`
+    - `app/page.tsx`
+    - `tests/legal-pages.test.ts`
+    - `README.md`
+    - `docs/PRODUCTION_READINESS_GAPS.md`
+  - Commit SHA:
+    - `PENDING`

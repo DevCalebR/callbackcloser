@@ -306,6 +306,9 @@ Prisma models included:
 ## Useful Routes
 
 - `/` - landing page
+- `/terms` - terms of service
+- `/privacy` - privacy policy
+- `/refund` - refund policy
 - `/sign-in` - Clerk sign-in
 - `/sign-up` - Clerk sign-up
 - `/app/onboarding` - create business record
