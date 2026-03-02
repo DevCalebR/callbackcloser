@@ -9,6 +9,7 @@ import {
 } from '@/lib/portfolio-demo-guardrail';
 import { RATE_LIMIT_PROTECTED_API_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
+import { withSecurityHeaders } from '@/lib/security-headers';
 
 const isProtectedRoute = createRouteMatcher(['/app(.*)', '/api/stripe/checkout(.*)', '/api/stripe/portal(.*)']);
 const isProtectedApiMutationRoute = createRouteMatcher(['/api/stripe/checkout', '/api/stripe/portal']);
@@ -24,7 +25,7 @@ export default clerkMiddleware(async (auth, req) => {
         vercelEnv: process.env.VERCEL_ENV ?? null,
       });
     }
-    return NextResponse.json({ error: getPortfolioDemoGuardrailErrorMessage() }, { status: 503 });
+    return withSecurityHeaders(NextResponse.json({ error: getPortfolioDemoGuardrailErrorMessage() }, { status: 503 }));
   }
 
   if (isPortfolioDemoModeEnabled(process.env)) {
@@ -35,7 +36,7 @@ export default clerkMiddleware(async (auth, req) => {
         vercelEnv: process.env.VERCEL_ENV ?? null,
       });
     }
-    return;
+    return withSecurityHeaders(NextResponse.next());
   }
 
   if (isProtectedRoute(req)) {
@@ -51,12 +52,14 @@ export default clerkMiddleware(async (auth, req) => {
     });
 
     if (!rateLimit.allowed) {
-      return NextResponse.json(
+      return withSecurityHeaders(NextResponse.json(
         { error: 'Too many requests' },
         { status: 429, headers: buildRateLimitHeaders(rateLimit) }
-      );
+      ));
     }
   }
+
+  return withSecurityHeaders(NextResponse.next());
 });
 
 export const config = {
