@@ -262,13 +262,14 @@ Current behavior:
 
 - Forwarded calls are recorded via TwiML `<Dial record="record-from-answer-dual">`
 - The app stores recording metadata on `Call` (`recordingSid`, `recordingUrl`, `recordingStatus`, `recordingDurationSeconds`) when Twilio posts recording callbacks to `/api/twilio/status`
-- The app does **not** proxy/download recording audio files; recordings remain hosted in Twilio unless you add a separate ingestion/storage pipeline
+- Recording audio remains hosted in Twilio; CallbackCloser exposes a server-mediated redirect route for authenticated in-app access
 
 Where to access recordings:
 
+- Lead detail page (`/app/leads/[leadId]`) shows recording status/duration and an authenticated `Open recording` action
+- Recording links are mediated through `/api/leads/[leadId]/recording`, which checks the signed-in owner and lead business before redirecting
 - Twilio Console -> Monitor -> Calls (or Call Logs / Recordings, depending on account UI)
 - Database (`Call.recording*` fields) for metadata lookup / correlation
-- The app does not currently surface recordings in the dashboard UI
 
 ## Billing Gating Behavior
 
@@ -318,6 +319,7 @@ Prisma models included:
 - `/api/twilio/voice` - Twilio voice webhook
 - `/api/twilio/status` - Twilio dial action callback
 - `/api/twilio/sms` - Twilio SMS webhook
+- `/api/leads/[leadId]/recording` - authenticated recording redirect for lead owners
 - `/api/stripe/webhook` - Stripe webhook
 
 ## Notes / MVP Constraints
