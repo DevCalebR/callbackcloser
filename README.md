@@ -31,11 +31,13 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - Twilio SMS webhook (`/api/twilio/sms`) with lead qualification steps
 - Lead dashboard + filters + lead detail transcript + status updates
 - Stripe billing page + checkout + billing portal
+- Public purchase entry route (`/buy`) for external marketing-site links
 - Stripe webhook sync for subscription status gating
 - SMS compliance commands (`STOP` / `START` / `HELP`) with DB-backed opt-out state
 - Call recording enabled on forwarded calls + recording metadata captured on callbacks
 - Twilio webhook protection: production-enforced `X-Twilio-Signature` validation, with shared-token fallback only in non-production
 - Webhook observability baseline: correlation IDs (`X-Correlation-Id`), centralized `app.error` reporting, optional alert webhook dispatch
+- `/api/health` readiness endpoint for deploy smoke checks and uptime monitors
 - Production guardrail: `PORTFOLIO_DEMO_MODE` is blocked in production unless `ALLOW_PRODUCTION_DEMO_MODE=true` is explicitly set
 
 ## Local Setup
@@ -262,13 +264,23 @@ Current behavior:
 
 - Forwarded calls are recorded via TwiML `<Dial record="record-from-answer-dual">`
 - The app stores recording metadata on `Call` (`recordingSid`, `recordingUrl`, `recordingStatus`, `recordingDurationSeconds`) when Twilio posts recording callbacks to `/api/twilio/status`
-- The app does **not** proxy/download recording audio files; recordings remain hosted in Twilio unless you add a separate ingestion/storage pipeline
+- Recording audio remains hosted in Twilio; CallbackCloser streams it through a server-side proxy for authenticated in-app access
+
+Recording URL safety + proxy behavior:
+
+- Stored recording URLs are validated before use:
+  - must use `https://`
+  - host must be allowlisted Twilio recording/API host: `api.twilio.com`, `api.us1.twilio.com`, `api.ie1.twilio.com`, or `api.au1.twilio.com`
+  - path must be a Twilio recording resource path (`.../Recordings/...`)
+- Invalid/malformed recording URLs return `404` from `/api/leads/[leadId]/recording`
+- Authorized requests are fetched from Twilio with server credentials and streamed back to the signed-in owner (no raw Twilio URL redirect)
 
 Where to access recordings:
 
+- Lead detail page (`/app/leads/[leadId]`) shows recording status/duration and an authenticated `Open recording` action
+- Recording links are mediated through `/api/leads/[leadId]/recording`, which checks the signed-in owner + business ownership and streams media via the server proxy
 - Twilio Console -> Monitor -> Calls (or Call Logs / Recordings, depending on account UI)
 - Database (`Call.recording*` fields) for metadata lookup / correlation
-- The app does not currently surface recordings in the dashboard UI
 
 ## Billing Gating Behavior
 
@@ -303,21 +315,78 @@ Prisma models included:
 9. Optionally set `DEBUG_ENV_ENDPOINT_TOKEN`, then verify app URL resolution:
    - `https://YOUR_DOMAIN/api/debug/env?token=YOUR_DEBUG_ENV_ENDPOINT_TOKEN`
 
+## External Buy Link
+
+Use this URL for the Buy CTA on `getrelayworks.com`:
+
+- `https://YOUR_DOMAIN/buy`
+
+Optional plan-specific links:
+
+- `https://YOUR_DOMAIN/buy?plan=starter`
+- `https://YOUR_DOMAIN/buy?plan=pro`
+
+`/buy` handles auth/onboarding redirects and lands the user on `/app/billing`.
+
+## Production Launch Checklist
+
+Use this checklist before sending paid traffic from `getrelayworks.com` or allowing the release to auto-deploy to production.
+
+1. Confirm the production branch release content is complete.
+   - Merge and verify the launch branches that are not yet on `main`:
+     - `chore/p0-security-roadmap`
+     - `chore/product-ux-legal`
+     - `hardening/g14-recordings-ux`
+2. Run the full verification suite from a clean checkout:
+   - `npm run env:check`
+   - `npm test`
+   - `npm run lint`
+   - `npm run typecheck`
+   - `npm run build`
+3. Confirm Vercel production env vars match `docs/PRODUCTION_ENV.md`.
+4. Apply production Prisma migrations:
+   - `npx prisma migrate deploy`
+   - optional smoke: `npm run db:smoke`
+5. Confirm Stripe production setup:
+   - live products/prices exist
+   - live webhook targets `/api/stripe/webhook`
+   - billing portal is enabled
+6. Confirm Twilio production setup:
+   - production number is assigned
+   - webhooks point to the production app URL
+   - `TWILIO_VALIDATE_SIGNATURE=true`
+   - answered, missed, STOP, START, and HELP flows are tested
+7. Confirm Clerk production setup:
+   - production domain/origins are allowed
+   - sign-in and sign-up redirects work
+8. Confirm monitoring and operations readiness:
+   - `/api/health` returns `200`
+   - alerting or error sink is live
+   - backup/restore drill evidence is current
+9. Confirm customer-facing launch surface:
+   - `/terms`, `/privacy`, and `/refund` are public
+   - support inbox/contact path is monitored
+   - `getrelayworks.com` Buy CTA points to the approved production flow
+
 ## Useful Routes
 
 - `/` - landing page
+- `/buy` - external purchase entry (redirects through auth/onboarding to billing)
 - `/terms` - terms of service
 - `/privacy` - privacy policy
 - `/refund` - refund policy
+- `/contact` - public support/contact page
 - `/sign-in` - Clerk sign-in
 - `/sign-up` - Clerk sign-up
 - `/app/onboarding` - create business record
 - `/app/leads` - dashboard
 - `/app/settings` - business settings + Twilio number provisioning
 - `/app/billing` - Stripe subscription page
+- `/api/health` - readiness probe for deploy and uptime checks
 - `/api/twilio/voice` - Twilio voice webhook
 - `/api/twilio/status` - Twilio dial action callback
 - `/api/twilio/sms` - Twilio SMS webhook
+- `/api/leads/[leadId]/recording` - authenticated recording media proxy for lead owners
 - `/api/stripe/webhook` - Stripe webhook
 
 ## Notes / MVP Constraints

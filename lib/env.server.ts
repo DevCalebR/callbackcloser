@@ -93,6 +93,46 @@ function validateDatabaseUrl() {
   }
 }
 
+function validateDistinctStripePrices() {
+  const starter = process.env.STRIPE_PRICE_STARTER?.trim();
+  const pro = process.env.STRIPE_PRICE_PRO?.trim();
+  if (starter && pro && starter === pro) {
+    throw new Error('Invalid environment configuration: STRIPE_PRICE_STARTER and STRIPE_PRICE_PRO must be different Stripe price IDs.');
+  }
+}
+
+function validateOptionalAbsoluteUrl(name: string, { requireHttps }: { requireHttps: boolean }) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`Invalid environment configuration: ${name} must be a valid absolute URL when set.`);
+  }
+
+  if (requireHttps && parsed.protocol !== 'https:') {
+    throw new Error(`Invalid environment configuration: ${name} must use https:// in production.`);
+  }
+}
+
+function validateOptionalIntegerEnv(name: string, options: { min: number; max: number }) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return;
+
+  if (!/^-?\d+$/.test(raw)) {
+    throw new Error(`Invalid environment configuration: ${name} must be an integer.`);
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < options.min || parsed > options.max) {
+    throw new Error(
+      `Invalid environment configuration: ${name} must be between ${options.min} and ${options.max}.`
+    );
+  }
+}
+
 function parseBooleanFlag(value: string | undefined) {
   if (!value) return false;
   const normalized = value.trim().toLowerCase();
@@ -105,6 +145,17 @@ function validateTwilioWebhookSecurityMode() {
       'Invalid environment configuration: production requires TWILIO_VALIDATE_SIGNATURE=true so Twilio webhooks enforce X-Twilio-Signature validation.'
     );
   }
+}
+
+function validateOperationalConfig() {
+  validateOptionalAbsoluteUrl('ALERT_WEBHOOK_URL', { requireHttps: process.env.NODE_ENV === 'production' });
+  validateOptionalIntegerEnv('ALERT_WEBHOOK_TIMEOUT_MS', { min: 1_000, max: 30_000 });
+  validateOptionalIntegerEnv('RATE_LIMIT_WINDOW_MS', { min: 1_000, max: 3_600_000 });
+  validateOptionalIntegerEnv('RATE_LIMIT_TWILIO_AUTH_MAX', { min: 10, max: 10_000 });
+  validateOptionalIntegerEnv('RATE_LIMIT_TWILIO_UNAUTH_MAX', { min: 5, max: 5_000 });
+  validateOptionalIntegerEnv('RATE_LIMIT_STRIPE_AUTH_MAX', { min: 10, max: 10_000 });
+  validateOptionalIntegerEnv('RATE_LIMIT_STRIPE_UNAUTH_MAX', { min: 5, max: 5_000 });
+  validateOptionalIntegerEnv('RATE_LIMIT_PROTECTED_API_MAX', { min: 10, max: 10_000 });
 }
 
 export function validateServerEnv() {
@@ -128,6 +179,8 @@ export function validateServerEnv() {
   enforcePortfolioDemoGuardrail(process.env);
   validateAppUrl();
   validateDatabaseUrl();
+  validateDistinctStripePrices();
+  validateOperationalConfig();
   validated = true;
 }
 

@@ -112,3 +112,25 @@ test('does not allow shared-token fallback in production when signature is missi
     }
   );
 });
+
+test('allows shared-token fallback for subaccount webhooks in production when parent signature validation does not match', () => {
+  withEnv(
+    {
+      NODE_ENV: 'production',
+      TWILIO_VALIDATE_SIGNATURE: 'true',
+      TWILIO_ACCOUNT_SID: 'AC11111111111111111111111111111111',
+      TWILIO_AUTH_TOKEN: 'parent-auth-token',
+      TWILIO_WEBHOOK_AUTH_TOKEN: 'prod-token',
+    },
+    () => {
+      const params = {
+        AccountSid: 'AC22222222222222222222222222222222',
+        CallSid: 'CA555',
+        From: '+15550000000',
+        To: '+15551111111',
+      };
+      const request = new Request('https://example.com/api/twilio/voice?webhook_token=prod-token');
+      assert.equal(hasValidTwilioWebhookRequest(request, params), true);
+    }
+  );
+});

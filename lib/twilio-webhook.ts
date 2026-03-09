@@ -13,6 +13,7 @@ let missingTokenWarningLogged = false;
 let missingSignatureConfigWarningLogged = false;
 let missingSignatureHeaderWarningLogged = false;
 let productionSignatureModeWarningLogged = false;
+let subaccountTokenFallbackWarningLogged = false;
 
 function parseBooleanFlag(value: string | undefined) {
   if (!value) return false;
@@ -129,8 +130,23 @@ export function hasValidTwilioWebhookRequest(
   const signatureValid = hasValidTwilioWebhookSignature(request, params, env);
   if (signatureValid) return true;
 
+  const sharedTokenValid = hasValidTwilioWebhookToken(request, { env, allowQueryParam: true });
   if (env.NODE_ENV !== 'production') {
-    return hasValidTwilioWebhookToken(request, { env, allowQueryParam: true });
+    return sharedTokenValid;
+  }
+
+  const parentAccountSid = env.TWILIO_ACCOUNT_SID?.trim();
+  const requestAccountSid = params.AccountSid?.trim();
+  const isSubaccountRequest = Boolean(requestAccountSid && parentAccountSid && requestAccountSid !== parentAccountSid);
+  if (sharedTokenValid && isSubaccountRequest) {
+    if (!subaccountTokenFallbackWarningLogged) {
+      subaccountTokenFallbackWarningLogged = true;
+      logTwilioWarn('webhook-auth', 'subaccount_signature_validation_fallback_token', {
+        decision: 'allow',
+        accountSid: requestAccountSid,
+      });
+    }
+    return true;
   }
 
   return false;
