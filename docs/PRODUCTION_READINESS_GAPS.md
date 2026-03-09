@@ -524,18 +524,24 @@ Dependencies: G4 (recommended)
     - Added access-control helper for recording links in `lib/recording-access.ts`:
       - only authenticated owner of the lead's business can open recordings
       - blocks wrong-business and missing-recording cases
+      - validates recording URLs before use:
+        - `https` only
+        - Twilio hostname allowlist: `api.twilio.com`, `api.us1.twilio.com`, `api.ie1.twilio.com`, `api.au1.twilio.com`
+        - recording-resource path requirement (`.../Recordings/...`)
     - Added server-mediated recording access route:
       - `app/api/leads/[leadId]/recording/route.ts`
-      - validates auth + business ownership before redirecting to Twilio recording URL
+      - validates auth + business ownership before fetching recording media from Twilio
+      - uses server-side Twilio credentials and streams media to the authenticated owner (no raw URL redirect)
       - hides cross-business lead access behind `404`
+      - returns `404` for invalid/malformed/non-allowlisted recording URLs
     - Updated lead detail UI (`app/app/leads/[leadId]/page.tsx`) to show:
       - recording status
       - recording duration
       - gated `Open recording` action (uses server route, not raw URL)
-    - Added focused access-control tests in `tests/recording-access.test.ts`.
+    - Added focused access-control + recording URL validation tests in `tests/recording-access.test.ts`.
     - Updated recording docs in `README.md` to reflect the in-app gated flow.
   - Commands run + results:
-    - `npm test` -> PASS (38/38)
+    - `npm test` -> PASS (41/41)
     - `npm run lint` -> PASS
     - `npm run build` -> PASS
     - `npm run typecheck` -> PASS
