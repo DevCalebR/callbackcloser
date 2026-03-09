@@ -3,7 +3,7 @@ import type { Business } from '@prisma/client';
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { isPortfolioDemoModeEnabled } from '@/lib/portfolio-demo-guardrail';
-import { getTwilioClient, hasTwilioClientEnv } from '@/lib/twilio-client';
+import { getTwilioClient, getTwilioSubaccountClient, hasTwilioClientEnv } from '@/lib/twilio-client';
 import { logTwilioInfo } from '@/lib/twilio-logging';
 import { getTwilioWebhookConfig, syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
 
@@ -11,9 +11,10 @@ type EnvMap = Readonly<Record<string, string | undefined>>;
 
 export type TwilioProvisioningBlockReason = 'already_has_number' | 'missing_twilio_credentials' | 'demo_mode';
 
-type ProvisionableBusiness = Pick<Business, 'id' | 'name' | 'twilioPhoneNumber' | 'twilioPhoneNumberSid'>;
+type ProvisionableBusiness = Pick<Business, 'id' | 'name' | 'twilioSubaccountSid' | 'twilioPhoneNumber' | 'twilioPhoneNumberSid'>;
 
 type ProvisionPhoneNumberOptions = {
+  businessId: string;
   businessName: string;
   areaCode?: string | number | null;
   correlationId?: string;
@@ -25,12 +26,14 @@ type LinkProvisionedPhoneNumberParams = {
   phoneNumberSid: string;
   syncedAt?: Date;
   correlationId?: string;
+  subaccountSid?: string | null;
 };
 
 export type ProvisionPhoneNumberResult = {
   phoneNumber: string | null;
   phoneNumberSid: string;
   syncedAt: Date;
+  subaccountSid: string;
 };
 
 function parseAreaCode(areaCode: ProvisionPhoneNumberOptions['areaCode']) {
@@ -69,10 +72,50 @@ export function getTwilioProvisioningBlockReason(
   return null;
 }
 
+export async function ensureTwilioSubaccount(
+  businessId: string,
+  businessName: string,
+  correlationId = 'n/a'
+) {
+  const business = await db.business.findUnique({
+    where: { id: businessId },
+    select: { id: true, twilioSubaccountSid: true },
+  });
+
+  if (!business) {
+    throw new Error('Business not found');
+  }
+
+  if (business.twilioSubaccountSid) {
+    return business.twilioSubaccountSid;
+  }
+
+  const parentClient = getTwilioClient();
+  const subaccount = await parentClient.api.accounts.create({
+    friendlyName: `CallbackCloser-${businessId}`,
+  });
+
+  await db.business.update({
+    where: { id: businessId },
+    data: { twilioSubaccountSid: subaccount.sid },
+  });
+
+  logTwilioInfo('provisioning', 'subaccount_created', {
+    correlationId,
+    businessId,
+    businessName,
+    twilioSubaccountSid: subaccount.sid,
+    ownerAccountSid: subaccount.ownerAccountSid,
+  });
+
+  return subaccount.sid;
+}
+
 export async function provisionPhoneNumber(options: ProvisionPhoneNumberOptions): Promise<ProvisionPhoneNumberResult> {
   const correlationId = options.correlationId ?? 'n/a';
-  const client = getTwilioClient();
   const webhookConfig = getTwilioWebhookConfig();
+  const subaccountSid = await ensureTwilioSubaccount(options.businessId, options.businessName, correlationId);
+  const client = getTwilioSubaccountClient(subaccountSid);
   const areaCode = parseAreaCode(options.areaCode);
 
   const candidates = await client.availablePhoneNumbers('US').local.list({
@@ -94,15 +137,17 @@ export async function provisionPhoneNumber(options: ProvisionPhoneNumberOptions)
 
   logTwilioInfo('provisioning', 'number_purchased', {
     correlationId,
+    twilioSubaccountSid: subaccountSid,
     phoneNumberSid: purchasedNumber.sid,
     phoneNumber: purchasedNumber.phoneNumber,
     appBaseUrl: webhookConfig.appBaseUrl,
   });
 
-  const { number } = await syncTwilioIncomingPhoneNumberWebhooks(purchasedNumber.sid);
+  const { number } = await syncTwilioIncomingPhoneNumberWebhooks(purchasedNumber.sid, client);
 
   logTwilioInfo('provisioning', 'webhooks_configured', {
     correlationId,
+    twilioSubaccountSid: subaccountSid,
     phoneNumberSid: number.sid,
     phoneNumber: number.phoneNumber,
     voiceUrl: webhookConfig.voiceUrl,
@@ -110,10 +155,21 @@ export async function provisionPhoneNumber(options: ProvisionPhoneNumberOptions)
     statusUrl: webhookConfig.statusUrl,
   });
 
+  const syncedAt = new Date();
+  await linkProvisionedPhoneNumberToBusiness({
+    businessId: options.businessId,
+    phoneNumber: number.phoneNumber,
+    phoneNumberSid: number.sid,
+    syncedAt,
+    correlationId,
+    subaccountSid,
+  });
+
   return {
     phoneNumber: number.phoneNumber,
     phoneNumberSid: number.sid,
-    syncedAt: new Date(),
+    syncedAt,
+    subaccountSid,
   };
 }
 
@@ -122,6 +178,7 @@ export async function linkProvisionedPhoneNumberToBusiness(params: LinkProvision
   const business = await db.business.update({
     where: { id: params.businessId },
     data: {
+      ...(params.subaccountSid !== undefined ? { twilioSubaccountSid: params.subaccountSid } : {}),
       twilioPhoneNumber: normalizePhoneNumber(params.phoneNumber),
       twilioPhoneNumberSid: params.phoneNumberSid,
       twilioWebhookSyncedAt: syncedAt,
@@ -131,6 +188,7 @@ export async function linkProvisionedPhoneNumberToBusiness(params: LinkProvision
   logTwilioInfo('provisioning', 'account_linked', {
     correlationId: params.correlationId ?? 'n/a',
     businessId: business.id,
+    twilioSubaccountSid: business.twilioSubaccountSid,
     phoneNumberSid: business.twilioPhoneNumberSid,
     phoneNumber: business.twilioPhoneNumber,
   });

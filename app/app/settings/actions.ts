@@ -7,8 +7,9 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { logTwilioError } from '@/lib/twilio-logging';
-import { linkProvisionedPhoneNumberToBusiness, provisionPhoneNumber } from '@/lib/twilio-provision';
-import { getTwilioClient, getTwilioWebhookConfig, syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
+import { provisionPhoneNumber } from '@/lib/twilio-provision';
+import { getTwilioBusinessClient } from '@/lib/twilio-client';
+import { syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
 import { businessSettingsSchema, buyNumberSchema } from '@/lib/validators';
 
 async function getBusinessForOwner() {
@@ -30,8 +31,11 @@ function parseTwilioPhoneNumberSid(formData: FormData) {
   return sid;
 }
 
-async function pickExistingTwilioIncomingNumber(phoneNumberSid?: string) {
-  const client = getTwilioClient();
+async function pickExistingTwilioIncomingNumber(
+  business: Awaited<ReturnType<typeof getBusinessForOwner>>,
+  phoneNumberSid?: string
+) {
+  const client = getTwilioBusinessClient(business.twilioSubaccountSid);
   if (phoneNumberSid) {
     return client.incomingPhoneNumbers(phoneNumberSid).fetch();
   }
@@ -95,17 +99,10 @@ export async function buyTwilioNumberAction(formData: FormData) {
 
   try {
     const correlationId = `settings_buy_${business.id}`;
-    const provisionedNumber = await provisionPhoneNumber({
+    await provisionPhoneNumber({
+      businessId: business.id,
       businessName: business.name,
       areaCode: parsed.data.areaCode,
-      correlationId,
-    });
-
-    await linkProvisionedPhoneNumberToBusiness({
-      businessId: business.id,
-      phoneNumber: provisionedNumber.phoneNumber,
-      phoneNumberSid: provisionedNumber.phoneNumberSid,
-      syncedAt: provisionedNumber.syncedAt,
       correlationId,
     });
 
@@ -131,9 +128,10 @@ export async function connectExistingTwilioNumberAction(formData: FormData) {
   const business = await getBusinessForOwner();
 
   try {
+    const client = getTwilioBusinessClient(business.twilioSubaccountSid);
     const phoneNumberSid = parseTwilioPhoneNumberSid(formData);
-    const selectedNumber = await pickExistingTwilioIncomingNumber(phoneNumberSid);
-    const { number } = await syncTwilioIncomingPhoneNumberWebhooks(selectedNumber.sid);
+    const selectedNumber = await pickExistingTwilioIncomingNumber(business, phoneNumberSid);
+    const { number } = await syncTwilioIncomingPhoneNumberWebhooks(selectedNumber.sid, client);
     const syncedAt = new Date();
 
     await saveBusinessTwilioNumber(business.id, {
@@ -157,7 +155,8 @@ export async function resyncTwilioWebhooksAction() {
   }
 
   try {
-    const { number } = await syncTwilioIncomingPhoneNumberWebhooks(business.twilioPhoneNumberSid);
+    const client = getTwilioBusinessClient(business.twilioSubaccountSid);
+    const { number } = await syncTwilioIncomingPhoneNumberWebhooks(business.twilioPhoneNumberSid, client);
     const syncedAt = new Date();
 
     await saveBusinessTwilioNumber(business.id, {

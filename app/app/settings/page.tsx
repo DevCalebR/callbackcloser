@@ -1,7 +1,8 @@
 import { requireBusiness } from '@/lib/auth';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { getPortfolioDemoTwilioNumbers, getPortfolioDemoWebhookConfig, isPortfolioDemoMode } from '@/lib/portfolio-demo';
-import { getTwilioClient, getTwilioWebhookConfig } from '@/lib/twilio';
+import { getTwilioBusinessClient } from '@/lib/twilio-client';
+import { getTwilioWebhookConfig } from '@/lib/twilio';
 import { saveBusinessSettingsAction, buyTwilioNumberAction, connectExistingTwilioNumberAction, resyncTwilioWebhooksAction } from '@/app/app/settings/actions';
 import { CopyValueButton } from '@/components/copy-value-button';
 import { Button } from '@/components/ui/button';
@@ -45,7 +46,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
     existingTwilioNumbers = getPortfolioDemoTwilioNumbers();
   } else {
     try {
-      const client = getTwilioClient();
+      const client = getTwilioBusinessClient(business.twilioSubaccountSid);
       const numbers = await client.incomingPhoneNumbers.list({ limit: 50 });
       existingTwilioNumbers = numbers.map((number) => ({
         sid: number.sid,

@@ -35,6 +35,7 @@ const demoBusiness: Business = {
   serviceLabel2: 'Install',
   serviceLabel3: 'Maintenance',
   timezone: 'America/Chicago',
+  twilioSubaccountSid: 'ACbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   twilioPhoneNumber: '+15125550123',
   twilioPhoneNumberSid: 'PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
   twilioWebhookSyncedAt: new Date('2026-02-24T15:14:00.000Z'),

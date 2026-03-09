@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
 import { logTwilioError, logTwilioWarn } from '@/lib/twilio-logging';
-import { getTwilioProvisioningBlockReason, linkProvisionedPhoneNumberToBusiness, provisionPhoneNumber } from '@/lib/twilio-provision';
+import { getTwilioProvisioningBlockReason, provisionPhoneNumber } from '@/lib/twilio-provision';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
     select: {
       id: true,
       name: true,
+      twilioSubaccountSid: true,
       twilioPhoneNumber: true,
       twilioPhoneNumberSid: true,
     },
@@ -68,15 +69,8 @@ export async function POST(request: Request) {
 
   try {
     const provisionedNumber = await provisionPhoneNumber({
-      businessName: business.name,
-      correlationId,
-    });
-
-    await linkProvisionedPhoneNumberToBusiness({
       businessId: business.id,
-      phoneNumber: provisionedNumber.phoneNumber,
-      phoneNumberSid: provisionedNumber.phoneNumberSid,
-      syncedAt: provisionedNumber.syncedAt,
+      businessName: business.name,
       correlationId,
     });
 
@@ -85,6 +79,7 @@ export async function POST(request: Request) {
         ok: true,
         phoneNumber: provisionedNumber.phoneNumber,
         phoneNumberSid: provisionedNumber.phoneNumberSid,
+        twilioSubaccountSid: provisionedNumber.subaccountSid,
       })
     );
   } catch (error) {

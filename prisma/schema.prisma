@@ -53,6 +53,7 @@ model Business {
   serviceLabel2               String             @default("Install")
   serviceLabel3               String             @default("Maintenance")
   timezone                    String             @default("America/New_York")
+  twilioSubaccountSid         String?            @unique
   twilioPhoneNumber           String?            @unique
   twilioPhoneNumberSid        String?            @unique
   twilioWebhookSyncedAt       DateTime?

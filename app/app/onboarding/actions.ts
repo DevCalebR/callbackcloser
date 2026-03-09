@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 
 import { upsertBusinessForOwner } from '@/lib/business';
 import { logTwilioError } from '@/lib/twilio-logging';
-import { getTwilioProvisioningBlockReason, linkProvisionedPhoneNumberToBusiness, provisionPhoneNumber } from '@/lib/twilio-provision';
+import { getTwilioProvisioningBlockReason, provisionPhoneNumber } from '@/lib/twilio-provision';
 import { onboardingSchema } from '@/lib/validators';
 
 const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/leads';
@@ -45,16 +45,9 @@ export async function saveOnboardingAction(formData: FormData) {
     const correlationId = `onboarding_${business.id}`;
 
     try {
-      const provisionedNumber = await provisionPhoneNumber({
-        businessName: business.name,
-        correlationId,
-      });
-
-      await linkProvisionedPhoneNumberToBusiness({
+      await provisionPhoneNumber({
         businessId: business.id,
-        phoneNumber: provisionedNumber.phoneNumber,
-        phoneNumberSid: provisionedNumber.phoneNumberSid,
-        syncedAt: provisionedNumber.syncedAt,
+        businessName: business.name,
         correlationId,
       });
     } catch (error) {
