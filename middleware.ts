@@ -1,3 +1,4 @@
+import type { NextFetchEvent, NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 
@@ -15,8 +16,45 @@ const isProtectedRoute = createRouteMatcher(['/app(.*)', '/api/stripe/checkout(.
 const isProtectedApiMutationRoute = createRouteMatcher(['/api/stripe/checkout', '/api/stripe/portal']);
 let productionDemoGuardrailLogged = false;
 let productionDemoOverrideLogged = false;
+let missingClerkEnvLogged = false;
 
-export default clerkMiddleware(async (auth, req) => {
+type EnvMap = Readonly<Record<string, string | undefined>>;
+
+function hasRequiredClerkMiddlewareEnv(env: EnvMap = process.env) {
+  return Boolean(env.CLERK_SECRET_KEY?.trim() && env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim());
+}
+
+function buildAuthUnavailableResponse(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.json({ error: 'Authentication is temporarily unavailable.' }, { status: 503 });
+  }
+
+  return new NextResponse('Authentication is temporarily unavailable.', { status: 503 });
+}
+
+const protectedMiddleware = clerkMiddleware(async (auth, req) => {
+  await auth.protect();
+
+  if (req.method === 'POST' && isProtectedApiMutationRoute(req)) {
+    const clientIp = getClientIpAddress(req);
+    const rateLimit = consumeRateLimit({
+      key: `middleware:protected-api:${clientIp}`,
+      limit: RATE_LIMIT_PROTECTED_API_MAX,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests' },
+        { status: 429, headers: buildRateLimitHeaders(rateLimit) }
+      );
+    }
+  }
+
+  return NextResponse.next();
+});
+
+export default async function middleware(req: NextRequest, event: NextFetchEvent) {
   if (isPortfolioDemoModeBlockedInProduction(process.env)) {
     if (!productionDemoGuardrailLogged) {
       productionDemoGuardrailLogged = true;
@@ -39,28 +77,35 @@ export default clerkMiddleware(async (auth, req) => {
     return withSecurityHeaders(NextResponse.next());
   }
 
-  if (isProtectedRoute(req)) {
-    await auth.protect();
+  if (!isProtectedRoute(req)) {
+    return withSecurityHeaders(NextResponse.next());
   }
 
-  if (req.method === 'POST' && isProtectedApiMutationRoute(req)) {
-    const clientIp = getClientIpAddress(req);
-    const rateLimit = consumeRateLimit({
-      key: `middleware:protected-api:${clientIp}`,
-      limit: RATE_LIMIT_PROTECTED_API_MAX,
-      windowMs: RATE_LIMIT_WINDOW_MS,
-    });
-
-    if (!rateLimit.allowed) {
-      return withSecurityHeaders(NextResponse.json(
-        { error: 'Too many requests' },
-        { status: 429, headers: buildRateLimitHeaders(rateLimit) }
-      ));
+  if (!hasRequiredClerkMiddlewareEnv(process.env)) {
+    if (!missingClerkEnvLogged) {
+      missingClerkEnvLogged = true;
+      console.error('Clerk middleware env is incomplete; protected routes will return 503 until keys are configured.', {
+        clerkSecretKeyPresent: Boolean(process.env.CLERK_SECRET_KEY?.trim()),
+        clerkPublishableKeyPresent: Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim()),
+        nodeEnv: process.env.NODE_ENV ?? null,
+        vercelEnv: process.env.VERCEL_ENV ?? null,
+      });
     }
+
+    return withSecurityHeaders(buildAuthUnavailableResponse(req));
   }
 
-  return withSecurityHeaders(NextResponse.next());
-});
+  try {
+    const response = await protectedMiddleware(req, event);
+    return withSecurityHeaders(response ?? NextResponse.next());
+  } catch (error) {
+    console.error('Protected middleware invocation failed.', {
+      path: req.nextUrl.pathname,
+      message: error instanceof Error ? error.message : 'unknown_error',
+    });
+    return withSecurityHeaders(buildAuthUnavailableResponse(req));
+  }
+}
 
 export const config = {
   matcher: ['/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)', '/(api|trpc)(.*)'],
