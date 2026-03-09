@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
 import { upsertBusinessForOwner } from '@/lib/business';
+import { logTwilioError } from '@/lib/twilio-logging';
+import { getTwilioProvisioningBlockReason, linkProvisionedPhoneNumberToBusiness, provisionPhoneNumber } from '@/lib/twilio-provision';
 import { onboardingSchema } from '@/lib/validators';
 
 const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/leads';
@@ -36,7 +38,41 @@ export async function saveOnboardingAction(formData: FormData) {
     redirect(`/app/onboarding?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid form data')}`);
   }
 
-  await upsertBusinessForOwner(userId, parsed.data);
+  const business = await upsertBusinessForOwner(userId, parsed.data);
+  const provisioningBlockReason = getTwilioProvisioningBlockReason(business);
+
+  if (!provisioningBlockReason) {
+    const correlationId = `onboarding_${business.id}`;
+
+    try {
+      const provisionedNumber = await provisionPhoneNumber({
+        businessName: business.name,
+        correlationId,
+      });
+
+      await linkProvisionedPhoneNumberToBusiness({
+        businessId: business.id,
+        phoneNumber: provisionedNumber.phoneNumber,
+        phoneNumberSid: provisionedNumber.phoneNumberSid,
+        syncedAt: provisionedNumber.syncedAt,
+        correlationId,
+      });
+    } catch (error) {
+      logTwilioError(
+        'provisioning',
+        'onboarding_auto_provision_failed',
+        {
+          correlationId,
+          businessId: business.id,
+          ownerClerkId: userId,
+          decision: 'onboarding_completed_without_twilio_number',
+        },
+        error
+      );
+    }
+  }
+
   revalidatePath('/app');
+  revalidatePath('/app/settings');
   redirect(postOnboardingRedirect);
 }

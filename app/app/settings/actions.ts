@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { logTwilioError } from '@/lib/twilio-logging';
+import { linkProvisionedPhoneNumberToBusiness, provisionPhoneNumber } from '@/lib/twilio-provision';
 import { getTwilioClient, getTwilioWebhookConfig, syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
 import { businessSettingsSchema, buyNumberSchema } from '@/lib/validators';
 
@@ -92,49 +94,34 @@ export async function buyTwilioNumberAction(formData: FormData) {
   }
 
   try {
-    const client = getTwilioClient();
-    const webhookConfig = getTwilioWebhookConfig();
-    const areaCode = parsed.data.areaCode?.trim() || undefined;
-    const areaCodeNumber = areaCode ? Number.parseInt(areaCode, 10) : undefined;
-    const candidates = await client.availablePhoneNumbers('US').local.list({
-      limit: 1,
-      smsEnabled: true,
-      voiceEnabled: true,
-      ...(areaCodeNumber ? { areaCode: areaCodeNumber } : {}),
+    const correlationId = `settings_buy_${business.id}`;
+    const provisionedNumber = await provisionPhoneNumber({
+      businessName: business.name,
+      areaCode: parsed.data.areaCode,
+      correlationId,
     });
 
-    const candidate = candidates[0];
-    if (!candidate?.phoneNumber) {
-      redirect('/app/settings?error=No%20US%20local%20numbers%20available');
-    }
-
-    const number = await client.incomingPhoneNumbers.create({
-      phoneNumber: candidate.phoneNumber,
-      friendlyName: `${business.name} - CallbackCloser`,
-      voiceUrl: webhookConfig.voiceUrl,
-      voiceMethod: 'POST',
-      smsUrl: webhookConfig.smsUrl,
-      smsMethod: 'POST',
-      statusCallback: webhookConfig.statusUrl,
-      statusCallbackMethod: 'POST',
-    });
-
-    const syncedAt = new Date();
-    await saveBusinessTwilioNumber(business.id, {
-      phoneNumber: number.phoneNumber,
-      phoneNumberSid: number.sid,
-      syncedAt,
-    });
-
-    console.info('Twilio webhook sync applied', {
-      phoneNumberSid: number.sid,
-      phoneNumber: number.phoneNumber,
-      appBaseUrl: webhookConfig.appBaseUrl,
+    await linkProvisionedPhoneNumberToBusiness({
+      businessId: business.id,
+      phoneNumber: provisionedNumber.phoneNumber,
+      phoneNumberSid: provisionedNumber.phoneNumberSid,
+      syncedAt: provisionedNumber.syncedAt,
+      correlationId,
     });
 
     revalidatePath('/app/settings');
     redirect('/app/settings?numberBought=1');
   } catch (error) {
+    logTwilioError(
+      'provisioning',
+      'settings_manual_provision_failed',
+      {
+        correlationId: `settings_buy_${business.id}`,
+        businessId: business.id,
+        decision: 'redirect_with_error',
+      },
+      error
+    );
     const message = error instanceof Error ? error.message : 'Failed to buy number';
     redirect(`/app/settings?error=${encodeURIComponent(message)}`);
   }

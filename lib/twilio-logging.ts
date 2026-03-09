@@ -1,6 +1,6 @@
 import { reportApplicationError } from './observability.ts';
 
-type TwilioLogRoute = 'voice' | 'sms' | 'status' | 'messaging' | 'webhook-auth';
+type TwilioLogRoute = 'voice' | 'sms' | 'status' | 'messaging' | 'webhook-auth' | 'provisioning';
 type TwilioLogLevel = 'info' | 'warn' | 'error';
 
 type TwilioLogFields = Record<string, unknown>;
