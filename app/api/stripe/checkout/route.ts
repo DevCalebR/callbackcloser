@@ -24,7 +24,6 @@ export async function POST(request: Request) {
   if (process.env.NODE_ENV === 'production' && !isAllowedRequestOrigin(request, getConfiguredAppBaseUrl())) {
     return withCorrelation(NextResponse.json({ error: 'Invalid request origin' }, { status: 403 }));
   }
-
   const { userId } = await auth();
   if (!userId) {
     return withCorrelation(NextResponse.redirect(absoluteUrl('/sign-in'), { status: 303 }));
@@ -92,7 +91,6 @@ export async function POST(request: Request) {
         hasExistingStripeCustomer: Boolean(business.stripeCustomerId),
       },
     });
-
     return withCorrelation(NextResponse.redirect(session.url, { status: 303 }));
   } catch (error) {
     reportApplicationError({

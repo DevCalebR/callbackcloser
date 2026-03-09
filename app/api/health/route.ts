@@ -7,7 +7,7 @@ import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/obse
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const DB_PROBE_TIMEOUT_MS = 2000;
+const DB_PROBE_TIMEOUT_MS = 2_000;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   return Promise.race<T>([
@@ -41,8 +41,10 @@ async function getDatabaseCheck() {
     await withTimeout(db.$queryRaw`SELECT 1`, DB_PROBE_TIMEOUT_MS);
     return { ok: true as const, detail: 'ok' };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : 'db_probe_failed';
-    return { ok: false as const, detail };
+    return {
+      ok: false as const,
+      detail: error instanceof Error ? error.message : 'db_probe_failed',
+    };
   }
 }
 
