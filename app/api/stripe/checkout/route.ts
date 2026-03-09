@@ -1,7 +1,11 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
+import { logAuditEvent } from '@/lib/audit-log';
 import { db } from '@/lib/db';
+import { getConfiguredAppBaseUrl } from '@/lib/env.server';
+import { getCorrelationIdFromRequest, reportApplicationError, withCorrelationIdHeader } from '@/lib/observability';
+import { isAllowedRequestOrigin } from '@/lib/request-origin';
 import { getStripe } from '@/lib/stripe';
 import { absoluteUrl } from '@/lib/url';
 import { checkoutSchema } from '@/lib/validators';
@@ -14,25 +18,32 @@ function errorRedirect(message: string) {
 }
 
 export async function POST(request: Request) {
+  const correlationId = getCorrelationIdFromRequest(request);
+  const withCorrelation = (response: NextResponse) => withCorrelationIdHeader(response, correlationId);
+
+  if (process.env.NODE_ENV === 'production' && !isAllowedRequestOrigin(request, getConfiguredAppBaseUrl())) {
+    return withCorrelation(NextResponse.json({ error: 'Invalid request origin' }, { status: 403 }));
+  }
+
   const { userId } = await auth();
   if (!userId) {
-    return NextResponse.redirect(absoluteUrl('/sign-in'), { status: 303 });
+    return withCorrelation(NextResponse.redirect(absoluteUrl('/sign-in'), { status: 303 }));
   }
 
   const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
   if (!business) {
-    return NextResponse.redirect(absoluteUrl('/app/onboarding'), { status: 303 });
+    return withCorrelation(NextResponse.redirect(absoluteUrl('/app/onboarding'), { status: 303 }));
   }
 
   const formData = await request.formData();
   const parsed = checkoutSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return errorRedirect('Invalid Stripe price selection');
+    return withCorrelation(errorRedirect('Invalid Stripe price selection'));
   }
 
   const allowedPrices = [process.env.STRIPE_PRICE_STARTER, process.env.STRIPE_PRICE_PRO].filter(Boolean);
   if (!allowedPrices.includes(parsed.data.priceId)) {
-    return errorRedirect('Price ID is not allowed');
+    return withCorrelation(errorRedirect('Price ID is not allowed'));
   }
 
   try {
@@ -65,12 +76,37 @@ export async function POST(request: Request) {
     });
 
     if (!session.url) {
-      return errorRedirect('Stripe did not return a checkout URL');
+      return withCorrelation(errorRedirect('Stripe did not return a checkout URL'));
     }
 
-    return NextResponse.redirect(session.url, { status: 303 });
+    logAuditEvent({
+      event: 'billing.checkout_session_created',
+      actorType: 'user',
+      actorId: userId,
+      businessId: business.id,
+      targetType: 'stripe_checkout_session',
+      targetId: session.id,
+      correlationId,
+      metadata: {
+        priceId: parsed.data.priceId,
+        hasExistingStripeCustomer: Boolean(business.stripeCustomerId),
+      },
+    });
+
+    return withCorrelation(NextResponse.redirect(session.url, { status: 303 }));
   } catch (error) {
+    reportApplicationError({
+      source: 'stripe.checkout',
+      event: 'route_error',
+      correlationId,
+      error,
+      metadata: {
+        userId,
+        businessId: business.id,
+      },
+      alert: false,
+    });
     const message = error instanceof Error ? error.message : 'Failed to create Stripe checkout session';
-    return errorRedirect(message);
+    return withCorrelation(errorRedirect(message));
   }
 }
