@@ -97,23 +97,20 @@ export async function buyTwilioNumberAction(formData: FormData) {
     redirect('/app/settings?error=This%20business%20already%20has%20a%20Twilio%20number');
   }
 
+  const correlationId = `settings_buy_${business.id}`;
   try {
-    const correlationId = `settings_buy_${business.id}`;
     await provisionPhoneNumber({
       businessId: business.id,
       businessName: business.name,
       areaCode: parsed.data.areaCode,
       correlationId,
     });
-
-    revalidatePath('/app/settings');
-    redirect('/app/settings?numberBought=1');
   } catch (error) {
     logTwilioError(
       'provisioning',
       'settings_manual_provision_failed',
       {
-        correlationId: `settings_buy_${business.id}`,
+        correlationId,
         businessId: business.id,
         decision: 'redirect_with_error',
       },
@@ -122,6 +119,9 @@ export async function buyTwilioNumberAction(formData: FormData) {
     const message = error instanceof Error ? error.message : 'Failed to buy number';
     redirect(`/app/settings?error=${encodeURIComponent(message)}`);
   }
+
+  revalidatePath('/app/settings');
+  redirect('/app/settings?numberBought=1');
 }
 
 export async function connectExistingTwilioNumberAction(formData: FormData) {
@@ -139,13 +139,13 @@ export async function connectExistingTwilioNumberAction(formData: FormData) {
       phoneNumberSid: number.sid,
       syncedAt,
     });
-
-    revalidatePath('/app/settings');
-    redirect('/app/settings?twilioConnected=1');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to connect existing Twilio number';
     redirect(`/app/settings?error=${encodeURIComponent(message)}`);
   }
+
+  revalidatePath('/app/settings');
+  redirect('/app/settings?twilioConnected=1');
 }
 
 export async function resyncTwilioWebhooksAction() {
@@ -164,11 +164,11 @@ export async function resyncTwilioWebhooksAction() {
       phoneNumberSid: number.sid,
       syncedAt,
     });
-
-    revalidatePath('/app/settings');
-    redirect('/app/settings?twilioSynced=1');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to sync Twilio webhooks';
     redirect(`/app/settings?error=${encodeURIComponent(message)}`);
   }
+
+  revalidatePath('/app/settings');
+  redirect('/app/settings?twilioSynced=1');
 }
