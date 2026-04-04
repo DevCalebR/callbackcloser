@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +21,20 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
         <p className="text-sm text-muted-foreground">Stripe subscriptions control whether new missed-call leads receive automated SMS follow-up.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Need the public-facing overview?{' '}
+          <Link className="underline underline-offset-4" href="/pricing">
+            Pricing
+          </Link>{' '}
+          ·{' '}
+          <Link className="underline underline-offset-4" href="/refund">
+            Refund policy
+          </Link>{' '}
+          ·{' '}
+          <Link className="underline underline-offset-4" href="/contact">
+            Contact
+          </Link>
+        </p>
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}

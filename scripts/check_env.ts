@@ -57,12 +57,16 @@ if (productionNodeEnv && demoModeEnabled && !demoModeOverrideEnabled) {
 
 console.log('CallbackCloser env check');
 console.log(`- Loaded env files: ${loadedFiles.join(', ') || '(none)'}`);
+console.log(`- NEXT_PUBLIC_APP_URL: ${process.env.NEXT_PUBLIC_APP_URL?.trim() ? 'set' : 'missing'}`);
 console.log(`- TWILIO_VALIDATE_SIGNATURE: ${signatureValidationEnabled ? 'enabled' : 'disabled'}`);
 console.log(`- PORTFOLIO_DEMO_MODE: ${demoModeEnabled ? 'enabled' : 'disabled'}`);
 console.log(`- ALLOW_PRODUCTION_DEMO_MODE: ${demoModeOverrideEnabled ? 'enabled' : 'disabled'}`);
 
 if (missing.length === 0 && configErrors.length === 0) {
   console.log('- Result: PASS (all required env vars are present)');
+  console.log(
+    '- Note: env check does not verify business-level live smoke prerequisites such as forwarding number, owner notify phone, Twilio number + webhook sync, or active billing.'
+  );
   process.exit(0);
 }
 

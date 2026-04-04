@@ -262,12 +262,21 @@ Current behavior:
 
 - Forwarded calls are recorded via TwiML `<Dial record="record-from-answer-dual">`
 - The app stores recording metadata on `Call` (`recordingSid`, `recordingUrl`, `recordingStatus`, `recordingDurationSeconds`) when Twilio posts recording callbacks to `/api/twilio/status`
-- Recording audio remains hosted in Twilio; CallbackCloser exposes a server-mediated redirect route for authenticated in-app access
+- Recording audio remains hosted in Twilio; CallbackCloser streams it through a server-side proxy for authenticated in-app access
+
+Recording URL safety + proxy behavior:
+
+- Stored recording URLs are validated before use:
+  - must use `https://`
+  - host must be allowlisted Twilio recording/API host: `api.twilio.com`, `api.us1.twilio.com`, `api.ie1.twilio.com`, or `api.au1.twilio.com`
+  - path must be a Twilio recording resource path (`.../Recordings/...`)
+- Invalid/malformed recording URLs return `404` from `/api/leads/[leadId]/recording`
+- Authorized requests are fetched from Twilio with server credentials and streamed back to the signed-in owner (no raw Twilio URL redirect)
 
 Where to access recordings:
 
 - Lead detail page (`/app/leads/[leadId]`) shows recording status/duration and an authenticated `Open recording` action
-- Recording links are mediated through `/api/leads/[leadId]/recording`, which checks the signed-in owner and lead business before redirecting
+- Recording links are mediated through `/api/leads/[leadId]/recording`, which checks the signed-in owner + business ownership and streams media via the server proxy
 - Twilio Console -> Monitor -> Calls (or Call Logs / Recordings, depending on account UI)
 - Database (`Call.recording*` fields) for metadata lookup / correlation
 
@@ -319,7 +328,7 @@ Prisma models included:
 - `/api/twilio/voice` - Twilio voice webhook
 - `/api/twilio/status` - Twilio dial action callback
 - `/api/twilio/sms` - Twilio SMS webhook
-- `/api/leads/[leadId]/recording` - authenticated recording redirect for lead owners
+- `/api/leads/[leadId]/recording` - authenticated recording media proxy for lead owners
 - `/api/stripe/webhook` - Stripe webhook
 
 ## Notes / MVP Constraints
