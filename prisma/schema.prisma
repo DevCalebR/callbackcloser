@@ -94,7 +94,7 @@ model Lead {
   updatedAt             DateTime             @updatedAt
   usageLimitNotifiedAt  DateTime?
   business              Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  call                  Call?                @relation(fields: [callId], references: [id])
+  call                  Call?                @relation(fields: [callId], references: [id], onDelete: SetNull)
   messages              Message[]
 
   @@index([businessId, status])
@@ -120,7 +120,7 @@ model Message {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   business        Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  lead            Lead?              @relation(fields: [leadId], references: [id])
+  lead            Lead?              @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
   @@index([businessId, createdAt])
   @@index([leadId, createdAt])

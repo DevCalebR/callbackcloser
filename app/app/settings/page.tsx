@@ -1,20 +1,22 @@
 import Link from 'next/link';
 
+import { CopyValueButton } from '@/components/copy-value-button';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { requireBusiness } from '@/lib/auth';
 import { getLiveSmokeReadiness } from '@/lib/live-smoke-readiness';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { getPortfolioDemoWebhookConfig, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { isSubscriptionActive } from '@/lib/subscription';
+import { getTwilioBusinessClient } from '@/lib/twilio-client';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
-import { getTwilioClient, getTwilioWebhookConfig } from '@/lib/twilio';
+import { getTwilioWebhookConfig } from '@/lib/twilio';
 import { describeUsageLimit, getConversationUsageForBusiness, isConversationLimitReached } from '@/lib/usage';
-import { saveBusinessSettingsAction, buyTwilioNumberAction, resyncTwilioWebhooksAction } from '@/app/app/settings/actions';
-import { Badge } from '@/components/ui/badge';
-import { CopyValueButton } from '@/components/copy-value-button';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+
+import { buyTwilioNumberAction, resyncTwilioWebhooksAction, saveBusinessSettingsAction } from './actions';
 
 export default async function SettingsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
@@ -64,7 +66,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
     }
   } else if (business.twilioPhoneNumberSid) {
     try {
-      const client = getTwilioClient();
+      const client = getTwilioBusinessClient(business.twilioSubaccountSid);
       const number = await client.incomingPhoneNumbers(business.twilioPhoneNumberSid).fetch();
       assignedTwilioNumber = {
         sid: number.sid,
@@ -76,7 +78,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
     }
   }
 
-  const assignedTwilioNumberFound = Boolean(assignedTwilioNumber);
+  const assignedTwilioNumberVerified = Boolean(assignedTwilioNumber);
   const lastTwilioWebhookSync = business.twilioWebhookSyncedAt ? new Date(business.twilioWebhookSyncedAt).toLocaleString() : 'Never';
   const subscriptionReady = isSubscriptionActive(business.subscriptionStatus);
   const ownerNotifyPhoneOptedOut =
@@ -99,7 +101,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
     hasWebhookSync: Boolean(business.twilioWebhookSyncedAt),
     hasTwilioAccountAccess: !assignedTwilioNumberError,
     canVerifyAssignedTwilioNumber: Boolean(business.twilioPhoneNumberSid) && !assignedTwilioNumberError,
-    hasAssignedTwilioNumberInAccount: assignedTwilioNumberFound,
+    hasAssignedTwilioNumberInAccount: assignedTwilioNumberVerified,
     webhookAppBaseUrl: twilioWebhookConfig?.appBaseUrl,
     webhookConfigError: twilioWebhookConfigError,
     twilioAccountLookupError: assignedTwilioNumberError,
@@ -126,7 +128,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               <CardDescription>These blockers should be clear before you place a real missed-call test.</CardDescription>
             </div>
             <Badge variant={liveSmokeReadiness.ready ? 'success' : 'outline'}>
-              {liveSmokeReadiness.ready ? 'ready_for_live_smoke' : `${liveSmokeReadiness.blockers.length}_blocker${liveSmokeReadiness.blockers.length === 1 ? '' : 's'}`}
+              {liveSmokeReadiness.ready
+                ? 'ready_for_live_smoke'
+                : `${liveSmokeReadiness.blockers.length}_blocker${liveSmokeReadiness.blockers.length === 1 ? '' : 's'}`}
             </Badge>
           </div>
         </CardHeader>
@@ -140,7 +144,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               <p className="font-medium">Fix these blockers before the live smoke test:</p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 {liveSmokeReadiness.blockers.map((blocker) => (
-                  <li key={blocker.key}>{blocker.label}: {blocker.detail}</li>
+                  <li key={blocker.key}>
+                    {blocker.label}: {blocker.detail}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -252,10 +258,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               <p className="text-muted-foreground">{business.twilioPhoneNumber ? formatPhoneForDisplay(business.twilioPhoneNumber) : 'None assigned'}</p>
               <p className="mt-1 text-xs text-muted-foreground">SID: {business.twilioPhoneNumberSid ?? 'None assigned'}</p>
               <p className="mt-1 text-xs text-muted-foreground">Last webhook sync: {lastTwilioWebhookSync}</p>
-              {business.twilioPhoneNumberSid && !assignedTwilioNumberError ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Account match: {assignedTwilioNumberFound ? 'assigned number found in current Twilio account' : 'assigned SID not found in current Twilio account list'}
-                </p>
+              {assignedTwilioNumberVerified ? (
+                <p className="mt-1 text-xs text-muted-foreground">Account match: verified assigned number in the current Twilio account.</p>
               ) : null}
             </div>
 
@@ -282,7 +286,14 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <form action={buyTwilioNumberAction} className="space-y-3">
               <div>
                 <Label htmlFor="areaCode">Preferred area code (optional)</Label>
-                <Input id="areaCode" name="areaCode" inputMode="numeric" placeholder="512" maxLength={3} disabled={Boolean(business.twilioPhoneNumber)} />
+                <Input
+                  id="areaCode"
+                  name="areaCode"
+                  inputMode="numeric"
+                  placeholder="512"
+                  maxLength={3}
+                  disabled={Boolean(business.twilioPhoneNumber)}
+                />
               </div>
               <Button type="submit" disabled={Boolean(business.twilioPhoneNumber)}>
                 {business.twilioPhoneNumber ? 'Twilio Number Already Assigned' : 'Buy Twilio Number'}
@@ -298,7 +309,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               <Button disabled={!business.twilioPhoneNumberSid || !twilioWebhookConfig} type="submit" variant="outline">
                 Re-sync webhooks
               </Button>
-              <p className="text-xs text-muted-foreground">Re-applies the current webhook URLs to the selected Twilio number using the current `NEXT_PUBLIC_APP_URL`.</p>
+              <p className="text-xs text-muted-foreground">
+                Re-applies the current webhook URLs to the selected Twilio number using the current `NEXT_PUBLIC_APP_URL`.
+              </p>
             </form>
 
             <div className="space-y-2 rounded-md border p-3">
@@ -342,7 +355,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               </ol>
             </div>
 
-            <p className="text-xs text-muted-foreground">Requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WEBHOOK_AUTH_TOKEN`, and an `https://` `NEXT_PUBLIC_APP_URL`.</p>
+            <p className="text-xs text-muted-foreground">
+              Requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WEBHOOK_AUTH_TOKEN`, and an `https://` `NEXT_PUBLIC_APP_URL`.
+            </p>
           </CardContent>
         </Card>
       </div>

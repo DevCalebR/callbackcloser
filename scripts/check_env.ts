@@ -47,6 +47,38 @@ const requirements: EnvRequirement[] = [
 const missing = requirements.filter((item) => item.required && !process.env[item.name]?.trim());
 const configErrors: string[] = [];
 
+function validateAbsoluteUrl(name: string, options: { requireHttps: boolean }) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    configErrors.push(`${name} must be a valid absolute URL`);
+    return;
+  }
+
+  if (options.requireHttps && parsed.protocol !== 'https:') {
+    configErrors.push(`${name} must use https:// when NODE_ENV=production`);
+  }
+}
+
+function validateIntegerEnv(name: string, options: { min: number; max: number }) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return;
+
+  if (!/^-?\d+$/.test(raw)) {
+    configErrors.push(`${name} must be an integer`);
+    return;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < options.min || parsed > options.max) {
+    configErrors.push(`${name} must be between ${options.min} and ${options.max}`);
+  }
+}
+
 if (productionNodeEnv && !signatureValidationEnabled) {
   configErrors.push('TWILIO_VALIDATE_SIGNATURE must be true when NODE_ENV=production');
 }
@@ -54,6 +86,36 @@ if (productionNodeEnv && !signatureValidationEnabled) {
 if (productionNodeEnv && demoModeEnabled && !demoModeOverrideEnabled) {
   configErrors.push('PORTFOLIO_DEMO_MODE cannot be enabled in production without ALLOW_PRODUCTION_DEMO_MODE=true');
 }
+
+validateAbsoluteUrl('NEXT_PUBLIC_APP_URL', { requireHttps: productionNodeEnv });
+validateAbsoluteUrl('ALERT_WEBHOOK_URL', { requireHttps: productionNodeEnv });
+
+const databaseUrl = process.env.DATABASE_URL?.trim();
+if (databaseUrl?.includes('neon.tech') && !/[?&]sslmode=require(?:&|$)/i.test(databaseUrl)) {
+  configErrors.push('DATABASE_URL for Neon must include sslmode=require');
+}
+
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL?.trim();
+if (directDatabaseUrl?.includes('neon.tech') && !/[?&]sslmode=require(?:&|$)/i.test(directDatabaseUrl)) {
+  configErrors.push('DIRECT_DATABASE_URL for Neon must include sslmode=require');
+}
+if (directDatabaseUrl?.includes('-pooler.')) {
+  configErrors.push('DIRECT_DATABASE_URL must use the Neon direct (non-pooler) host');
+}
+
+const starterPriceId = process.env.STRIPE_PRICE_STARTER?.trim();
+const proPriceId = process.env.STRIPE_PRICE_PRO?.trim();
+if (starterPriceId && proPriceId && starterPriceId === proPriceId) {
+  configErrors.push('STRIPE_PRICE_STARTER and STRIPE_PRICE_PRO must be different price IDs');
+}
+
+validateIntegerEnv('ALERT_WEBHOOK_TIMEOUT_MS', { min: 1_000, max: 30_000 });
+validateIntegerEnv('RATE_LIMIT_WINDOW_MS', { min: 1_000, max: 3_600_000 });
+validateIntegerEnv('RATE_LIMIT_TWILIO_AUTH_MAX', { min: 10, max: 10_000 });
+validateIntegerEnv('RATE_LIMIT_TWILIO_UNAUTH_MAX', { min: 5, max: 5_000 });
+validateIntegerEnv('RATE_LIMIT_STRIPE_AUTH_MAX', { min: 10, max: 10_000 });
+validateIntegerEnv('RATE_LIMIT_STRIPE_UNAUTH_MAX', { min: 5, max: 5_000 });
+validateIntegerEnv('RATE_LIMIT_PROTECTED_API_MAX', { min: 10, max: 10_000 });
 
 console.log('CallbackCloser env check');
 console.log(`- Loaded env files: ${loadedFiles.join(', ') || '(none)'}`);

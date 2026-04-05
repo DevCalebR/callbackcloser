@@ -1,8 +1,5 @@
-import twilio from 'twilio';
-
 import { getConfiguredAppBaseUrl, resolveConfiguredAppBaseUrl } from '@/lib/env.server';
-
-let twilioClient: ReturnType<typeof twilio> | null = null;
+import { getTwilioClient, type TwilioClient } from '@/lib/twilio-client';
 
 export type TwilioWebhookConfig = {
   appBaseUrl: string;
@@ -11,19 +8,8 @@ export type TwilioWebhookConfig = {
   statusUrl: string;
 };
 
-export function getTwilioClient() {
-  if (twilioClient) return twilioClient;
-
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-
-  if (!accountSid || !authToken) {
-    throw new Error('Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN');
-  }
-
-  twilioClient = twilio(accountSid, authToken);
-  return twilioClient;
-}
+export { getTwilioBusinessClient, getTwilioClient, getTwilioSubaccountClient } from '@/lib/twilio-client';
+export type { TwilioClient } from '@/lib/twilio-client';
 
 export function getTwilioWebhookConfig(): TwilioWebhookConfig {
   const appBaseUrl = getConfiguredAppBaseUrl();
@@ -67,8 +53,10 @@ export function getTwilioWebhookConfig(): TwilioWebhookConfig {
   };
 }
 
-export async function syncTwilioIncomingPhoneNumberWebhooks(phoneNumberSid: string) {
-  const client = getTwilioClient();
+export async function syncTwilioIncomingPhoneNumberWebhooks(
+  phoneNumberSid: string,
+  client: TwilioClient = getTwilioClient()
+) {
   const webhookConfig = getTwilioWebhookConfig();
 
   const number = await client.incomingPhoneNumbers(phoneNumberSid).update({
@@ -81,6 +69,7 @@ export async function syncTwilioIncomingPhoneNumberWebhooks(phoneNumberSid: stri
   });
 
   console.info('Twilio webhook sync applied', {
+    twilioAccountSid: client.accountSid,
     phoneNumberSid: number.sid,
     phoneNumber: number.phoneNumber,
     appBaseUrl: webhookConfig.appBaseUrl,

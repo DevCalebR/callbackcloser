@@ -6,7 +6,10 @@ import { redirect } from 'next/navigation';
 
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
-import { getTwilioClient, getTwilioWebhookConfig, syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
+import { getTwilioBusinessClient } from '@/lib/twilio-client';
+import { logTwilioError } from '@/lib/twilio-logging';
+import { provisionPhoneNumber } from '@/lib/twilio-provision';
+import { syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
 import { businessSettingsSchema, buyNumberSchema } from '@/lib/validators';
 
 async function getBusinessForOwner() {
@@ -65,53 +68,31 @@ export async function buyTwilioNumberAction(formData: FormData) {
     redirect('/app/settings?error=This%20business%20already%20has%20a%20Twilio%20number');
   }
 
+  const correlationId = `settings_buy_${business.id}`;
   try {
-    const client = getTwilioClient();
-    const webhookConfig = getTwilioWebhookConfig();
-    const areaCode = parsed.data.areaCode?.trim() || undefined;
-    const areaCodeNumber = areaCode ? Number.parseInt(areaCode, 10) : undefined;
-    const candidates = await client.availablePhoneNumbers('US').local.list({
-      limit: 1,
-      smsEnabled: true,
-      voiceEnabled: true,
-      ...(areaCodeNumber ? { areaCode: areaCodeNumber } : {}),
+    await provisionPhoneNumber({
+      businessId: business.id,
+      businessName: business.name,
+      areaCode: parsed.data.areaCode,
+      correlationId,
     });
-
-    const candidate = candidates[0];
-    if (!candidate?.phoneNumber) {
-      redirect('/app/settings?error=No%20US%20local%20numbers%20available');
-    }
-
-    const number = await client.incomingPhoneNumbers.create({
-      phoneNumber: candidate.phoneNumber,
-      friendlyName: `${business.name} - CallbackCloser`,
-      voiceUrl: webhookConfig.voiceUrl,
-      voiceMethod: 'POST',
-      smsUrl: webhookConfig.smsUrl,
-      smsMethod: 'POST',
-      statusCallback: webhookConfig.statusUrl,
-      statusCallbackMethod: 'POST',
-    });
-
-    const syncedAt = new Date();
-    await saveBusinessTwilioNumber(business.id, {
-      phoneNumber: number.phoneNumber,
-      phoneNumberSid: number.sid,
-      syncedAt,
-    });
-
-    console.info('Twilio webhook sync applied', {
-      phoneNumberSid: number.sid,
-      phoneNumber: number.phoneNumber,
-      appBaseUrl: webhookConfig.appBaseUrl,
-    });
-
-    revalidatePath('/app/settings');
-    redirect('/app/settings?numberBought=1');
   } catch (error) {
+    logTwilioError(
+      'provisioning',
+      'settings_manual_provision_failed',
+      {
+        correlationId,
+        businessId: business.id,
+        decision: 'redirect_with_error',
+      },
+      error
+    );
     const message = error instanceof Error ? error.message : 'Failed to buy number';
     redirect(`/app/settings?error=${encodeURIComponent(message)}`);
   }
+
+  revalidatePath('/app/settings');
+  redirect('/app/settings?numberBought=1');
 }
 
 export async function connectExistingTwilioNumberAction(formData: FormData) {
@@ -131,7 +112,8 @@ export async function resyncTwilioWebhooksAction() {
   }
 
   try {
-    const { number } = await syncTwilioIncomingPhoneNumberWebhooks(business.twilioPhoneNumberSid);
+    const client = getTwilioBusinessClient(business.twilioSubaccountSid);
+    const { number } = await syncTwilioIncomingPhoneNumberWebhooks(business.twilioPhoneNumberSid, client);
     const syncedAt = new Date();
 
     await saveBusinessTwilioNumber(business.id, {
@@ -139,11 +121,11 @@ export async function resyncTwilioWebhooksAction() {
       phoneNumberSid: number.sid,
       syncedAt,
     });
-
-    revalidatePath('/app/settings');
-    redirect('/app/settings?twilioSynced=1');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to sync Twilio webhooks';
     redirect(`/app/settings?error=${encodeURIComponent(message)}`);
   }
+
+  revalidatePath('/app/settings');
+  redirect('/app/settings?twilioSynced=1');
 }

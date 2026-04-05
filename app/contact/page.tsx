@@ -40,9 +40,7 @@ export default function ContactPage() {
                   support@callbackcloser.com
                 </a>
               </p>
-              <p>
-                If you are already ready to try the product, you can also create an account and complete the in-app setup flow.
-              </p>
+              <p>If you are already ready to try the product, you can also create an account and complete the in-app setup flow.</p>
               <p>If you are an active pilot customer, include your business name, Twilio number, and the recent call or SMS time when reporting an issue.</p>
               <p>
                 For SMS consent, STOP or HELP behavior, or public trust-page questions, email support and reference{' '}
