@@ -14,6 +14,7 @@ const signatureValidationEnabled = readBooleanEnv('TWILIO_VALIDATE_SIGNATURE');
 const productionNodeEnv = process.env.NODE_ENV === 'production';
 const demoModeEnabled = readBooleanEnv('PORTFOLIO_DEMO_MODE');
 const demoModeOverrideEnabled = readBooleanEnv('ALLOW_PRODUCTION_DEMO_MODE');
+const founderBillingBypassEnabled = readBooleanEnv('ALLOW_FOUNDER_BILLING_BYPASS');
 
 const requirements: EnvRequirement[] = [
   { name: 'NEXT_PUBLIC_APP_URL', required: true, reason: 'Canonical app URL / webhook URL generation' },
@@ -42,6 +43,8 @@ const requirements: EnvRequirement[] = [
   { name: 'DEBUG_ENV_ENDPOINT_TOKEN', required: false, reason: 'Optional debug endpoint token' },
   { name: 'PORTFOLIO_DEMO_MODE', required: false, reason: 'Optional demo mode' },
   { name: 'ALLOW_PRODUCTION_DEMO_MODE', required: false, reason: 'Optional break-glass override for demo mode in production' },
+  { name: 'ALLOW_FOUNDER_BILLING_BYPASS', required: false, reason: 'Optional founder-only billing override for smoke testing' },
+  { name: 'FOUNDER_CLERK_USER_ID', required: founderBillingBypassEnabled, reason: 'Required when founder-only billing bypass is enabled' },
 ];
 
 const missing = requirements.filter((item) => item.required && !process.env[item.name]?.trim());
@@ -87,6 +90,10 @@ if (productionNodeEnv && demoModeEnabled && !demoModeOverrideEnabled) {
   configErrors.push('PORTFOLIO_DEMO_MODE cannot be enabled in production without ALLOW_PRODUCTION_DEMO_MODE=true');
 }
 
+if (founderBillingBypassEnabled && !process.env.FOUNDER_CLERK_USER_ID?.trim()) {
+  configErrors.push('FOUNDER_CLERK_USER_ID is required when ALLOW_FOUNDER_BILLING_BYPASS=true');
+}
+
 validateAbsoluteUrl('NEXT_PUBLIC_APP_URL', { requireHttps: productionNodeEnv });
 validateAbsoluteUrl('ALERT_WEBHOOK_URL', { requireHttps: productionNodeEnv });
 
@@ -123,6 +130,8 @@ console.log(`- NEXT_PUBLIC_APP_URL: ${process.env.NEXT_PUBLIC_APP_URL?.trim() ? 
 console.log(`- TWILIO_VALIDATE_SIGNATURE: ${signatureValidationEnabled ? 'enabled' : 'disabled'}`);
 console.log(`- PORTFOLIO_DEMO_MODE: ${demoModeEnabled ? 'enabled' : 'disabled'}`);
 console.log(`- ALLOW_PRODUCTION_DEMO_MODE: ${demoModeOverrideEnabled ? 'enabled' : 'disabled'}`);
+console.log(`- ALLOW_FOUNDER_BILLING_BYPASS: ${founderBillingBypassEnabled ? 'enabled' : 'disabled'}`);
+console.log(`- FOUNDER_CLERK_USER_ID: ${process.env.FOUNDER_CLERK_USER_ID?.trim() ? 'set' : 'missing'}`);
 
 if (missing.length === 0 && configErrors.length === 0) {
   console.log('- Result: PASS (all required env vars are present)');

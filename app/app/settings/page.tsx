@@ -10,7 +10,7 @@ import { requireBusiness } from '@/lib/auth';
 import { getLiveSmokeReadiness } from '@/lib/live-smoke-readiness';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { getPortfolioDemoWebhookConfig, isPortfolioDemoMode } from '@/lib/portfolio-demo';
-import { isSubscriptionActive } from '@/lib/subscription';
+import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getTwilioBusinessClient } from '@/lib/twilio-client';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
 import { getTwilioWebhookConfig } from '@/lib/twilio';
@@ -80,7 +80,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
   const assignedTwilioNumberVerified = Boolean(assignedTwilioNumber);
   const lastTwilioWebhookSync = business.twilioWebhookSyncedAt ? new Date(business.twilioWebhookSyncedAt).toLocaleString() : 'Never';
-  const subscriptionReady = isSubscriptionActive(business.subscriptionStatus);
+  const billingAccess = getBusinessBillingAccessState(business);
+  const subscriptionReady = billingAccess.billingActive;
   const ownerNotifyPhoneOptedOut =
     demoMode || !business.notifyPhone
       ? false
@@ -119,6 +120,12 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Twilio number purchased and connected.</div> : null}
       {twilioConnected ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Existing Twilio number connected and webhooks synced.</div> : null}
       {twilioSynced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Twilio webhooks re-synced.</div> : null}
+      {billingAccess.founderBillingBypassActive ? (
+        <div className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-950">
+          Founder-only billing bypass is active for this founder-owned business. Live smoke testing can proceed without a paid subscription
+          while this override is enabled. Turn it off after testing so Stripe billing gates apply normally again.
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>

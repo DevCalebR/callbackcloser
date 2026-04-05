@@ -9,6 +9,7 @@ import { db } from '@/lib/db';
 import { formatDateTime, isMessageDeliveryIssueStatus, leadStatusLabels, leadStatusOrder, smsStateLabels } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { getPortfolioDemoBlockedCount, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getConversationUsageForBusiness, resolveUsageTierFromSubscription } from '@/lib/usage';
 import {
   describeAutomationBlockReason,
@@ -24,6 +25,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Recor
   const statusFilter = Object.values(LeadStatus).includes(rawFilter as LeadStatus) ? (rawFilter as LeadStatus) : null;
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const demoMode = isPortfolioDemoMode();
+  const billingAccess = getBusinessBillingAccessState(business);
 
   const [leads, blockedCount, usage] = demoMode
     ? [getPortfolioDemoLeads(statusFilter), getPortfolioDemoBlockedCount(), null]
@@ -49,6 +51,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Recor
   const automationBlockReason = resolveAutomationBlockReason({
     blockedCount,
     subscriptionStatus: business.subscriptionStatus,
+    billingActive: billingAccess.billingActive,
     usage,
   });
   const automationBlockMessage = describeAutomationBlockReason(automationBlockReason, {

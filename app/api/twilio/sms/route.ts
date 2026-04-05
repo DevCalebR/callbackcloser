@@ -222,14 +222,14 @@ export async function POST(request: Request) {
       },
     });
 
-    if (!isSubscriptionActive(business.subscriptionStatus) || lead.billingRequired || !business.twilioPhoneNumber) {
+    if (!isSubscriptionActive(business) || lead.billingRequired || !business.twilioPhoneNumber) {
       logTwilioInfo('sms', 'automation_blocked', {
         messageSid,
         correlationId,
         eventType: 'inbound_sms',
         businessId: business.id,
         leadId: lead.id,
-        decision: !isSubscriptionActive(business.subscriptionStatus)
+        decision: !isSubscriptionActive(business)
           ? 'noop_billing_inactive'
           : lead.billingRequired
             ? 'noop_billing_required'

@@ -23,10 +23,11 @@ export function formatUsageSummary(usage: Pick<ConversationUsage, 'used' | 'limi
 export function resolveAutomationBlockReason(input: {
   blockedCount: number;
   subscriptionStatus: SubscriptionStatus | null | undefined;
+  billingActive?: boolean;
   usage?: Pick<ConversationUsage, 'used' | 'limit'> | null;
 }): AutomationBlockReason {
   if (input.blockedCount <= 0) return 'none';
-  if (!isSubscriptionActive(input.subscriptionStatus)) return 'billing_inactive';
+  if (!(input.billingActive ?? isSubscriptionActive(input.subscriptionStatus))) return 'billing_inactive';
   if (input.usage && isConversationLimitReached(input.usage)) return 'usage_limit_reached';
   return 'billing_required';
 }
