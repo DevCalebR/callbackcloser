@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PublicSiteFooter } from '@/components/public-site-footer';
 import { PublicSiteNav } from '@/components/public-site-nav';
 
-const EFFECTIVE_DATE = 'March 2, 2026';
+const EFFECTIVE_DATE = 'April 5, 2026';
 
 export default function TermsPage() {
   return (
@@ -39,6 +39,21 @@ export default function TermsPage() {
           </section>
 
           <section className="space-y-2">
+            <h2 className="text-xl font-semibold">SMS Messaging</h2>
+            <p className="text-sm text-muted-foreground">
+              Current CallbackCloser pilots use SMS for callback coordination, customer support, service updates, and account or service
+              notifications. CallbackCloser is not presented as a promotional SMS program on the public website.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Public opt-in language is described on the{' '}
+              <Link className="underline underline-offset-4" href="/sms-consent">
+                SMS Consent
+              </Link>{' '}
+              page. Recipients can use STOP to opt out and HELP for help where messaging is active.
+            </p>
+          </section>
+
+          <section className="space-y-2">
             <h2 className="text-xl font-semibold">Billing</h2>
             <p className="text-sm text-muted-foreground">
               Subscription charges are processed through Stripe. Plan changes and cancellations are handled through the billing portal when available for your account.
@@ -63,6 +78,10 @@ export default function TermsPage() {
 
           <footer className="text-sm text-muted-foreground">
             Questions: <a className="underline" href="mailto:support@callbackcloser.com">support@callbackcloser.com</a> ·{' '}
+            <Link className="underline" href="/contact">
+              Contact
+            </Link>{' '}
+            ·{' '}
             <Link className="underline" href="/">
               Back to home
             </Link>

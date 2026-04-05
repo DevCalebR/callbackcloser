@@ -100,7 +100,8 @@ export default function PricingPage() {
               <CardDescription>Early pilots still need clear public surfaces and straightforward expectations.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>CallbackCloser supports STOP, START, and HELP handling and keeps public terms, privacy, refund, contact, and SMS consent pages visible.</p>
+              <p>CallbackCloser uses a public web-form SMS consent page and supports STOP, START, and HELP handling for active messaging flows.</p>
+              <p>Public pricing, terms, privacy, refund, contact, and SMS consent pages are visible on callbackcloser.com before a pilot goes live.</p>
               <p>Businesses remain responsible for lawful texting practices and consent requirements in their market. CallbackCloser does not claim to replace legal review.</p>
               <div className="flex flex-wrap gap-3 pt-2">
                 <Link href="/contact">
@@ -108,7 +109,7 @@ export default function PricingPage() {
                 </Link>
                 <Link href="/sms-consent">
                   <Button size="sm" variant="outline">
-                    Read SMS consent policy
+                    Review SMS consent
                   </Button>
                 </Link>
               </div>

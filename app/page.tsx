@@ -150,6 +150,7 @@ export default function LandingPage() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-muted-foreground">
                 <p>CallbackCloser keeps pricing, contact, privacy, terms, refund, and SMS consent surfaces visible before live pilot rollout.</p>
+                <p>The public SMS consent flow is web-form based and explains message frequency, message and data rates, and STOP or HELP handling.</p>
                 <p>The product supports STOP, START, and HELP handling, but businesses still need to use lawful calling and texting practices.</p>
                 <div className="flex flex-wrap gap-3 pt-2">
                   <Link href="/pricing">
@@ -157,7 +158,7 @@ export default function LandingPage() {
                   </Link>
                   <Link href="/sms-consent">
                     <Button size="sm" variant="outline">
-                      Read SMS consent policy
+                      Review SMS consent
                     </Button>
                   </Link>
                 </div>

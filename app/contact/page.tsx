@@ -44,12 +44,19 @@ export default function ContactPage() {
                 If you are already ready to try the product, you can also create an account and complete the in-app setup flow.
               </p>
               <p>If you are an active pilot customer, include your business name, Twilio number, and the recent call or SMS time when reporting an issue.</p>
+              <p>
+                For SMS consent, STOP or HELP behavior, or public trust-page questions, email support and reference{' '}
+                <span className="font-medium text-foreground">callbackcloser.com</span> so we can match the request to the live pilot setup.
+              </p>
               <div className="flex flex-wrap gap-3 pt-2">
                 <Link href="/sign-up">
                   <Button>Start pilot onboarding</Button>
                 </Link>
                 <Link href="/pricing">
                   <Button variant="outline">View pricing</Button>
+                </Link>
+                <Link href="/sms-consent">
+                  <Button variant="ghost">Review SMS consent</Button>
                 </Link>
               </div>
             </CardContent>
@@ -64,6 +71,11 @@ export default function ContactPage() {
               {outreachInputs.map((item) => (
                 <p key={item}>- {item}</p>
               ))}
+              <p className="pt-2">
+                Public trust pages: <Link className="underline underline-offset-4" href="/privacy">Privacy</Link>,{' '}
+                <Link className="underline underline-offset-4" href="/terms">Terms</Link>, and{' '}
+                <Link className="underline underline-offset-4" href="/sms-consent">SMS Consent</Link>.
+              </p>
             </CardContent>
           </Card>
         </section>

@@ -6,7 +6,7 @@ const footerLinks = [
   { href: '/privacy', label: 'Privacy' },
   { href: '/terms', label: 'Terms' },
   { href: '/refund', label: 'Refund' },
-  { href: '/sms-consent', label: 'SMS consent' },
+  { href: '/sms-consent', label: 'SMS Consent' },
 ];
 
 export function PublicSiteFooter() {
@@ -16,6 +16,7 @@ export function PublicSiteFooter() {
         <div className="space-y-1">
           <p className="font-medium text-foreground">CallbackCloser</p>
           <p>Missed-call recovery, lead qualification, and owner visibility for local service businesses.</p>
+          <p>callbackcloser.com public trust pages cover pricing, support, privacy, terms, refund, and SMS consent.</p>
           <p>
             Contact:{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">

@@ -7,7 +7,7 @@ const primaryLinks = [
   { href: '/pricing', label: 'Pricing' },
   { href: '/#how-it-works', label: 'How it works' },
   { href: '/contact', label: 'Contact' },
-  { href: '/sms-consent', label: 'SMS consent' },
+  { href: '/sms-consent', label: 'SMS Consent' },
 ];
 
 export function PublicSiteNav() {
@@ -47,4 +47,3 @@ export function PublicSiteNav() {
     </header>
   );
 }
-
