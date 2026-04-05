@@ -6,9 +6,9 @@ import { redirect } from 'next/navigation';
 
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { getTwilioBusinessClient } from '@/lib/twilio-client';
 import { logTwilioError } from '@/lib/twilio-logging';
 import { provisionPhoneNumber } from '@/lib/twilio-provision';
-import { getTwilioBusinessClient } from '@/lib/twilio-client';
 import { syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
 import { businessSettingsSchema, buyNumberSchema } from '@/lib/validators';
 
@@ -18,35 +18,6 @@ async function getBusinessForOwner() {
   const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
   if (!business) redirect('/app/onboarding');
   return business;
-}
-
-function parseTwilioPhoneNumberSid(formData: FormData) {
-  const raw = formData.get('phoneNumberSid');
-  if (typeof raw !== 'string') return undefined;
-  const sid = raw.trim();
-  if (!sid) return undefined;
-  if (!/^PN[0-9a-fA-F]{32}$/.test(sid)) {
-    throw new Error('Invalid Twilio phone number SID');
-  }
-  return sid;
-}
-
-async function pickExistingTwilioIncomingNumber(
-  business: Awaited<ReturnType<typeof getBusinessForOwner>>,
-  phoneNumberSid?: string
-) {
-  const client = getTwilioBusinessClient(business.twilioSubaccountSid);
-  if (phoneNumberSid) {
-    return client.incomingPhoneNumbers(phoneNumberSid).fetch();
-  }
-
-  const numbers = await client.incomingPhoneNumbers.list({ limit: 50 });
-  const firstActive = numbers.find((number) => `${number.status || ''}`.toLowerCase() === 'in-use');
-  const selected = firstActive ?? numbers[0];
-  if (!selected) {
-    throw new Error('No Twilio incoming phone numbers found on this account');
-  }
-  return selected;
 }
 
 async function saveBusinessTwilioNumber(businessId: string, params: { phoneNumber: string | null; phoneNumberSid: string; syncedAt: Date }) {
@@ -125,27 +96,13 @@ export async function buyTwilioNumberAction(formData: FormData) {
 }
 
 export async function connectExistingTwilioNumberAction(formData: FormData) {
-  const business = await getBusinessForOwner();
-
-  try {
-    const client = getTwilioBusinessClient(business.twilioSubaccountSid);
-    const phoneNumberSid = parseTwilioPhoneNumberSid(formData);
-    const selectedNumber = await pickExistingTwilioIncomingNumber(business, phoneNumberSid);
-    const { number } = await syncTwilioIncomingPhoneNumberWebhooks(selectedNumber.sid, client);
-    const syncedAt = new Date();
-
-    await saveBusinessTwilioNumber(business.id, {
-      phoneNumber: number.phoneNumber,
-      phoneNumberSid: number.sid,
-      syncedAt,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to connect existing Twilio number';
-    redirect(`/app/settings?error=${encodeURIComponent(message)}`);
-  }
-
-  revalidatePath('/app/settings');
-  redirect('/app/settings?twilioConnected=1');
+  void formData;
+  redirect(
+    '/app/settings?error=' +
+      encodeURIComponent(
+        'Existing Twilio numbers are connected manually during founder-led pilots so shared account inventory is not exposed in self-serve settings.'
+      )
+  );
 }
 
 export async function resyncTwilioWebhooksAction() {

@@ -1,62 +1,174 @@
 import Link from 'next/link';
 
+import { PublicSiteFooter } from '@/components/public-site-footer';
+import { PublicSiteNav } from '@/components/public-site-nav';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
+const workflowSteps = [
+  {
+    title: 'Missed call captured',
+    description: 'A missed call hits your Twilio number, is logged, and is tied to the right business record.',
+  },
+  {
+    title: 'Automatic text follow-up',
+    description: 'CallbackCloser texts back right away so the lead hears from you before they call the next shop.',
+  },
+  {
+    title: 'Lead qualification',
+    description: 'The workflow collects service type, urgency, ZIP code, and best callback time by text.',
+  },
+  {
+    title: 'Owner visibility',
+    description: 'The owner gets a summary and the full conversation is available inside the protected dashboard.',
+  },
+];
+
+const pilotSteps = [
+  'Create your business profile and set the owner notification phone',
+  'Connect or buy your Twilio number and confirm call forwarding',
+  'Activate billing and run a live missed-call test before rollout',
+];
+
 export default function LandingPage() {
   return (
-    <main className="container flex min-h-screen items-center py-16">
-      <div className="grid w-full gap-10">
-        <div className="grid w-full gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <section className="space-y-6">
-            <p className="inline-flex rounded-full border bg-card px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-primary">
-              CallbackCloser
+    <div className="min-h-screen bg-background">
+      <PublicSiteNav />
+
+      <main>
+        <section className="border-b bg-gradient-to-b from-background via-background to-muted/30">
+          <div className="container grid gap-8 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
+            <section className="space-y-6">
+              <Badge variant="outline">Missed calls cost jobs</Badge>
+              <div className="space-y-4">
+                <h1 className="max-w-4xl text-4xl font-semibold tracking-tight sm:text-5xl">
+                  Recover missed calls with automatic text follow-up, lead qualification, and owner alerts.
+                </h1>
+                <p className="max-w-2xl text-lg text-muted-foreground">
+                  CallbackCloser texts back when your team misses a call, qualifies the lead by SMS, logs the conversation,
+                  and gives the owner a clear handoff inside the dashboard before the prospect goes cold.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Link href="/sign-up">
+                  <Button size="lg">Start pilot onboarding</Button>
+                </Link>
+                <Link href="/pricing">
+                  <Button size="lg" variant="outline">
+                    View pricing
+                  </Button>
+                </Link>
+                <Link href="/contact">
+                  <Button size="lg" variant="ghost">
+                    Talk to us
+                  </Button>
+                </Link>
+              </div>
+
+              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                <span className="rounded-full border bg-card px-3 py-1">Automatic text follow-up</span>
+                <span className="rounded-full border bg-card px-3 py-1">Lead qualification</span>
+                <span className="rounded-full border bg-card px-3 py-1">Owner summary text</span>
+                <span className="rounded-full border bg-card px-3 py-1">STOP and HELP support</span>
+              </div>
+            </section>
+
+            <Card className="border-primary/20 bg-card/95">
+              <CardHeader>
+                <CardTitle>What a recovered lead looks like</CardTitle>
+                <CardDescription>No login required to understand the product promise during outreach.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <div className="rounded-lg border bg-muted/40 p-4">
+                  <p className="font-medium">2:14 PM</p>
+                  <p className="text-muted-foreground">Missed call from a homeowner looking for same-day repair.</p>
+                </div>
+                <div className="rounded-lg border bg-primary/5 p-4">
+                  <p className="font-medium">2:14 PM</p>
+                  <p className="text-muted-foreground">CallbackCloser texts back right away and asks what service is needed.</p>
+                </div>
+                <div className="rounded-lg border bg-muted/40 p-4">
+                  <p className="font-medium">2:16 PM</p>
+                  <p className="text-muted-foreground">The lead replies with service type, urgency, ZIP code, and best callback time.</p>
+                </div>
+                <div className="rounded-lg border bg-primary/5 p-4">
+                  <p className="font-medium">2:16 PM</p>
+                  <p className="text-muted-foreground">The owner gets a summary text and sees the full conversation in the dashboard.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        <section className="container space-y-6 py-16" id="how-it-works">
+          <div className="max-w-2xl space-y-3">
+            <h2 className="text-3xl font-semibold tracking-tight">How CallbackCloser works</h2>
+            <p className="text-muted-foreground">
+              This is built for service businesses that lose jobs when the phone rings at the wrong moment. The workflow is
+              simple: recover the lead fast, gather the important details, and make sure the owner can respond without extra admin work.
             </p>
-            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-              Missed Call to Booked Job with automated SMS follow-up.
-            </h1>
-            <p className="max-w-2xl text-lg text-muted-foreground">
-              When a customer calls and nobody answers, CallbackCloser texts them instantly, captures the job details, and alerts the owner with a lead summary.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Link href="/buy">
-                <Button size="lg">Buy CallbackCloser</Button>
-              </Link>
-              <Link href="/app/leads">
-                <Button size="lg" variant="outline">
-                  Open App
-                </Button>
-              </Link>
-            </div>
-          </section>
-          <Card className="border-primary/20 bg-white/90 backdrop-blur">
-            <CardHeader>
-              <CardTitle>How it works</CardTitle>
-              <CardDescription>Built for home service businesses using Twilio, Stripe, Clerk, and Prisma.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <div className="rounded-lg border bg-muted/50 p-4">1. Incoming call hits your Twilio number and forwards to your business line.</div>
-              <div className="rounded-lg border bg-muted/50 p-4">2. If unanswered, a lead is created and SMS qualification starts automatically.</div>
-              <div className="rounded-lg border bg-muted/50 p-4">3. Owner gets a summary text and can track leads inside the dashboard.</div>
-            </CardContent>
-          </Card>
-        </div>
-        <footer className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-          <span>Legal:</span>
-          <Link className="underline underline-offset-4" href="/terms">
-            Terms
-          </Link>
-          <Link className="underline underline-offset-4" href="/privacy">
-            Privacy
-          </Link>
-          <Link className="underline underline-offset-4" href="/refund">
-            Refund
-          </Link>
-          <Link className="underline underline-offset-4" href="/contact">
-            Contact
-          </Link>
-        </footer>
-      </div>
-    </main>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {workflowSteps.map((step, index) => (
+              <Card key={step.title}>
+                <CardHeader>
+                  <CardDescription>Step {index + 1}</CardDescription>
+                  <CardTitle>{step.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">{step.description}</CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-y bg-muted/20">
+          <div className="container grid gap-6 py-16 lg:grid-cols-[1.05fr_0.95fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pilot-ready onboarding</CardTitle>
+                <CardDescription>Founder-led pilots move fastest when the setup path is obvious.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                {pilotSteps.map((step, index) => (
+                  <div key={step} className="rounded-lg border bg-card p-4">
+                    <p className="font-medium text-foreground">
+                      {index + 1}. {step}
+                    </p>
+                  </div>
+                ))}
+                <p>Need help before you sign up? Use the contact path below and we will walk through fit, setup, and pilot rollout.</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Trust and compliance</CardTitle>
+                <CardDescription>Public trust pages are available before a prospect ever logs in.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p>CallbackCloser keeps pricing, contact, privacy, terms, refund, and SMS consent surfaces visible before live pilot rollout.</p>
+                <p>The public SMS consent flow is web-form based and explains message frequency, message and data rates, and STOP or HELP handling.</p>
+                <p>The product supports STOP, START, and HELP handling, but businesses still need to use lawful calling and texting practices.</p>
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <Link href="/pricing">
+                    <Button size="sm">View pricing</Button>
+                  </Link>
+                  <Link href="/sms-consent">
+                    <Button size="sm" variant="outline">
+                      Review SMS consent
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      </main>
+
+      <PublicSiteFooter />
+    </div>
   );
 }

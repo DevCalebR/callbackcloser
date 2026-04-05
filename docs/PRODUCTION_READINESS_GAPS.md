@@ -554,4 +554,5 @@ Dependencies: G4 (recommended)
     - `README.md`
     - `docs/PRODUCTION_READINESS_GAPS.md`
   - Commit SHA:
-    - `4e8f4d8`
+    - initial implementation: `4e8f4d8`
+    - hardening follow-up: pending on `hardening/g14-recordings-ux` (this update)

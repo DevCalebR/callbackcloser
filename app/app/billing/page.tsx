@@ -16,7 +16,7 @@ import {
 } from '@/lib/usage-visibility';
 
 function planPrice(priceId: string | undefined) {
-  return priceId ? 'Configured via Stripe Price ID' : 'Missing env var';
+  return priceId ? 'Exact charge is shown in Stripe checkout for this environment.' : 'Billing is not configured in this environment.';
 }
 
 function parseRequestedPlan(searchParams?: Record<string, string | string[] | undefined>) {
@@ -59,7 +59,23 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
-        <p className="text-sm text-muted-foreground">Stripe subscriptions control whether new missed-call leads receive automated SMS follow-up.</p>
+        <p className="text-sm text-muted-foreground">
+          Stripe controls whether new missed-call leads receive automated SMS follow-up. Exact pricing is confirmed in Stripe checkout.
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Need the public-facing overview?{' '}
+          <Link className="underline underline-offset-4" href="/pricing">
+            Pricing
+          </Link>{' '}
+          ·{' '}
+          <Link className="underline underline-offset-4" href="/refund">
+            Refund policy
+          </Link>{' '}
+          ·{' '}
+          <Link className="underline underline-offset-4" href="/contact">
+            Contact
+          </Link>
+        </p>
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
@@ -70,27 +86,43 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
       ) : null}
       {checkoutSucceeded && subscriptionActive ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
-          Subscription is active. Next steps: connect your Twilio number in <Link className="underline" href="/app/settings">Business Settings</Link>, then monitor new leads in{' '}
-          <Link className="underline" href="/app/leads">Dashboard</Link>.
+          Subscription is active. Next steps: connect your Twilio number in{' '}
+          <Link className="underline underline-offset-4" href="/app/settings">
+            Business Settings
+          </Link>
+          , then monitor new leads in{' '}
+          <Link className="underline underline-offset-4" href="/app/leads">
+            Dashboard
+          </Link>
+          .
         </div>
       ) : null}
       {checkoutSucceeded && !subscriptionActive ? (
         <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
           <p>Stripe checkout completed. Subscription status is still syncing from webhook events.</p>
-          <p className="text-muted-foreground">If this does not update shortly, refresh this page and verify `STRIPE_WEBHOOK_SECRET` + webhook endpoint configuration.</p>
+          <p className="text-muted-foreground">
+            If this does not update shortly, refresh this page and verify `STRIPE_WEBHOOK_SECRET` and the Stripe webhook endpoint configuration.
+          </p>
           <div>
             <Link href="/app/billing">
-              <Button size="sm" variant="outline">Refresh Status</Button>
+              <Button size="sm" variant="outline">
+                Refresh Status
+              </Button>
             </Link>
           </div>
         </div>
       ) : null}
       {checkoutCanceled ? <div className="rounded-md border bg-muted/40 p-3 text-sm">Checkout canceled. You can restart anytime below.</div> : null}
+      {!subscriptionActive && !checkoutSucceeded ? (
+        <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+          Billing is not active yet. Missed calls can still be captured, but automated SMS follow-up stays paused until Stripe marks the subscription active.
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>
           <CardTitle>Current Subscription</CardTitle>
-          <CardDescription>Status synced from Stripe webhook events.</CardDescription>
+          <CardDescription>Status is synced from Stripe webhook events, not just the browser redirect.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3 text-sm">
           <Badge variant={business.subscriptionStatus === 'ACTIVE' ? 'success' : 'outline'}>
@@ -111,7 +143,10 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <CardContent className="space-y-3 text-sm">
           <p>{automationStatusMessage}</p>
           {automationBlockReason !== 'none' ? (
-            <Link href="#plan-options" className="inline-flex rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+            <Link
+              href="#plan-options"
+              className="inline-flex rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
               Upgrade Plan
             </Link>
           ) : null}
@@ -122,16 +157,18 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className={requestedPlan === 'starter' ? 'border-primary/40 bg-primary/5' : ''}>
           <CardHeader>
             <CardTitle>Starter</CardTitle>
-            <CardDescription>Basic missed-call SMS follow-up and dashboard access.</CardDescription>
+            <CardDescription>Missed-call recovery, SMS qualification, owner alerts, and dashboard access.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p>{planPrice(starterPriceId)}</p>
-            <p className="text-muted-foreground">Uses `STRIPE_PRICE_STARTER`.</p>
+            <p className="text-muted-foreground">Best for smaller pilot volumes.</p>
           </CardContent>
           <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
               <input type="hidden" name="priceId" value={starterPriceId ?? ''} />
-              <Button type="submit" className="w-full" disabled={!starterPriceId}>Subscribe to Starter</Button>
+              <Button type="submit" className="w-full" disabled={!starterPriceId}>
+                Start Starter Pilot
+              </Button>
             </form>
           </CardFooter>
         </Card>
@@ -139,20 +176,24 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className={requestedPlan === 'pro' ? 'border-primary/40 bg-primary/5' : ''}>
           <CardHeader>
             <CardTitle>Pro</CardTitle>
-            <CardDescription>Higher volume and premium support workflows.</CardDescription>
+            <CardDescription>Higher conversation volume and closer rollout support.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p>{planPrice(proPriceId)}</p>
-            <p className="text-muted-foreground">Uses `STRIPE_PRICE_PRO`.</p>
+            <p className="text-muted-foreground">Best for teams that need more pilot capacity.</p>
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
             <form action="/api/stripe/checkout" method="post" className="w-full">
               <input type="hidden" name="priceId" value={proPriceId ?? ''} />
-              <Button type="submit" className="w-full" disabled={!proPriceId}>Subscribe to Pro</Button>
+              <Button type="submit" className="w-full" disabled={!proPriceId}>
+                Start Pro Pilot
+              </Button>
             </form>
             {business.stripeCustomerId ? (
               <form action="/api/stripe/portal" method="post" className="w-full">
-                <Button type="submit" variant="outline" className="w-full">Open Billing Portal</Button>
+                <Button type="submit" variant="outline" className="w-full">
+                  Open Billing Portal
+                </Button>
               </form>
             ) : null}
           </CardFooter>

@@ -11,7 +11,12 @@ import { advanceLeadConversation } from '@/lib/sms-state-machine';
 import { isSubscriptionActive } from '@/lib/subscription';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { handleInboundSmsComplianceCommand } from '@/lib/twilio-sms-compliance';
-import { buildOwnerNotificationMessage, persistInboundMessage, sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
+import {
+  buildOwnerNotificationMessage,
+  persistInboundMessage,
+  persistOutboundMessageRecord,
+  sendAndPersistOutboundMessage,
+} from '@/lib/twilio-messaging';
 import { buildTwilioRetryableErrorResponse } from '@/lib/twilio-webhook-retry';
 import { hasValidTwilioWebhookRequest } from '@/lib/twilio-webhook';
 import { messagingTwiML } from '@/lib/twiml';
@@ -306,6 +311,29 @@ export async function POST(request: Request) {
           });
         }
       } catch (error) {
+        await persistOutboundMessageRecord({
+          businessId: business.id,
+          leadId: updatedLead.id,
+          fromPhone: business.twilioPhoneNumber,
+          toPhone: business.notifyPhone,
+          body: buildOwnerNotificationMessage({
+            businessName: business.name,
+            leadId: updatedLead.id,
+            callerPhone: updatedLead.callerPhoneNormalized,
+            serviceRequested: updatedLead.serviceRequested,
+            urgency: updatedLead.urgency,
+            zipCode: updatedLead.zipCode,
+            bestTime: updatedLead.bestTime,
+            leadUrl: absoluteUrl(`/app/leads/${updatedLead.id}`),
+          }),
+          participant: 'OWNER',
+          status: 'failed',
+          rawPayload: {
+            source: 'twilio.sms',
+            stage: 'owner_notification',
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
         logTwilioError(
           'sms',
           'owner_notification_failed',
@@ -359,6 +387,29 @@ export async function POST(request: Request) {
         });
       }
     } catch (error) {
+      await persistOutboundMessageRecord({
+        businessId: business.id,
+        leadId: updatedLead.id,
+        fromPhone: business.twilioPhoneNumber,
+        toPhone: updatedLead.callerPhoneNormalized,
+        body: transition.responseText,
+        status: 'fallback_webhook_response',
+        rawPayload: {
+          source: 'twilio.sms',
+          stage: 'lead_reply',
+          fallback: 'webhook_response',
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+
+      await db.lead.update({
+        where: { id: updatedLead.id },
+        data: {
+          lastOutboundAt: new Date(),
+          lastInteractionAt: new Date(),
+        },
+      });
+
       logTwilioError(
         'sms',
         'lead_reply_send_failed',
@@ -368,10 +419,11 @@ export async function POST(request: Request) {
           eventType: 'inbound_sms',
           businessId: business.id,
           leadId: updatedLead.id,
-          decision: 'reply_send_failed',
+          decision: 'reply_send_failed_fallback_to_twiML',
         },
         error
       );
+      return withCorrelation(xmlOk(transition.responseText));
     }
 
     return withCorrelation(xmlOk());

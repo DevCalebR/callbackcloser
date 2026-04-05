@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { formatDateTime, leadStatusLabels, leadStatusOrder, smsStateLabels } from '@/lib/lead-presenters';
+import { formatDateTime, formatMessageStatus, isMessageDeliveryIssueStatus, leadStatusLabels, leadStatusOrder, smsStateLabels } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { getPortfolioDemoLeadDetail, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
@@ -29,6 +29,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
   if (!lead) notFound();
 
   const saved = searchParams?.saved === '1';
+  const messageIssues = lead.messages.filter((message) => isMessageDeliveryIssueStatus(message.status));
 
   return (
     <div className="space-y-6">
@@ -46,6 +47,11 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
       </div>
 
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead status updated.</div> : null}
+      {messageIssues.length > 0 ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          Automated SMS had a delivery issue on this lead. Review the transcript below and follow up manually if needed.
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="space-y-6">
@@ -139,7 +145,14 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
                     <span>
                       {message.direction.toLowerCase()} | {message.participant.toLowerCase()}
                     </span>
-                    <span>{formatDateTime(message.createdAt)}</span>
+                    <div className="flex items-center gap-2">
+                      {formatMessageStatus(message.status) && message.status?.toLowerCase() !== 'delivered' ? (
+                        <Badge variant={isMessageDeliveryIssueStatus(message.status) ? 'destructive' : 'outline'}>
+                          {formatMessageStatus(message.status)}
+                        </Badge>
+                      ) : null}
+                      <span>{formatDateTime(message.createdAt)}</span>
+                    </div>
                   </div>
                   <p className="whitespace-pre-wrap">{message.body}</p>
                 </div>
