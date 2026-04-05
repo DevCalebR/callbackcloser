@@ -19,6 +19,8 @@ const ENV_SPECS: EnvSpec[] = [
   { name: 'CLERK_SECRET_KEY', provider: 'Clerk', visibility: 'server', requiredInProduction: true },
   { name: 'NEXT_PUBLIC_CLERK_SIGN_IN_URL', provider: 'Clerk', visibility: 'public', requiredInProduction: false },
   { name: 'NEXT_PUBLIC_CLERK_SIGN_UP_URL', provider: 'Clerk', visibility: 'public', requiredInProduction: false },
+  { name: 'ALLOW_FOUNDER_BILLING_BYPASS', provider: 'Clerk', visibility: 'server', requiredInProduction: false },
+  { name: 'FOUNDER_CLERK_USER_ID', provider: 'Clerk', visibility: 'server', requiredInProduction: false },
 
   { name: 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', provider: 'Stripe', visibility: 'public', requiredInProduction: false },
   { name: 'STRIPE_SECRET_KEY', provider: 'Stripe', visibility: 'server', requiredInProduction: true },
@@ -158,6 +160,15 @@ function validateOperationalConfig() {
   validateOptionalIntegerEnv('RATE_LIMIT_PROTECTED_API_MAX', { min: 10, max: 10_000 });
 }
 
+function validateFounderBillingBypassConfig() {
+  if (!parseBooleanFlag(process.env.ALLOW_FOUNDER_BILLING_BYPASS)) return;
+  if (!process.env.FOUNDER_CLERK_USER_ID?.trim()) {
+    throw new Error(
+      'Invalid environment configuration: ALLOW_FOUNDER_BILLING_BYPASS=true requires FOUNDER_CLERK_USER_ID to identify the single founder account.'
+    );
+  }
+}
+
 export function validateServerEnv() {
   if (validated) return;
   if (process.env.NODE_ENV !== 'production') return;
@@ -181,6 +192,7 @@ export function validateServerEnv() {
   validateDatabaseUrl();
   validateDistinctStripePrices();
   validateOperationalConfig();
+  validateFounderBillingBypassConfig();
   validated = true;
 }
 

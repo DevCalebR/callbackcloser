@@ -110,6 +110,25 @@ npm run webhooks:print
 npm run db:smoke
 ```
 
+## Founder-Only Billing Bypass For Smoke Testing
+
+If you need to run a founder-owned production smoke test without paying a real subscription fee, you can enable a narrow billing override:
+
+```env
+ALLOW_FOUNDER_BILLING_BYPASS=true
+FOUNDER_CLERK_USER_ID=your_clerk_user_id
+```
+
+How it works:
+
+- Only the business owned by `FOUNDER_CLERK_USER_ID` is treated as billing-active at runtime.
+- Stripe integration and webhook syncing stay intact.
+- `Business.subscriptionStatus` in the database is not rewritten.
+- Normal customer accounts still require a real active Stripe subscription.
+- When enabled, the protected billing and settings pages show a visible founder-bypass notice.
+
+Turn it off after smoke testing by unsetting `ALLOW_FOUNDER_BILLING_BYPASS` or setting it back to `false`, then removing `FOUNDER_CLERK_USER_ID` if you do not need it.
+
 ## Clerk Setup (Required)
 
 1. Create a Clerk application.

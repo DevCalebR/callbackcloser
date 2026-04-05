@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { SubscriptionStatus } from '@prisma/client';
 
 import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
@@ -264,7 +263,7 @@ export async function POST(request: Request) {
           callId: call.id,
           callerPhone,
           callerPhoneNormalized,
-          billingRequired: !isSubscriptionActive(business.subscriptionStatus),
+          billingRequired: !isSubscriptionActive(business),
           smsState: 'NOT_STARTED',
           lastInteractionAt: new Date(),
         },
@@ -290,7 +289,7 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!isSubscriptionActive(business.subscriptionStatus)) {
+    if (!isSubscriptionActive(business)) {
       if (!lead.billingRequired) {
         await db.lead.update({ where: { id: lead.id }, data: { billingRequired: true } });
       }
@@ -494,7 +493,7 @@ export async function POST(request: Request) {
       await db.lead.update({
         where: { id: lead.id },
         data: {
-          billingRequired: business.subscriptionStatus !== SubscriptionStatus.ACTIVE,
+          billingRequired: !isSubscriptionActive(business),
           lastInteractionAt: new Date(),
         },
       });

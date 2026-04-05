@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
-import { isSubscriptionActive } from '@/lib/subscription';
+import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getConversationUsageForBusiness, resolveUsageTierFromSubscription } from '@/lib/usage';
 import {
   describeAutomationBlockReason,
@@ -33,7 +33,8 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const checkout = typeof searchParams?.checkout === 'string' ? searchParams.checkout : undefined;
   const requestedPlan = parseRequestedPlan(searchParams);
-  const subscriptionActive = isSubscriptionActive(business.subscriptionStatus);
+  const billingAccess = getBusinessBillingAccessState(business);
+  const subscriptionActive = billingAccess.billingActive;
   const checkoutSucceeded = checkout === 'success';
   const checkoutCanceled = checkout === 'canceled';
   const demoMode = isPortfolioDemoMode();
@@ -48,6 +49,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const automationBlockReason = resolveAutomationBlockReason({
     blockedCount,
     subscriptionStatus: business.subscriptionStatus,
+    billingActive: billingAccess.billingActive,
     usage,
   });
   const automationStatusMessage = describeAutomationBlockReason(automationBlockReason, {
@@ -79,12 +81,18 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
+      {billingAccess.founderBillingBypassActive ? (
+        <div className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-950">
+          Founder-only billing bypass is active for this founder-owned business. CallbackCloser will allow missed-call SMS automation
+          for smoke testing without a live Stripe charge. Normal customer accounts still require real active billing.
+        </div>
+      ) : null}
       {requestedPlan ? (
         <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
           Selected plan: <strong>{requestedPlan === 'starter' ? 'Starter' : 'Pro'}</strong>. Continue checkout below.
         </div>
       ) : null}
-      {checkoutSucceeded && subscriptionActive ? (
+      {checkoutSucceeded && billingAccess.rawSubscriptionActive ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           Subscription is active. Next steps: connect your Twilio number in{' '}
           <Link className="underline underline-offset-4" href="/app/settings">
@@ -97,7 +105,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           .
         </div>
       ) : null}
-      {checkoutSucceeded && !subscriptionActive ? (
+      {checkoutSucceeded && !billingAccess.rawSubscriptionActive ? (
         <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
           <p>Stripe checkout completed. Subscription status is still syncing from webhook events.</p>
           <p className="text-muted-foreground">
@@ -128,10 +136,14 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           <Badge variant={business.subscriptionStatus === 'ACTIVE' ? 'success' : 'outline'}>
             {business.subscriptionStatus.toLowerCase()}
           </Badge>
+          {billingAccess.founderBillingBypassActive ? <Badge variant="outline">founder_bypass_active</Badge> : null}
           <Badge variant="outline">{usageTierLabel}</Badge>
           <span className="text-muted-foreground">Usage: {usageSummary}</span>
           {business.stripeCustomerId ? <span className="text-muted-foreground">Customer: {business.stripeCustomerId}</span> : null}
           {business.stripeSubscriptionId ? <span className="text-muted-foreground">Subscription: {business.stripeSubscriptionId}</span> : null}
+          {billingAccess.founderBillingBypassActive ? (
+            <span className="text-muted-foreground">Stripe status remains {business.subscriptionStatus.toLowerCase()} while the founder override is enabled.</span>
+          ) : null}
         </CardContent>
       </Card>
 

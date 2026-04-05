@@ -1,6 +1,6 @@
 import type { Business } from '@prisma/client';
 
-import { isSubscriptionActive } from './subscription.ts';
+import { getBusinessBillingAccessState, isSubscriptionActive } from './subscription.ts';
 
 export const BILLING_TIME_ZONE = 'America/New_York' as const;
 
@@ -16,7 +16,7 @@ export type ConversationUsage = {
   timezone: typeof BILLING_TIME_ZONE;
 };
 
-type UsageBusiness = Pick<Business, 'id' | 'subscriptionStatus' | 'stripePriceId'>;
+type UsageBusiness = Pick<Business, 'id' | 'ownerClerkId' | 'subscriptionStatus' | 'stripePriceId'>;
 
 type LeadCountClient = {
   lead: {
@@ -141,11 +141,23 @@ export function getCurrentMonthWindowUtc(now: Date = new Date(), timeZone: strin
 }
 
 export function resolveUsageTierFromSubscription(
-  input: Pick<UsageBusiness, 'subscriptionStatus' | 'stripePriceId'>,
+  input: Pick<UsageBusiness, 'subscriptionStatus' | 'stripePriceId'> & Partial<Pick<UsageBusiness, 'ownerClerkId'>>,
   env: Readonly<Record<string, string | undefined>> = process.env
 ): UsageTier {
-  if (!isSubscriptionActive(input.subscriptionStatus)) {
+  const billingAccess = getBusinessBillingAccessState(
+    {
+      ownerClerkId: input.ownerClerkId ?? '',
+      subscriptionStatus: input.subscriptionStatus,
+    },
+    env
+  );
+
+  if (!billingAccess.billingActive) {
     return 'free';
+  }
+
+  if (billingAccess.founderBillingBypassActive) {
+    return 'starter';
   }
 
   const priceId = input.stripePriceId?.trim();
