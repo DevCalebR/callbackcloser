@@ -43,11 +43,11 @@ export default function LandingPage() {
               <Badge variant="outline">Missed calls cost jobs</Badge>
               <div className="space-y-4">
                 <h1 className="max-w-4xl text-4xl font-semibold tracking-tight sm:text-5xl">
-                  Turn missed calls into booked jobs with automatic text follow-up for local service businesses.
+                  Recover missed calls with automatic text follow-up, lead qualification, and owner alerts.
                 </h1>
                 <p className="max-w-2xl text-lg text-muted-foreground">
                   CallbackCloser texts back when your team misses a call, qualifies the lead by SMS, logs the conversation,
-                  and gives the owner a clear dashboard view before the prospect goes cold.
+                  and gives the owner a clear handoff inside the dashboard before the prospect goes cold.
                 </p>
               </div>
 
@@ -139,7 +139,7 @@ export default function LandingPage() {
                     </p>
                   </div>
                 ))}
-                <p>Need help before you sign up? Use the contact path below and we will walk through pilot fit and rollout.</p>
+                <p>Need help before you sign up? Use the contact path below and we will walk through fit, setup, and pilot rollout.</p>
               </CardContent>
             </Card>
 
@@ -149,8 +149,8 @@ export default function LandingPage() {
                 <CardDescription>Public trust pages are available before a prospect ever logs in.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p>CallbackCloser keeps pricing, contact, privacy, terms, refund, and SMS consent surfaces visible for outreach and pilot onboarding.</p>
-                <p>The product supports STOP, START, and HELP handling, and businesses remain responsible for lawful texting practices.</p>
+                <p>CallbackCloser keeps pricing, contact, privacy, terms, refund, and SMS consent surfaces visible before live pilot rollout.</p>
+                <p>The product supports STOP, START, and HELP handling, but businesses still need to use lawful calling and texting practices.</p>
                 <div className="flex flex-wrap gap-3 pt-2">
                   <Link href="/pricing">
                     <Button size="sm">View pricing</Button>

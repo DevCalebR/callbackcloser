@@ -23,6 +23,9 @@ export default function SmsConsentPage() {
               CallbackCloser is used by service businesses to follow up after a missed phone call, ask a few qualification questions,
               and help the owner respond faster. The exact message flow is controlled by the business using the platform.
             </p>
+            <p className="text-sm text-muted-foreground">
+              Message frequency depends on the lead conversation. Message and data rates may apply based on the recipient&apos;s mobile plan.
+            </p>
           </section>
 
           <section className="space-y-2">
@@ -37,7 +40,7 @@ export default function SmsConsentPage() {
             <h2 className="text-xl font-semibold">Business responsibilities</h2>
             <p className="text-sm text-muted-foreground">
               Businesses using CallbackCloser are responsible for lawful use of text messaging, including the consent and contact
-              practices required by their market, campaign type, and jurisdiction.
+              practices required by their market, campaign type, and jurisdiction. CallbackCloser does not claim that these public notes replace legal advice.
             </p>
           </section>
 
@@ -66,4 +69,3 @@ export default function SmsConsentPage() {
     </div>
   );
 }
-

@@ -15,7 +15,7 @@ export function PublicSiteFooter() {
       <div className="container flex flex-col gap-4 py-8 text-sm text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           <p className="font-medium text-foreground">CallbackCloser</p>
-          <p>Missed-call follow-up, lead qualification, and owner visibility for local service businesses.</p>
+          <p>Missed-call recovery, lead qualification, and owner visibility for local service businesses.</p>
           <p>
             Contact:{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
@@ -35,4 +35,3 @@ export function PublicSiteFooter() {
     </footer>
   );
 }
-

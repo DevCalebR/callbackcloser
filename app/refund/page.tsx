@@ -20,7 +20,7 @@ export default function RefundPolicyPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Subscription Charges</h2>
             <p className="text-sm text-muted-foreground">
-              CallbackCloser is billed as a recurring subscription through Stripe. Charges apply according to your selected plan and billing cycle.
+              CallbackCloser is billed as a recurring subscription through Stripe. Charges apply according to the plan and billing interval confirmed in Stripe checkout.
             </p>
           </section>
 
@@ -35,6 +35,7 @@ export default function RefundPolicyPage() {
             <h2 className="text-xl font-semibold">Refund Requests</h2>
             <p className="text-sm text-muted-foreground">
               Refunds are reviewed case-by-case for duplicate billing, platform defects, or accidental charges. Approved refunds are issued to the original payment method.
+              CallbackCloser does not promise automatic prorated refunds for unused time.
             </p>
           </section>
 

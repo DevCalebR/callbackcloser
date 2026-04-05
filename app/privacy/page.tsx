@@ -32,9 +32,25 @@ export default function PrivacyPage() {
           </section>
 
           <section className="space-y-2">
+            <h2 className="text-xl font-semibold">Service Providers</h2>
+            <p className="text-sm text-muted-foreground">
+              CallbackCloser relies on service providers such as Twilio, Stripe, Clerk, and Neon to handle messaging, billing, authentication,
+              and database hosting. Those providers process the data required for their part of the service.
+            </p>
+          </section>
+
+          <section className="space-y-2">
             <h2 className="text-xl font-semibold">Data Sharing</h2>
             <p className="text-sm text-muted-foreground">
               CallbackCloser uses service providers (for example Twilio, Stripe, Clerk, and Neon) solely to provide the platform. We do not sell your data.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-xl font-semibold">Pilot Operations</h2>
+            <p className="text-sm text-muted-foreground">
+              During founder-led pilots, CallbackCloser may review account setup details, webhook health, and recent lead activity to help diagnose launch issues.
+              That access is limited to support and rollout needs.
             </p>
           </section>
 
@@ -46,7 +62,7 @@ export default function PrivacyPage() {
           </section>
 
           <footer className="text-sm text-muted-foreground">
-            Contact: <a className="underline" href="mailto:support@callbackcloser.com">support@callbackcloser.com</a> ·{' '}
+            Contact: <a className="underline" href="mailto:support@callbackcloser.com">support@callbackcloser.com</a> · Founder-led pilot support ·{' '}
             <Link className="underline" href="/">
               Back to home
             </Link>

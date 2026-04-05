@@ -20,7 +20,14 @@ export default function TermsPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Service Scope</h2>
             <p className="text-sm text-muted-foreground">
-              CallbackCloser provides automation tools for missed-call follow-up workflows, including SMS messaging and lead tracking.
+              CallbackCloser provides automation tools for missed-call recovery workflows, including SMS qualification, owner notification, and lead tracking.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-xl font-semibold">Founder-Led Pilot</h2>
+            <p className="text-sm text-muted-foreground">
+              Current accounts are launched as founder-led pilots. Setup, Twilio attachment, and rollout steps may include manual support before live traffic is turned on.
             </p>
           </section>
 
@@ -34,14 +41,23 @@ export default function TermsPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Billing</h2>
             <p className="text-sm text-muted-foreground">
-              Subscription charges are processed through Stripe. Plan changes and cancellations are handled through the billing portal.
+              Subscription charges are processed through Stripe. Plan changes and cancellations are handled through the billing portal when available for your account.
+              If billing is inactive or past due, CallbackCloser may continue capturing missed-call leads while automated SMS follow-up stays paused.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-xl font-semibold">Customer Responsibilities</h2>
+            <p className="text-sm text-muted-foreground">
+              You are responsible for your business phone routing, Twilio account permissions, lawful messaging practices, and the accuracy of any call forwarding
+              or notification numbers you configure.
             </p>
           </section>
 
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Limitation of Liability</h2>
             <p className="text-sm text-muted-foreground">
-              The service is provided as-is. CallbackCloser is not liable for indirect or consequential damages arising from use of the platform.
+              The service is provided as-is. CallbackCloser does not guarantee uninterrupted delivery or booking outcomes and is not liable for indirect or consequential damages arising from use of the platform.
             </p>
           </section>
 

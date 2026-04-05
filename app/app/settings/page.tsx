@@ -3,12 +3,12 @@ import Link from 'next/link';
 import { requireBusiness } from '@/lib/auth';
 import { getLiveSmokeReadiness } from '@/lib/live-smoke-readiness';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getPortfolioDemoTwilioNumbers, getPortfolioDemoWebhookConfig, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getPortfolioDemoWebhookConfig, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { isSubscriptionActive } from '@/lib/subscription';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
 import { getTwilioClient, getTwilioWebhookConfig } from '@/lib/twilio';
 import { describeUsageLimit, getConversationUsageForBusiness, isConversationLimitReached } from '@/lib/usage';
-import { saveBusinessSettingsAction, buyTwilioNumberAction, connectExistingTwilioNumberAction, resyncTwilioWebhooksAction } from '@/app/app/settings/actions';
+import { saveBusinessSettingsAction, buyTwilioNumberAction, resyncTwilioWebhooksAction } from '@/app/app/settings/actions';
 import { Badge } from '@/components/ui/badge';
 import { CopyValueButton } from '@/components/copy-value-button';
 import { Button } from '@/components/ui/button';
@@ -45,30 +45,38 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
     }
   }
 
-  let existingTwilioNumberError: string | undefined;
-  let existingTwilioNumbers: Array<{ sid: string; phoneNumber: string; friendlyName: string | null }> = [];
+  let assignedTwilioNumberError: string | undefined;
+  let assignedTwilioNumber:
+    | {
+        sid: string;
+        phoneNumber: string;
+        friendlyName: string | null;
+      }
+    | undefined;
 
   if (demoMode) {
-    existingTwilioNumbers = getPortfolioDemoTwilioNumbers();
-  } else {
+    if (business.twilioPhoneNumberSid && business.twilioPhoneNumber) {
+      assignedTwilioNumber = {
+        sid: business.twilioPhoneNumberSid,
+        phoneNumber: business.twilioPhoneNumber,
+        friendlyName: `${business.name} demo number`,
+      };
+    }
+  } else if (business.twilioPhoneNumberSid) {
     try {
       const client = getTwilioClient();
-      const numbers = await client.incomingPhoneNumbers.list({ limit: 50 });
-      existingTwilioNumbers = numbers.map((number) => ({
+      const number = await client.incomingPhoneNumbers(business.twilioPhoneNumberSid).fetch();
+      assignedTwilioNumber = {
         sid: number.sid,
         phoneNumber: number.phoneNumber,
         friendlyName: number.friendlyName || null,
-      }));
+      };
     } catch (twilioError) {
-      existingTwilioNumberError = twilioError instanceof Error ? twilioError.message : 'Failed to load Twilio incoming phone numbers';
+      assignedTwilioNumberError = twilioError instanceof Error ? twilioError.message : 'Failed to load the assigned Twilio number';
     }
   }
 
-  const selectedExistingNumberSid = business.twilioPhoneNumberSid || existingTwilioNumbers[0]?.sid || '';
-  const selectedExistingNumber = existingTwilioNumbers.find((number) => number.sid === selectedExistingNumberSid);
-  const assignedTwilioNumberFound = business.twilioPhoneNumberSid
-    ? existingTwilioNumbers.some((number) => number.sid === business.twilioPhoneNumberSid)
-    : false;
+  const assignedTwilioNumberFound = Boolean(assignedTwilioNumber);
   const lastTwilioWebhookSync = business.twilioWebhookSyncedAt ? new Date(business.twilioWebhookSyncedAt).toLocaleString() : 'Never';
   const subscriptionReady = isSubscriptionActive(business.subscriptionStatus);
   const ownerNotifyPhoneOptedOut =
@@ -89,12 +97,12 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
     hasTwilioNumberSid: Boolean(business.twilioPhoneNumberSid),
     hasWebhookConfig: Boolean(twilioWebhookConfig),
     hasWebhookSync: Boolean(business.twilioWebhookSyncedAt),
-    hasTwilioAccountAccess: !existingTwilioNumberError,
-    canVerifyAssignedTwilioNumber: !existingTwilioNumberError,
+    hasTwilioAccountAccess: !assignedTwilioNumberError,
+    canVerifyAssignedTwilioNumber: Boolean(business.twilioPhoneNumberSid) && !assignedTwilioNumberError,
     hasAssignedTwilioNumberInAccount: assignedTwilioNumberFound,
     webhookAppBaseUrl: twilioWebhookConfig?.appBaseUrl,
     webhookConfigError: twilioWebhookConfigError,
-    twilioAccountLookupError: existingTwilioNumberError,
+    twilioAccountLookupError: assignedTwilioNumberError,
   });
 
   return (
@@ -236,7 +244,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         <Card>
           <CardHeader>
             <CardTitle>Twilio Number</CardTitle>
-            <CardDescription>Connect an existing number or buy a US local number, then keep webhooks synced to your current public URL.</CardDescription>
+            <CardDescription>Buy a pilot number here or have CallbackCloser attach your existing number without exposing shared account inventory.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-md border bg-muted/40 p-3 text-sm">
@@ -244,7 +252,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               <p className="text-muted-foreground">{business.twilioPhoneNumber ? formatPhoneForDisplay(business.twilioPhoneNumber) : 'None assigned'}</p>
               <p className="mt-1 text-xs text-muted-foreground">SID: {business.twilioPhoneNumberSid ?? 'None assigned'}</p>
               <p className="mt-1 text-xs text-muted-foreground">Last webhook sync: {lastTwilioWebhookSync}</p>
-              {business.twilioPhoneNumberSid && !existingTwilioNumberError ? (
+              {business.twilioPhoneNumberSid && !assignedTwilioNumberError ? (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Account match: {assignedTwilioNumberFound ? 'assigned number found in current Twilio account' : 'assigned SID not found in current Twilio account list'}
                 </p>
@@ -253,40 +261,22 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
             <div className="space-y-3 rounded-md border p-3">
               <div>
-                <p className="text-sm font-medium">Use Existing Twilio Number</p>
-                <p className="text-xs text-muted-foreground">Select a number from your Twilio account and sync the webhooks to the current `NEXT_PUBLIC_APP_URL`.</p>
+                <p className="text-sm font-medium">Existing Twilio numbers are founder-managed during pilots</p>
+                <p className="text-xs text-muted-foreground">
+                  To keep customer workspaces isolated, CallbackCloser does not expose Twilio account inventory in self-serve settings. If you
+                  already own a Twilio number, email{' '}
+                  <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
+                    support@callbackcloser.com
+                  </a>{' '}
+                  with your business name and number and we will attach it for you.
+                </p>
               </div>
-
-              {existingTwilioNumberError ? <p className="text-xs text-destructive">{existingTwilioNumberError}</p> : null}
-              {!existingTwilioNumberError && existingTwilioNumbers.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No incoming Twilio numbers found on this account.</p>
+              {assignedTwilioNumberError ? <p className="text-xs text-destructive">{assignedTwilioNumberError}</p> : null}
+              {assignedTwilioNumber ? (
+                <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+                  Verified assigned number: {formatPhoneForDisplay(assignedTwilioNumber.phoneNumber)} [{assignedTwilioNumber.sid}]
+                </div>
               ) : null}
-
-              <form action={connectExistingTwilioNumberAction} className="space-y-3">
-                {existingTwilioNumbers.length > 1 ? (
-                  <div>
-                    <Label htmlFor="phoneNumberSid">Existing Twilio number</Label>
-                    <select
-                      id="phoneNumberSid"
-                      name="phoneNumberSid"
-                      className="flex h-10 w-full rounded-md border bg-card px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                      defaultValue={selectedExistingNumberSid}
-                    >
-                      {existingTwilioNumbers.map((number) => (
-                        <option key={number.sid} value={number.sid}>
-                          {formatPhoneForDisplay(number.phoneNumber)} {number.friendlyName ? `(${number.friendlyName})` : ''} [{number.sid}]
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : selectedExistingNumberSid ? (
-                  <input name="phoneNumberSid" type="hidden" value={selectedExistingNumberSid} />
-                ) : null}
-
-                <Button disabled={!twilioWebhookConfig || existingTwilioNumbers.length === 0} type="submit" variant="outline">
-                  {existingTwilioNumbers.length === 0 ? 'No Existing Numbers Available' : 'Use Existing Number & Sync Webhooks'}
-                </Button>
-              </form>
             </div>
 
             <form action={buyTwilioNumberAction} className="space-y-3">
@@ -297,6 +287,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               <Button type="submit" disabled={Boolean(business.twilioPhoneNumber)}>
                 {business.twilioPhoneNumber ? 'Twilio Number Already Assigned' : 'Buy Twilio Number'}
               </Button>
+              {!business.twilioPhoneNumber ? (
+                <p className="text-xs text-muted-foreground">
+                  Buying a number is the safest self-serve path for pilot accounts because it does not reveal the rest of the shared Twilio account.
+                </p>
+              ) : null}
             </form>
 
             <form action={resyncTwilioWebhooksAction} className="space-y-2">

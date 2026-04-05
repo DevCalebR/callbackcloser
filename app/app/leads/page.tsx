@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { formatDateTime, isMessageDeliveryIssueStatus, leadStatusLabels, leadStatusOrder, smsStateLabels } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { formatDateTime, leadStatusLabels, leadStatusOrder, smsStateLabels } from '@/lib/lead-presenters';
 import { getPortfolioDemoBlockedCount, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { isSubscriptionActive } from '@/lib/subscription';
 import { cn } from '@/lib/utils';
@@ -30,7 +30,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Recor
           include: {
             messages: {
               orderBy: { createdAt: 'desc' },
-              take: 1,
+              take: 3,
             },
           },
           orderBy: [{ createdAt: 'desc' }],
@@ -107,6 +107,9 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Recor
                     <div className="flex flex-wrap gap-1">
                       {lead.billingRequired ? <Badge variant="destructive">billing_required</Badge> : null}
                       {lead.ownerNotifiedAt ? <Badge variant="secondary">owner_notified</Badge> : null}
+                      {lead.messages.some((message) => isMessageDeliveryIssueStatus(message.status)) ? (
+                        <Badge variant="outline">message_attention</Badge>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-2 py-3 text-muted-foreground">{formatDateTime(lead.createdAt)}</td>

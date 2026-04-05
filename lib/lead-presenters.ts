@@ -19,6 +19,24 @@ export const smsStateLabels: Record<SmsConversationState, string> = {
   COMPLETED: 'Completed',
 };
 
+export function isMessageDeliveryIssueStatus(status: string | null | undefined) {
+  const normalized = status?.trim().toLowerCase();
+  return normalized === 'failed' || normalized === 'fallback_webhook_response';
+}
+
+export function formatMessageStatus(status: string | null | undefined) {
+  const normalized = status?.trim().toLowerCase();
+  if (!normalized) return null;
+
+  if (normalized === 'delivered') return 'Delivered';
+  if (normalized === 'sent') return 'Sent';
+  if (normalized === 'queued') return 'Queued';
+  if (normalized === 'failed') return 'Failed';
+  if (normalized === 'fallback_webhook_response') return 'Sent via webhook fallback';
+
+  return normalized.replace(/_/g, ' ');
+}
+
 export function formatDateTime(value: Date | null | undefined) {
   if (!value) return '-';
   return new Intl.DateTimeFormat('en-US', {

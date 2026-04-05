@@ -22,7 +22,8 @@ export default function ContactPage() {
           <h1 className="text-4xl font-semibold tracking-tight">Contact CallbackCloser</h1>
           <p className="text-lg text-muted-foreground">
             CallbackCloser is currently onboarded founder-to-founder. If you run a local service business and want to see how
-            missed-call text follow-up would work for your team, email us and we will walk through fit, setup, and pilot rollout.
+            missed-call recovery, SMS qualification, and owner alerts would work for your team, email us and we will walk through fit,
+            setup, and pilot rollout.
           </p>
         </section>
 
@@ -42,6 +43,7 @@ export default function ContactPage() {
               <p>
                 If you are already ready to try the product, you can also create an account and complete the in-app setup flow.
               </p>
+              <p>If you are an active pilot customer, include your business name, Twilio number, and the recent call or SMS time when reporting an issue.</p>
               <div className="flex flex-wrap gap-3 pt-2">
                 <Link href="/sign-up">
                   <Button>Start pilot onboarding</Button>
@@ -71,4 +73,3 @@ export default function ContactPage() {
     </div>
   );
 }
-

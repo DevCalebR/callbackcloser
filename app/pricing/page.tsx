@@ -34,17 +34,17 @@ export default function PricingPage() {
       <main className="container space-y-10 py-12">
         <section className="max-w-3xl space-y-4">
           <Badge variant="outline">Founder-led pilots</Badge>
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Pricing for early pilot onboarding</h1>
+          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Pilot plans for missed-call recovery</h1>
           <p className="text-lg text-muted-foreground">
-            CallbackCloser is currently sold through direct outreach and demos so each business can confirm fit, Twilio setup,
-            owner notification routing, and rollout details before live traffic is turned on.
+            CallbackCloser is sold as a founder-led pilot for service businesses that want missed-call recovery, SMS qualification,
+            owner notification, and lead management without a heavy setup project.
           </p>
           <p className="text-sm text-muted-foreground">
-            Need current pilot pricing? Email{' '}
+            Exact pricing is confirmed in Stripe checkout once you choose a plan in the app. If you want help before checkout, email{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
               support@callbackcloser.com
             </a>{' '}
-            and we will walk you through the plan that matches your team before any Stripe checkout.
+            and we will walk through fit, setup, and rollout.
           </p>
         </section>
 
@@ -89,7 +89,7 @@ export default function PricingPage() {
                 </div>
               ))}
               <p>
-                Live automated SMS follow-up is only intended to run after the Twilio number is connected and billing is active.
+                Live automated SMS follow-up only runs after the Twilio number is connected, billing is active, and a real smoke test passes.
               </p>
             </CardContent>
           </Card>
@@ -100,8 +100,8 @@ export default function PricingPage() {
               <CardDescription>Early pilots still need clear public surfaces and straightforward expectations.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>CallbackCloser supports STOP, START, and HELP handling and keeps public terms, privacy, refund, and SMS consent pages visible.</p>
-              <p>Businesses remain responsible for lawful texting practices and consent requirements in their market.</p>
+              <p>CallbackCloser supports STOP, START, and HELP handling and keeps public terms, privacy, refund, contact, and SMS consent pages visible.</p>
+              <p>Businesses remain responsible for lawful texting practices and consent requirements in their market. CallbackCloser does not claim to replace legal review.</p>
               <div className="flex flex-wrap gap-3 pt-2">
                 <Link href="/contact">
                   <Button size="sm">Contact us</Button>
@@ -121,4 +121,3 @@ export default function PricingPage() {
     </div>
   );
 }
-
