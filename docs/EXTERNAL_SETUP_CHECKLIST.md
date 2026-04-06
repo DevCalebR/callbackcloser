@@ -73,6 +73,7 @@ Optional quick checks:
 
 ```bash
 npm run env:check
+npm run preflight:providers
 npm run typecheck
 ```
 

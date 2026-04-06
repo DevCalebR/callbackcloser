@@ -107,6 +107,7 @@ Optional helper commands:
 
 ```bash
 npm run webhooks:print
+npm run preflight:providers
 npm run db:smoke
 ```
 
@@ -323,20 +324,25 @@ Prisma models included:
 2. Import project in Vercel.
 3. Add all environment variables from `.env.local` (or from your secret manager).
    - Quick check: `npm run env:check`
+   - Provider parity check: `npm run preflight:providers`
 4. Set `NEXT_PUBLIC_APP_URL` to your production origin, e.g. `https://app.example.com`.
-5. Run Prisma migrations against your production database:
+5. Set Clerk auth route env vars to the app-owned paths:
+   - `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`
+   - `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`
+   - In Clerk Dashboard, allow both URLs on the deployed origin.
+6. Run Prisma migrations against your production database:
    - Either via CI/CD step: `npx prisma migrate deploy`
    - Or manually once after deploy
-6. Configure Stripe webhook to the Vercel domain.
-7. Configure Twilio phone number webhooks (or buy the number through the app after deploy).
+7. Configure Stripe webhook to the Vercel domain.
+8. Configure Twilio phone number webhooks (or buy the number through the app after deploy).
    - Helper: `npm run webhooks:print` (redacts the shared token by default)
-8. Confirm `NEXT_PUBLIC_APP_URL` is set in both `Production` and (if used) `Preview`, and includes `https://`.
-9. Optionally set `DEBUG_ENV_ENDPOINT_TOKEN`, then verify app URL resolution:
+9. Confirm `NEXT_PUBLIC_APP_URL` is set in both `Production` and (if used) `Preview`, and includes `https://`.
+10. Optionally set `DEBUG_ENV_ENDPOINT_TOKEN`, then verify app URL resolution:
    - `https://YOUR_DOMAIN/api/debug/env?token=YOUR_DEBUG_ENV_ENDPOINT_TOKEN`
 
 ## External Buy Link
 
-Use this URL for the Buy CTA on `getrelayworks.com`:
+Use this URL for the public CallbackCloser CTA:
 
 - `https://YOUR_DOMAIN/buy`
 
@@ -349,7 +355,7 @@ Optional plan-specific links:
 
 ## Production Launch Checklist
 
-Use this checklist before sending paid traffic from `getrelayworks.com` or allowing the release to auto-deploy to production.
+Use this checklist before sending paid traffic to `callbackcloser.com` or allowing the release to auto-deploy to production.
 
 1. Confirm the production branch release content is complete.
    - Merge and verify the launch branches that are not yet on `main`:
@@ -385,7 +391,7 @@ Use this checklist before sending paid traffic from `getrelayworks.com` or allow
 9. Confirm customer-facing launch surface:
    - `/terms`, `/privacy`, and `/refund` are public
    - support inbox/contact path is monitored
-   - `getrelayworks.com` Buy CTA points to the approved production flow
+   - public CTAs point to the approved `callbackcloser.com` production flow
 
 ## Useful Routes
 
