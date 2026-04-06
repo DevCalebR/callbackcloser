@@ -1,14 +1,21 @@
+import Link from 'next/link';
+import { MessageDirection } from '@prisma/client';
 import { notFound } from 'next/navigation';
 
 import { updateLeadStatusAction } from '@/app/app/leads/actions';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { formatDateTime, formatMessageStatus, isMessageDeliveryIssueStatus, leadStatusLabels, leadStatusOrder, smsStateLabels } from '@/lib/lead-presenters';
+import {
+  formatDateTime,
+  getLeadCallbackState,
+  getLeadLastActivityAt,
+  getLeadStatusBadgeVariant,
+  isMessageDeliveryIssueStatus,
+  leadStatusLabels,
+} from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { getPortfolioDemoLeadDetail, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
@@ -30,95 +37,105 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
 
   const saved = searchParams?.saved === '1';
   const messageIssues = lead.messages.filter((message) => isMessageDeliveryIssueStatus(message.status));
+  const callbackState = getLeadCallbackState(lead);
+  const returnPath = `/app/leads?leadId=${lead.id}`;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Lead Detail</h1>
-          <p className="text-sm text-muted-foreground">{formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone)}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-2">
+          <Link className="text-sm text-muted-foreground underline underline-offset-4" href={returnPath}>
+            Back to recovered leads
+          </Link>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone)}</h1>
+            <p className="text-sm text-muted-foreground">Lead detail and full conversation history.</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant={lead.billingRequired ? 'destructive' : 'secondary'}>
-            {lead.billingRequired ? 'billing_required' : 'billing_ok'}
+            {lead.billingRequired ? 'Billing paused' : 'Billing OK'}
           </Badge>
-          <Badge variant={lead.status === 'BOOKED' ? 'success' : 'outline'}>{leadStatusLabels[lead.status]}</Badge>
+          <Badge variant={getLeadStatusBadgeVariant(lead.status)}>{leadStatusLabels[lead.status]}</Badge>
         </div>
       </div>
 
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead status updated.</div> : null}
       {messageIssues.length > 0 ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          Automated SMS had a delivery issue on this lead. Review the transcript below and follow up manually if needed.
+          This lead had an SMS delivery issue. Review the thread and follow up manually if needed.
         </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+      <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Captured Details</CardTitle>
-              <CardDescription>Fields collected from the SMS workflow.</CardDescription>
+              <CardTitle>Lead summary</CardTitle>
+              <CardDescription>What CallbackCloser captured before the callback.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Service</span><span>{lead.serviceRequested || '-'}</span></div>
               <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Urgency</span><span>{lead.urgency || '-'}</span></div>
               <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">ZIP</span><span>{lead.zipCode || '-'}</span></div>
-              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Best Time</span><span>{lead.bestTime || '-'}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Best time</span><span>{lead.bestTime || '-'}</span></div>
               <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Name</span><span>{lead.contactName || '-'}</span></div>
-              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">SMS State</span><span>{smsStateLabels[lead.smsState]}</span></div>
-              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Created</span><span>{formatDateTime(lead.createdAt)}</span></div>
-              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Owner Notified</span><span>{formatDateTime(lead.ownerNotifiedAt)}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Callback state</span><span>{callbackState}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Last activity</span><span>{formatDateTime(getLeadLastActivityAt(lead))}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Owner alerted</span><span>{formatDateTime(lead.ownerNotifiedAt)}</span></div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Lead Status</CardTitle>
-              <CardDescription>Internal pipeline status for your team.</CardDescription>
+              <CardTitle>Quick actions</CardTitle>
+              <CardDescription>Keep follow-up moving without leaving the page.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <form action={updateLeadStatusAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <CardContent className="grid gap-2 sm:grid-cols-2">
+              <form action={updateLeadStatusAction}>
                 <input type="hidden" name="leadId" value={lead.id} />
-                <div className="w-full sm:max-w-xs">
-                  <Label htmlFor="status">Status</Label>
-                  <Select id="status" name="status" defaultValue={lead.status}>
-                    {leadStatusOrder.map((status) => (
-                      <option key={status} value={status}>
-                        {leadStatusLabels[status]}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <Button type="submit">Update</Button>
+                <input type="hidden" name="status" value="CONTACTED" />
+                <input type="hidden" name="redirectTo" value={`/app/leads/${lead.id}`} />
+                <Button className="w-full" type="submit" variant="outline">
+                  Mark Contacted
+                </Button>
               </form>
+              <form action={updateLeadStatusAction}>
+                <input type="hidden" name="leadId" value={lead.id} />
+                <input type="hidden" name="status" value="BOOKED" />
+                <input type="hidden" name="redirectTo" value={`/app/leads/${lead.id}`} />
+                <Button className="w-full" type="submit">
+                  Mark Booked
+                </Button>
+              </form>
+              <form action={updateLeadStatusAction}>
+                <input type="hidden" name="leadId" value={lead.id} />
+                <input type="hidden" name="status" value="LOST" />
+                <input type="hidden" name="redirectTo" value={`/app/leads/${lead.id}`} />
+                <Button className="w-full" type="submit" variant="destructive">
+                  Mark Lost
+                </Button>
+              </form>
+              <Link className={buttonVariants({ variant: 'secondary', className: 'w-full' })} href={`tel:${lead.callerPhoneNormalized || lead.callerPhone}`}>
+                Call Now
+              </Link>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Call Record</CardTitle>
-              <CardDescription>Twilio voice callback data and recording metadata for the originating call.</CardDescription>
+              <CardTitle>Call record</CardTitle>
+              <CardDescription>Voice metadata for the missed-call event.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               {lead.call ? (
                 <>
                   <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Call SID</span><span className="break-all">{lead.call.twilioCallSid}</span></div>
                   <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Dial status</span><span>{lead.call.dialCallStatus || '-'}</span></div>
-                  <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Answered</span><span>{lead.call.answered ? 'Yes' : 'No'}</span></div>
                   <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Missed</span><span>{lead.call.missed ? 'Yes' : 'No'}</span></div>
-                  <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Duration</span><span>{lead.call.callDurationSeconds ?? 0}s</span></div>
+                  <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Answered</span><span>{lead.call.answered ? 'Yes' : 'No'}</span></div>
+                  <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Call duration</span><span>{lead.call.callDurationSeconds ?? 0}s</span></div>
                   <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Recording status</span><span>{lead.call.recordingStatus || 'not_available'}</span></div>
-                  <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Recording duration</span><span>{lead.call.recordingDurationSeconds ?? 0}s</span></div>
-                  <div className="pt-1">
-                    {lead.call.recordingUrl ? (
-                      <form action={`/api/leads/${lead.id}/recording`} method="get">
-                        <Button type="submit" variant="outline">Open recording</Button>
-                      </form>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Recording link unavailable until Twilio recording metadata is received.</p>
-                    )}
-                  </div>
                 </>
               ) : (
                 <p className="text-muted-foreground">No call record linked.</p>
@@ -129,8 +146,8 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
 
         <Card>
           <CardHeader>
-            <CardTitle>Transcript</CardTitle>
-            <CardDescription>Inbound and outbound Twilio messages for this lead.</CardDescription>
+            <CardTitle>SMS thread</CardTitle>
+            <CardDescription>Full inbound and outbound conversation for this lead.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {lead.messages.length === 0 ? (
@@ -139,16 +156,14 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
               lead.messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`rounded-lg border p-3 text-sm ${message.direction === 'OUTBOUND' ? 'bg-primary/5' : 'bg-card'}`}
+                  className={`rounded-xl border p-3 text-sm ${message.direction === MessageDirection.OUTBOUND ? 'bg-primary/5' : 'bg-card'}`}
                 >
                   <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <span>
-                      {message.direction.toLowerCase()} | {message.participant.toLowerCase()}
-                    </span>
+                    <span>{message.direction === MessageDirection.OUTBOUND ? 'CallbackCloser' : 'Lead'}</span>
                     <div className="flex items-center gap-2">
-                      {formatMessageStatus(message.status) && message.status?.toLowerCase() !== 'delivered' ? (
+                      {message.status && message.status.toLowerCase() !== 'delivered' ? (
                         <Badge variant={isMessageDeliveryIssueStatus(message.status) ? 'destructive' : 'outline'}>
-                          {formatMessageStatus(message.status)}
+                          {message.status.replace(/_/g, ' ')}
                         </Badge>
                       ) : null}
                       <span>{formatDateTime(message.createdAt)}</span>

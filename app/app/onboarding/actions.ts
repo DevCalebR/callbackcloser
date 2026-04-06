@@ -9,7 +9,7 @@ import { logTwilioError } from '@/lib/twilio-logging';
 import { getTwilioProvisioningBlockReason, provisionPhoneNumber } from '@/lib/twilio-provision';
 import { onboardingSchema } from '@/lib/validators';
 
-const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/leads';
+const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/settings';
 
 function resolveSafePostOnboardingRedirectPath(value: FormDataEntryValue | null) {
   if (typeof value !== 'string') return DEFAULT_POST_ONBOARDING_REDIRECT;

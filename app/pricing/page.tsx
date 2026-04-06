@@ -6,24 +6,43 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-const starterFeatures = [
-  'Missed-call capture and immediate text follow-up',
-  'Lead qualification flow and protected dashboard access',
-  'Owner summary texts once the lead is qualified',
-  'Founder-led pilot onboarding and Twilio setup guidance',
+const pricingPlans = [
+  {
+    name: 'Starter',
+    summary: 'For owner-operators who need missed-call recovery live fast.',
+    details: [
+      'Missed-call capture and fast SMS follow-up',
+      'Lead qualification and owner alert handoff',
+      'Protected leads dashboard and billing visibility',
+      'White-glove pilot onboarding to get live cleanly',
+    ],
+  },
+  {
+    name: 'Growth',
+    summary: 'For growing service teams that need more follow-up capacity and clearer handoff management.',
+    details: [
+      'Everything in Starter',
+      'Higher conversation capacity for busier inbound volume',
+      'Priority rollout help for phone routing and notification tuning',
+      'Clearer billing visibility and upgrade path as usage grows',
+    ],
+  },
+  {
+    name: 'Agency / Multi-location',
+    summary: 'For operators running multiple locations, brands, or client accounts.',
+    details: [
+      'Multi-location rollout planning',
+      'Packaging guidance for multiple phone flows',
+      'Custom onboarding and deployment sequencing',
+      'Contact sales before activation',
+    ],
+  },
 ];
 
-const proFeatures = [
-  'Everything in Starter',
-  'Support for higher lead volume and rollout tuning',
-  'Priority pilot onboarding help for live traffic cutover',
-  'Closer collaboration on message flow and owner workflow fit',
-];
-
-const goLiveChecklist = [
-  'Create your business record and set the owner notification phone',
-  'Connect or buy your Twilio number and confirm forwarding',
-  'Activate billing so live missed-call text follow-up can run',
+const clarityPoints = [
+  'Current plan, next billing date, usage, and portal access live inside the app.',
+  'If billing is inactive, lead capture can remain visible while automated SMS follow-up is paused.',
+  'If usage caps are reached, the app warns clearly instead of hiding the state.',
 ];
 
 export default function PricingPage() {
@@ -33,82 +52,78 @@ export default function PricingPage() {
 
       <main className="container space-y-10 py-12">
         <section className="max-w-3xl space-y-4">
-          <Badge variant="outline">Founder-led pilots</Badge>
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Pilot plans for missed-call recovery</h1>
+          <Badge variant="outline">Transparent packaging</Badge>
+          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Simple pricing for missed-call recovery</h1>
           <p className="text-lg text-muted-foreground">
-            CallbackCloser is sold as a founder-led pilot for service businesses that want missed-call recovery, SMS qualification,
-            owner notification, and lead management without a heavy setup project.
+            CallbackCloser is packaged so owners can understand the rollout path, the plan tiers, and the billing expectations quickly.
           </p>
           <p className="text-sm text-muted-foreground">
-            Exact pricing is confirmed in Stripe checkout once you choose a plan in the app. If you want help before checkout, email{' '}
+            Exact checkout pricing is still confirmed in Stripe for this environment, but the public structure stays simple:
+            Starter, Growth, and Agency / Multi-location. If you want rollout help before checkout, email{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
               support@callbackcloser.com
-            </a>{' '}
-            and we will walk through fit, setup, and rollout.
+            </a>
+            .
           </p>
         </section>
 
-        <section className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Starter</CardTitle>
-              <CardDescription>For smaller service teams that want missed-call follow-up live quickly.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              {starterFeatures.map((feature) => (
-                <p key={feature}>- {feature}</p>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Pro</CardTitle>
-              <CardDescription>For teams that want more rollout support and higher-volume readiness.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              {proFeatures.map((feature) => (
-                <p key={feature}>- {feature}</p>
-              ))}
-            </CardContent>
-          </Card>
+        <section className="grid gap-6 lg:grid-cols-3">
+          {pricingPlans.map((plan) => (
+            <Card key={plan.name} className="bg-card/90">
+              <CardHeader>
+                <CardTitle>{plan.name}</CardTitle>
+                <CardDescription>{plan.summary}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                {plan.details.map((detail) => (
+                  <p key={detail}>- {detail}</p>
+                ))}
+                <div className="pt-3">
+                  {plan.name === 'Agency / Multi-location' ? (
+                    <Link className={buttonVariants({ variant: 'outline' })} href="/contact">
+                      Contact Sales
+                    </Link>
+                  ) : (
+                    <Link className={buttonVariants()} href="/sign-up">
+                      Start Free Pilot
+                    </Link>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <Card>
+        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <Card className="bg-card/90">
             <CardHeader>
-              <CardTitle>What happens before go-live</CardTitle>
-              <CardDescription>These are the same three steps used in the product during pilot setup.</CardDescription>
+              <CardTitle>Billing clarity inside the app</CardTitle>
+              <CardDescription>The in-app billing page is designed to remove fear of hidden telecom costs.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              {goLiveChecklist.map((step, index) => (
-                <div key={step} className="rounded-lg border bg-muted/30 p-4">
-                  <p className="font-medium text-foreground">
-                    {index + 1}. {step}
-                  </p>
+              {clarityPoints.map((point) => (
+                <div key={point} className="rounded-2xl border bg-background/80 p-4">
+                  {point}
                 </div>
               ))}
-              <p>
-                Live automated SMS follow-up only runs after the Twilio number is connected, billing is active, and a real smoke test passes.
-              </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-card/90">
             <CardHeader>
               <CardTitle>Trust and compliance</CardTitle>
-              <CardDescription>Early pilots still need clear public surfaces and straightforward expectations.</CardDescription>
+              <CardDescription>Premium presentation does not mean hiding the guardrails.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>CallbackCloser uses a public web-form SMS consent page and supports STOP, START, and HELP handling for active messaging flows.</p>
-              <p>Public pricing, terms, privacy, refund, contact, and SMS consent pages are visible on callbackcloser.com before a pilot goes live.</p>
-              <p>Businesses remain responsible for lawful texting practices and consent requirements in their market. CallbackCloser does not claim to replace legal review.</p>
+              <p>Public pricing, contact, privacy, terms, refund, and SMS consent pages remain visible before activation.</p>
+              <p>STOP, START, and HELP handling remain part of the live messaging flow, and the consent page stays public.</p>
+              <p>Businesses remain responsible for lawful texting practices and consent requirements in their market.</p>
               <div className="flex flex-wrap gap-3 pt-2">
-                <Link className={buttonVariants({ size: 'sm' })} href="/contact">
-                  Contact us
-                </Link>
-                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/sms-consent">
+                <Link className={buttonVariants({ size: 'sm' })} href="/sms-consent">
                   Review SMS consent
+                </Link>
+                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/contact">
+                  Talk to us
                 </Link>
               </div>
             </CardContent>

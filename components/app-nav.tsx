@@ -9,7 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/app/leads', label: 'Dashboard' },
+  { href: '/app/leads', label: 'Leads' },
+  { href: '/app/conversations', label: 'Conversations' },
+  { href: '/app/call-flow', label: 'Call Flow' },
   { href: '/app/settings', label: 'Business Settings' },
   { href: '/app/billing', label: 'Billing' },
 ];

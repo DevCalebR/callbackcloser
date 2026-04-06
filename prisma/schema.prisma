@@ -164,6 +164,7 @@ enum LeadStatus {
   QUALIFIED
   CONTACTED
   BOOKED
+  LOST
 }
 
 enum SmsConversationState {

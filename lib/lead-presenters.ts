@@ -1,12 +1,19 @@
-import { LeadStatus, SmsConversationState } from '@prisma/client';
+import { LeadStatus, SmsConversationState, type Lead } from '@prisma/client';
 
-export const leadStatusOrder: LeadStatus[] = [LeadStatus.NEW, LeadStatus.QUALIFIED, LeadStatus.CONTACTED, LeadStatus.BOOKED];
+export const leadStatusOrder: LeadStatus[] = [
+  LeadStatus.NEW,
+  LeadStatus.QUALIFIED,
+  LeadStatus.CONTACTED,
+  LeadStatus.BOOKED,
+  LeadStatus.LOST,
+];
 
 export const leadStatusLabels: Record<LeadStatus, string> = {
   NEW: 'New',
   QUALIFIED: 'Qualified',
   CONTACTED: 'Contacted',
   BOOKED: 'Booked',
+  LOST: 'Lost',
 };
 
 export const smsStateLabels: Record<SmsConversationState, string> = {
@@ -43,4 +50,29 @@ export function formatDateTime(value: Date | null | undefined) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(value);
+}
+
+export function getLeadStatusBadgeVariant(status: LeadStatus) {
+  if (status === LeadStatus.BOOKED) return 'success';
+  if (status === LeadStatus.LOST) return 'destructive';
+  if (status === LeadStatus.NEW) return 'outline';
+  return 'secondary';
+}
+
+type LeadActivityInput = Pick<Lead, 'createdAt' | 'lastInteractionAt' | 'lastInboundAt' | 'lastOutboundAt'>;
+
+export function getLeadLastActivityAt(lead: LeadActivityInput) {
+  return lead.lastInteractionAt ?? lead.lastInboundAt ?? lead.lastOutboundAt ?? lead.createdAt;
+}
+
+type LeadCallbackStateInput = Pick<Lead, 'status' | 'billingRequired' | 'smsState' | 'ownerNotifiedAt'>;
+
+export function getLeadCallbackState(lead: LeadCallbackStateInput) {
+  if (lead.status === LeadStatus.BOOKED) return 'Booked';
+  if (lead.status === LeadStatus.LOST) return 'Lost';
+  if (lead.status === LeadStatus.CONTACTED) return 'Contacted';
+  if (lead.billingRequired) return 'Billing paused';
+  if (lead.ownerNotifiedAt || lead.smsState === SmsConversationState.COMPLETED) return 'Ready to call';
+  if (lead.smsState === SmsConversationState.NOT_STARTED) return 'Awaiting first SMS';
+  return 'Qualifying by text';
 }

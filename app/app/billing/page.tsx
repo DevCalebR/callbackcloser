@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type Stripe from 'stripe';
 
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -7,7 +8,8 @@ import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
-import { getConversationUsageForBusiness, resolveUsageTierFromSubscription } from '@/lib/usage';
+import { getStripe } from '@/lib/stripe';
+import { BILLING_TIME_ZONE, getConversationUsageForBusiness, getCurrentMonthWindowUtc, resolveUsageTierFromSubscription } from '@/lib/usage';
 import {
   describeAutomationBlockReason,
   formatUsageSummary,
@@ -15,21 +17,98 @@ import {
   resolveAutomationBlockReason,
 } from '@/lib/usage-visibility';
 
+function formatDate(value: Date | null | undefined) {
+  if (!value) return 'Unavailable';
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeZone: BILLING_TIME_ZONE,
+  }).format(value);
+}
+
 function planPrice(priceId: string | undefined) {
-  return priceId ? 'Exact charge is shown in Stripe checkout for this environment.' : 'Billing is not configured in this environment.';
+  return priceId ? 'Exact price is confirmed in Stripe checkout for this environment.' : 'Billing is not configured in this environment.';
 }
 
 function parseRequestedPlan(searchParams?: Record<string, string | string[] | undefined>) {
-  const rawPlan = searchParams?.plan;
-  const normalized = typeof rawPlan === 'string' ? rawPlan.trim().toLowerCase() : '';
-  if (normalized === 'starter' || normalized === 'pro') return normalized;
+  const rawPlan = typeof searchParams?.plan === 'string' ? searchParams.plan.trim().toLowerCase() : '';
+  if (rawPlan === 'starter') return 'starter' as const;
+  if (rawPlan === 'growth' || rawPlan === 'pro') return 'growth' as const;
   return null;
+}
+
+function formatPaymentMethod(paymentMethod: Stripe.PaymentMethod | null | undefined) {
+  if (!paymentMethod) return 'Open Stripe Billing Portal to confirm payment method';
+  if (paymentMethod.type === 'card' && paymentMethod.card) {
+    return `${paymentMethod.card.brand.toUpperCase()} ending in ${paymentMethod.card.last4}`;
+  }
+  return paymentMethod.type.replace(/_/g, ' ');
+}
+
+async function getStripeBillingSnapshot(business: { stripeSubscriptionId: string | null; stripeCustomerId: string | null; stripePriceId: string | null }) {
+  if (!process.env.STRIPE_SECRET_KEY) return null;
+  if (!business.stripeSubscriptionId && !business.stripeCustomerId) return null;
+
+  try {
+    const stripe = getStripe();
+    const subscription = business.stripeSubscriptionId
+      ? await stripe.subscriptions.retrieve(business.stripeSubscriptionId, {
+          expand: ['default_payment_method', 'items.data.price'],
+        })
+      : null;
+    const customer = business.stripeCustomerId
+      ? await stripe.customers.retrieve(business.stripeCustomerId, {
+          expand: ['invoice_settings.default_payment_method'],
+        })
+      : null;
+
+    const paymentMethodFromSubscription =
+      subscription && subscription.default_payment_method && typeof subscription.default_payment_method === 'object'
+        ? (subscription.default_payment_method as Stripe.PaymentMethod)
+        : null;
+    const paymentMethodFromCustomer =
+      customer &&
+      !('deleted' in customer && customer.deleted) &&
+      customer.invoice_settings.default_payment_method &&
+      typeof customer.invoice_settings.default_payment_method === 'object'
+        ? (customer.invoice_settings.default_payment_method as Stripe.PaymentMethod)
+        : null;
+    const paymentMethod = paymentMethodFromSubscription ?? paymentMethodFromCustomer;
+    const currentPrice = subscription?.items.data[0]?.price ?? null;
+    const nextChargeTimestamp = subscription?.items.data[0]?.current_period_end ?? null;
+
+    return {
+      nextChargeDate: nextChargeTimestamp ? new Date(nextChargeTimestamp * 1000) : null,
+      paymentMethodLabel: formatPaymentMethod(paymentMethod),
+      stripePlanLabel: currentPrice?.nickname || currentPrice?.lookup_key || currentPrice?.id || business.stripePriceId || null,
+    };
+  } catch (error) {
+    return {
+      nextChargeDate: null,
+      paymentMethodLabel: error instanceof Error ? `Unavailable in app (${error.message})` : 'Unavailable in app',
+      stripePlanLabel: business.stripePriceId || null,
+    };
+  }
+}
+
+function mapPlanLabel(input: string | null | undefined, priceId: string | null | undefined, env: NodeJS.ProcessEnv) {
+  if (!input && !priceId) return 'No active plan';
+  if (priceId && env.STRIPE_PRICE_STARTER && priceId === env.STRIPE_PRICE_STARTER) return 'Starter';
+  if (priceId && env.STRIPE_PRICE_PRO && priceId === env.STRIPE_PRICE_PRO) return 'Growth';
+  if (input?.toLowerCase().includes('starter')) return 'Starter';
+  if (input?.toLowerCase().includes('pro') || input?.toLowerCase().includes('growth')) return 'Growth';
+  return input || 'Custom';
+}
+
+function usageCostLabel(subscriptionActive: boolean, blockedCount: number) {
+  if (!subscriptionActive) return 'Automation paused until billing is active';
+  if (blockedCount > 0) return 'Review blocked leads before estimating extra usage';
+  return 'No hidden in-app overage configured today';
 }
 
 export default async function BillingPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
   const starterPriceId = process.env.STRIPE_PRICE_STARTER;
-  const proPriceId = process.env.STRIPE_PRICE_PRO;
+  const growthPriceId = process.env.STRIPE_PRICE_PRO;
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const checkout = typeof searchParams?.checkout === 'string' ? searchParams.checkout : undefined;
   const requestedPlan = parseRequestedPlan(searchParams);
@@ -38,12 +117,36 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const checkoutSucceeded = checkout === 'success';
   const checkoutCanceled = checkout === 'canceled';
   const demoMode = isPortfolioDemoMode();
-  const [blockedCount, usage] = demoMode
-    ? [getPortfolioDemoBlockedCount(), null]
+  const currentMonth = getCurrentMonthWindowUtc();
+
+  const [blockedCount, usage, cycleSmsSent, cycleMissedCalls, cycleOwnerAlerts, stripeSnapshot] = demoMode
+    ? [getPortfolioDemoBlockedCount(), null, 8, 3, 2, null]
     : await Promise.all([
         db.lead.count({ where: { businessId: business.id, billingRequired: true } }),
         getConversationUsageForBusiness(business),
+        db.message.count({
+          where: {
+            businessId: business.id,
+            direction: 'OUTBOUND',
+            createdAt: { gte: currentMonth.start, lt: currentMonth.end },
+          },
+        }),
+        db.call.count({
+          where: {
+            businessId: business.id,
+            missed: true,
+            createdAt: { gte: currentMonth.start, lt: currentMonth.end },
+          },
+        }),
+        db.lead.count({
+          where: {
+            businessId: business.id,
+            ownerNotifiedAt: { gte: currentMonth.start, lt: currentMonth.end },
+          },
+        }),
+        getStripeBillingSnapshot(business),
       ]);
+
   const usageTierLabel = formatUsageTierLabel(resolveUsageTierFromSubscription(business));
   const usageSummary = usage ? formatUsageSummary(usage) : 'Unavailable in portfolio demo mode.';
   const automationBlockReason = resolveAutomationBlockReason({
@@ -57,148 +160,219 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
     usage: usage ?? undefined,
   });
 
+  const currentPlanLabel = mapPlanLabel(stripeSnapshot?.stripePlanLabel, business.stripePriceId, process.env);
+  const billingStatusLabel = billingAccess.founderBillingBypassActive ? 'Founder bypass active' : business.subscriptionStatus.toLowerCase();
+  const billingNeedsAttention = business.subscriptionStatus === 'PAST_DUE' || business.subscriptionStatus === 'CANCELED' || !subscriptionActive;
+
+  const summaryItems = [
+    { label: 'Current plan', value: currentPlanLabel },
+    { label: 'Next charge date', value: stripeSnapshot ? formatDate(stripeSnapshot.nextChargeDate) : 'Shown in Stripe Billing Portal' },
+    { label: 'Included usage', value: usage ? `${usage.limit} SMS-qualified conversations / month` : 'Unavailable in portfolio demo mode' },
+    { label: 'Overage policy', value: 'No hidden in-app metered overage. Automation pauses at the limit until you upgrade.' },
+    { label: 'Payment method', value: stripeSnapshot?.paymentMethodLabel || 'Add or update card in Stripe Billing Portal' },
+    { label: 'Billing portal', value: business.stripeCustomerId ? 'Available below' : 'Available after customer setup' },
+  ];
+
+  const usageCards = [
+    { label: 'SMS used', value: usage?.used ?? cycleSmsSent, detail: 'Conversation starts this cycle' },
+    { label: 'Missed calls processed', value: cycleMissedCalls, detail: 'Missed calls captured this cycle' },
+    { label: 'Owner alerts sent', value: cycleOwnerAlerts, detail: 'Qualified lead handoffs delivered' },
+    { label: 'Estimated usage cost', value: usageCostLabel(subscriptionActive, blockedCount), detail: 'Made explicit so billing never feels vague' },
+  ];
+
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
-        <p className="text-sm text-muted-foreground">
-          Stripe controls whether new missed-call leads receive automated SMS follow-up. Exact pricing is confirmed in Stripe checkout.
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Need the public-facing overview?{' '}
-          <Link className="underline underline-offset-4" href="/pricing">
-            Pricing
-          </Link>{' '}
-          ·{' '}
-          <Link className="underline underline-offset-4" href="/refund">
-            Refund policy
-          </Link>{' '}
-          ·{' '}
-          <Link className="underline underline-offset-4" href="/contact">
-            Contact
-          </Link>
-        </p>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="space-y-2">
+        <Badge variant="outline">Billing</Badge>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Billing and usage visibility</h1>
+            <p className="text-sm text-muted-foreground">
+              Make the current plan, payment state, and usage readable in under 20 seconds so billing never feels hidden.
+            </p>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Public-facing overview:{' '}
+            <Link className="underline underline-offset-4" href="/pricing">
+              Pricing
+            </Link>{' '}
+            ·{' '}
+            <Link className="underline underline-offset-4" href="/refund">
+              Refund
+            </Link>{' '}
+            ·{' '}
+            <Link className="underline underline-offset-4" href="/contact">
+              Contact
+            </Link>
+          </p>
+        </div>
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
-      {billingAccess.founderBillingBypassActive ? (
-        <div className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-950">
-          Founder-only billing bypass is active for this founder-owned business. CallbackCloser will allow missed-call SMS automation
-          for smoke testing without a live Stripe charge. Normal customer accounts still require real active billing.
-        </div>
-      ) : null}
       {requestedPlan ? (
         <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-          Selected plan: <strong>{requestedPlan === 'starter' ? 'Starter' : 'Pro'}</strong>. Continue checkout below.
+          Selected plan: <strong>{requestedPlan === 'starter' ? 'Starter' : 'Growth'}</strong>. Continue with the checkout card below.
         </div>
       ) : null}
       {checkoutSucceeded && billingAccess.rawSubscriptionActive ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
-          Subscription is active. Next steps: connect your Twilio number in{' '}
+          Billing is active. Next move: confirm routing in{' '}
           <Link className="underline underline-offset-4" href="/app/settings">
             Business Settings
-          </Link>
-          , then monitor new leads in{' '}
+          </Link>{' '}
+          and run the missed-call test from{' '}
           <Link className="underline underline-offset-4" href="/app/leads">
-            Dashboard
+            Recovered Leads
           </Link>
           .
         </div>
       ) : null}
       {checkoutSucceeded && !billingAccess.rawSubscriptionActive ? (
-        <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-          <p>Stripe checkout completed. Subscription status is still syncing from webhook events.</p>
-          <p className="text-muted-foreground">
-            If this does not update shortly, refresh this page and verify `STRIPE_WEBHOOK_SECRET` and the Stripe webhook endpoint configuration.
-          </p>
-          <div>
-            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/app/billing">
-              Refresh Status
-            </Link>
-          </div>
+        <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+          Stripe checkout completed. Subscription status is still syncing from webhook events. Refresh shortly or verify the Stripe webhook endpoint if this state lingers.
         </div>
       ) : null}
-      {checkoutCanceled ? <div className="rounded-md border bg-muted/40 p-3 text-sm">Checkout canceled. You can restart anytime below.</div> : null}
-      {!subscriptionActive && !checkoutSucceeded ? (
-        <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-          Billing is not active yet. Missed calls can still be captured, but automated SMS follow-up stays paused until Stripe marks the subscription active.
+      {checkoutCanceled ? <div className="rounded-md border bg-muted/40 p-3 text-sm">Checkout canceled. You can restart from the plan cards below.</div> : null}
+      {billingAccess.founderBillingBypassActive ? (
+        <div className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-950">
+          Founder-only billing bypass is active for this founder-owned workspace. Use it for smoke testing, not as the steady-state billing mode.
         </div>
       ) : null}
 
-      <Card>
+      {billingNeedsAttention ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardHeader>
+            <CardTitle>Billing needs attention now</CardTitle>
+            <CardDescription>This state is intentionally impossible to miss.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p>
+              Lead capture can remain active, but automated SMS follow-up is paused until the payment method is updated and Stripe marks billing active again.
+            </p>
+            <p>{automationStatusMessage}</p>
+            <div className="flex flex-wrap gap-3">
+              {business.stripeCustomerId ? (
+                <form action="/api/stripe/portal" method="post">
+                  <Button type="submit">Update Payment Method</Button>
+                </form>
+              ) : (
+                <Link className={buttonVariants()} href="#plan-options">
+                  Activate Billing
+                </Link>
+              )}
+              <Link className={buttonVariants({ variant: 'outline' })} href="/app/settings">
+                Open Business Settings
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card className="bg-card/90">
         <CardHeader>
-          <CardTitle>Current Subscription</CardTitle>
-          <CardDescription>Status is synced from Stripe webhook events, not just the browser redirect.</CardDescription>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>Current billing summary</CardTitle>
+              <CardDescription>Stripe remains the source of truth, but this page should still be readable at a glance.</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={subscriptionActive ? 'success' : 'outline'}>{billingStatusLabel}</Badge>
+              <Badge variant="outline">{usageTierLabel}</Badge>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3 text-sm">
-          <Badge variant={business.subscriptionStatus === 'ACTIVE' ? 'success' : 'outline'}>
-            {business.subscriptionStatus.toLowerCase()}
-          </Badge>
-          {billingAccess.founderBillingBypassActive ? <Badge variant="outline">founder_bypass_active</Badge> : null}
-          <Badge variant="outline">{usageTierLabel}</Badge>
-          <span className="text-muted-foreground">Usage: {usageSummary}</span>
-          {business.stripeCustomerId ? <span className="text-muted-foreground">Customer: {business.stripeCustomerId}</span> : null}
-          {business.stripeSubscriptionId ? <span className="text-muted-foreground">Subscription: {business.stripeSubscriptionId}</span> : null}
-          {billingAccess.founderBillingBypassActive ? (
-            <span className="text-muted-foreground">Stripe status remains {business.subscriptionStatus.toLowerCase()} while the founder override is enabled.</span>
-          ) : null}
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {summaryItems.map((item) => (
+            <div key={item.label} className="rounded-xl border bg-background/80 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.label}</p>
+              <p className="mt-2 font-medium">{item.value}</p>
+            </div>
+          ))}
         </CardContent>
       </Card>
 
-      <Card className={automationBlockReason === 'none' ? 'border-accent/40 bg-accent/20' : 'border-destructive/30 bg-destructive/5'}>
+      <Card className="bg-card/90">
         <CardHeader>
-          <CardTitle>Automation Status</CardTitle>
-          <CardDescription>Why missed-call follow-up is running or paused.</CardDescription>
+          <CardTitle>Current cycle usage</CardTitle>
+          <CardDescription>
+            This cycle runs from {formatDate(currentMonth.start)} to {formatDate(currentMonth.end)} · {usageSummary}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {usageCards.map((card) => (
+            <div key={card.label} className="rounded-xl border bg-background/80 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{card.label}</p>
+              <p className="mt-2 text-lg font-medium">{card.value}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{card.detail}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card className={automationBlockReason === 'none' ? 'border-accent/40 bg-accent/20' : 'border-primary/20 bg-primary/5'}>
+        <CardHeader>
+          <CardTitle>Automation status</CardTitle>
+          <CardDescription>Why missed-call SMS follow-up is currently running or paused.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p>{automationStatusMessage}</p>
-          {automationBlockReason !== 'none' ? (
-            <Link
-              href="#plan-options"
-              className="inline-flex rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-            >
-              Upgrade Plan
-            </Link>
+          {!subscriptionActive ? (
+            <p className="text-muted-foreground">This is where billing transparency matters most: capture can stay visible, but auto-texting will not resume until payment is fixed.</p>
           ) : null}
         </CardContent>
       </Card>
 
-      <div id="plan-options" className="grid gap-6 md:grid-cols-2">
-        <Card className={requestedPlan === 'starter' ? 'border-primary/40 bg-primary/5' : ''}>
+      <div id="plan-options" className="grid gap-6 lg:grid-cols-3">
+        <Card className={requestedPlan === 'starter' ? 'border-primary/40 bg-primary/5' : 'bg-card/90'}>
           <CardHeader>
             <CardTitle>Starter</CardTitle>
-            <CardDescription>Missed-call recovery, SMS qualification, owner alerts, and dashboard access.</CardDescription>
+            <CardDescription>Missed-call recovery, SMS qualification, owner alerts, and dashboard visibility.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>{planPrice(starterPriceId)}</p>
-            <p className="text-muted-foreground">Best for smaller pilot volumes.</p>
+            <p>Best for smaller service teams that want clean activation and fast proof of value.</p>
           </CardContent>
           <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
               <input type="hidden" name="priceId" value={starterPriceId ?? ''} />
               <Button type="submit" className="w-full" disabled={!starterPriceId}>
-                Start Starter Pilot
+                Choose Starter
               </Button>
             </form>
           </CardFooter>
         </Card>
 
-        <Card className={requestedPlan === 'pro' ? 'border-primary/40 bg-primary/5' : ''}>
+        <Card className={requestedPlan === 'growth' ? 'border-primary/40 bg-primary/5' : 'bg-card/90'}>
           <CardHeader>
-            <CardTitle>Pro</CardTitle>
-            <CardDescription>Higher conversation volume and closer rollout support.</CardDescription>
+            <CardTitle>Growth</CardTitle>
+            <CardDescription>Higher conversation volume and more rollout support for teams with busier inbound traffic.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>{planPrice(proPriceId)}</p>
-            <p className="text-muted-foreground">Best for teams that need more pilot capacity.</p>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>{planPrice(growthPriceId)}</p>
+            <p>Best for service teams that need more follow-up capacity and a clearer path to scale.</p>
           </CardContent>
-          <CardFooter className="flex flex-col gap-2">
+          <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
-              <input type="hidden" name="priceId" value={proPriceId ?? ''} />
-              <Button type="submit" className="w-full" disabled={!proPriceId}>
-                Start Pro Pilot
+              <input type="hidden" name="priceId" value={growthPriceId ?? ''} />
+              <Button type="submit" className="w-full" disabled={!growthPriceId}>
+                Choose Growth
               </Button>
             </form>
+          </CardFooter>
+        </Card>
+
+        <Card className="bg-card/90">
+          <CardHeader>
+            <CardTitle>Agency / Multi-location</CardTitle>
+            <CardDescription>For operators managing multiple brands, multiple locations, or multiple client rollouts.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>Talk to us before activation so routing, billing, and onboarding structure match the operating model.</p>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-2">
+            <Link className={buttonVariants({ className: 'w-full' })} href="/contact">
+              Contact Sales
+            </Link>
             {business.stripeCustomerId ? (
               <form action="/api/stripe/portal" method="post" className="w-full">
                 <Button type="submit" variant="outline" className="w-full">

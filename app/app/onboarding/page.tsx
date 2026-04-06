@@ -2,13 +2,15 @@ import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
 import { saveOnboardingAction } from '@/app/app/onboarding/actions';
+import { SetupChecklist } from '@/components/setup-checklist';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/db';
 
-const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/leads';
+const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/settings';
 
 function resolveSafeNextPath(value: string | undefined) {
   const nextPath = value?.trim();
@@ -34,30 +36,67 @@ export default async function OnboardingPage({
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const nextPath = resolveSafeNextPath(typeof searchParams?.next === 'string' ? searchParams.next : undefined);
 
+  const checklistItems = [
+    {
+      key: 'routing',
+      label: 'Connect phone / routing',
+      detail: 'Create the business first, then confirm which line should ring and which Twilio number will catch missed calls.',
+      complete: false,
+    },
+    {
+      key: 'sms',
+      label: 'Verify SMS template',
+      detail: 'Check the first automated text and the qualification prompts before live traffic starts.',
+      complete: false,
+    },
+    {
+      key: 'alerts',
+      label: 'Verify owner notifications',
+      detail: 'Add the owner mobile number so lead summaries reach the right phone immediately.',
+      complete: false,
+    },
+    {
+      key: 'test',
+      label: 'Run test lead',
+      detail: 'Place a missed-call test after settings and billing are complete so you can confirm the full handoff.',
+      complete: false,
+    },
+  ];
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Create your business</h1>
-        <p className="text-sm text-muted-foreground">
-          Start with the business record now. After this step, connect or buy your Twilio number in Settings and activate billing
-          before live missed-call follow-up is turned on.
-        </p>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="space-y-2">
+        <Badge variant="outline">Activation</Badge>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Create your business workspace</h1>
+          <p className="text-sm text-muted-foreground">
+            Start with the business record now. Next, you will land in Business Settings to finish routing, SMS, owner alerts, billing, and the first missed-call test.
+          </p>
+        </div>
       </div>
-      <Card className="border-primary/20 bg-muted/30">
+
+      <SetupChecklist
+        title="First successful activation path"
+        description="CallbackCloser works best when the first missed-call test is treated like a guided rollout, not a blind setup sprint."
+        items={checklistItems}
+      />
+
+      <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
-          <CardTitle>Pilot setup steps</CardTitle>
-          <CardDescription>These are the three items that make the live missed-call workflow demo-ready.</CardDescription>
+          <CardTitle>What happens after this form</CardTitle>
+          <CardDescription>Reduce onboarding drag by keeping the next steps explicit.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-          <div className="rounded-lg border bg-card p-4">1. Create the business record and owner notification phone.</div>
-          <div className="rounded-lg border bg-card p-4">2. Connect or buy the Twilio number that will receive inbound calls and texts.</div>
-          <div className="rounded-lg border bg-card p-4">3. Activate billing so automated SMS follow-up can run on live missed calls.</div>
+          <div className="rounded-xl border bg-background/80 p-4">1. Business Settings opens so you can confirm routing and Twilio setup.</div>
+          <div className="rounded-xl border bg-background/80 p-4">2. Billing is activated so live missed calls can trigger automated SMS follow-up.</div>
+          <div className="rounded-xl border bg-background/80 p-4">3. You run the missed-call test and confirm the owner alert arrives with a ready-to-call summary.</div>
         </CardContent>
       </Card>
+
       <Card>
         <CardHeader>
-          <CardTitle>Business Settings</CardTitle>
-          <CardDescription>Set the call forwarding and SMS qualification defaults.</CardDescription>
+          <CardTitle>Business profile and defaults</CardTitle>
+          <CardDescription>Set the core routing and SMS defaults used during activation.</CardDescription>
         </CardHeader>
         <CardContent>
           {error ? (
@@ -78,7 +117,7 @@ export default async function OnboardingPage({
             <div>
               <Label htmlFor="notifyPhone">Owner notify phone</Label>
               <Input id="notifyPhone" name="notifyPhone" placeholder="+15559876543" />
-              <p className="mt-1 text-xs text-muted-foreground">Recommended. Lead summary texts go here once the prospect shares their ZIP code.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Recommended. Qualified lead summaries are sent here.</p>
             </div>
             <div>
               <Label htmlFor="missedCallSeconds">Missed-call timeout (seconds)</Label>
@@ -101,11 +140,8 @@ export default async function OnboardingPage({
               <Input id="serviceLabel3" name="serviceLabel3" defaultValue="Maintenance" required />
             </div>
             <div className="sm:col-span-2 pt-2">
-              <Button type="submit">Create Business</Button>
+              <Button type="submit">Create Business and Continue Setup</Button>
             </div>
-            <p className="sm:col-span-2 text-xs text-muted-foreground">
-              You can fine-tune service labels later. The next setup step after this form is Twilio number connection and billing activation.
-            </p>
           </form>
         </CardContent>
       </Card>

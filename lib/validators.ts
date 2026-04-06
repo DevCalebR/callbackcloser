@@ -15,7 +15,7 @@ export const businessSettingsSchema = onboardingSchema;
 
 export const leadStatusSchema = z.object({
   leadId: z.string().min(1),
-  status: z.enum(['NEW', 'QUALIFIED', 'CONTACTED', 'BOOKED']),
+  status: z.enum(['NEW', 'QUALIFIED', 'CONTACTED', 'BOOKED', 'LOST']),
 });
 
 export const checkoutSchema = z.object({

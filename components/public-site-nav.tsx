@@ -6,6 +6,8 @@ import { buttonVariants } from '@/components/ui/button';
 const primaryLinks = [
   { href: '/pricing', label: 'Pricing' },
   { href: '/#how-it-works', label: 'How it works' },
+  { href: '/#proof', label: 'Results' },
+  { href: '/#product-preview', label: 'Product' },
   { href: '/contact', label: 'Contact' },
   { href: '/sms-consent', label: 'SMS Consent' },
 ];
@@ -37,7 +39,7 @@ export function PublicSiteNav() {
               Sign in
             </Link>
             <Link className={buttonVariants({ size: 'sm' })} href="/sign-up">
-              Start pilot
+              Start Free Pilot
             </Link>
           </div>
         </div>

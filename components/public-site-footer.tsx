@@ -15,8 +15,8 @@ export function PublicSiteFooter() {
       <div className="container flex flex-col gap-4 py-8 text-sm text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           <p className="font-medium text-foreground">CallbackCloser</p>
-          <p>Missed-call recovery, lead qualification, and owner visibility for local service businesses.</p>
-          <p>callbackcloser.com public trust pages cover pricing, support, privacy, terms, refund, and SMS consent.</p>
+          <p>Recover missed calls with fast SMS qualification, owner alerts, and a clearer handoff back to the business.</p>
+          <p>White-glove pilot onboarding plus visible pricing, privacy, terms, refund, and SMS consent trust pages.</p>
           <p>
             Contact:{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
