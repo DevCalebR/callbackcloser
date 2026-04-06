@@ -19,6 +19,7 @@
     "db:studio": "prisma studio",
     "env:check": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/check_env.ts",
     "webhooks:print": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/print_webhook_urls.ts",
+    "preflight:providers": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/provider_preflight.ts",
     "preflight": "npm run env:check && npm run db:validate && npm test && npm run lint && npm run typecheck && npm run build",
     "postinstall": "prisma generate"
   },

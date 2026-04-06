@@ -1,5 +1,10 @@
 import process from 'node:process';
 
+import {
+  isLikelyValidClerkPublishableKey,
+  isLikelyValidClerkSecretKey,
+  validateOptionalClerkRouteEnv,
+} from '../lib/clerk-config.ts';
 import { loadLocalEnvFiles, readBooleanEnv } from './load-env.ts';
 
 type EnvRequirement = {
@@ -94,6 +99,26 @@ if (founderBillingBypassEnabled && !process.env.FOUNDER_CLERK_USER_ID?.trim()) {
   configErrors.push('FOUNDER_CLERK_USER_ID is required when ALLOW_FOUNDER_BILLING_BYPASS=true');
 }
 
+const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+if (clerkPublishableKey && !isLikelyValidClerkPublishableKey(clerkPublishableKey)) {
+  configErrors.push('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be a valid Clerk publishable key starting with pk_');
+}
+
+const clerkSecretKey = process.env.CLERK_SECRET_KEY?.trim();
+if (clerkSecretKey && !isLikelyValidClerkSecretKey(clerkSecretKey)) {
+  configErrors.push('CLERK_SECRET_KEY must be a valid Clerk secret key starting with sk_');
+}
+
+const signInUrlError = validateOptionalClerkRouteEnv('NEXT_PUBLIC_CLERK_SIGN_IN_URL');
+if (signInUrlError) {
+  configErrors.push(signInUrlError);
+}
+
+const signUpUrlError = validateOptionalClerkRouteEnv('NEXT_PUBLIC_CLERK_SIGN_UP_URL');
+if (signUpUrlError) {
+  configErrors.push(signUpUrlError);
+}
+
 validateAbsoluteUrl('NEXT_PUBLIC_APP_URL', { requireHttps: productionNodeEnv });
 validateAbsoluteUrl('ALERT_WEBHOOK_URL', { requireHttps: productionNodeEnv });
 
@@ -141,7 +166,7 @@ if (missing.length === 0 && configErrors.length === 0) {
   process.exit(0);
 }
 
-console.log('- Result: FAIL (missing required env vars)');
+console.log('- Result: FAIL (missing required env vars or invalid configuration)');
 for (const item of missing) {
   console.log(`  - ${item.name}`);
 }

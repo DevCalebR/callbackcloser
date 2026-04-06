@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { hasRequiredValidClerkEnv } from '@/lib/clerk-config';
 import { db } from '@/lib/db';
 import { getConfiguredAppBaseUrl } from '@/lib/env.server';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
@@ -30,7 +31,7 @@ function getEnvChecks() {
     appUrl: Boolean(getConfiguredAppBaseUrl()),
     databaseUrl: hasValue(process.env.DATABASE_URL),
     directDatabaseUrl: hasValue(process.env.DIRECT_DATABASE_URL),
-    clerk: hasValue(process.env.CLERK_SECRET_KEY) && hasValue(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY),
+    clerk: hasRequiredValidClerkEnv(process.env),
     stripe: hasValue(process.env.STRIPE_SECRET_KEY) && hasValue(process.env.STRIPE_WEBHOOK_SECRET),
     twilio: hasValue(process.env.TWILIO_ACCOUNT_SID) && hasValue(process.env.TWILIO_AUTH_TOKEN),
   };

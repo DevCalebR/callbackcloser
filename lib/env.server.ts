@@ -1,5 +1,10 @@
 import 'server-only';
 
+import {
+  isLikelyValidClerkPublishableKey,
+  isLikelyValidClerkSecretKey,
+  validateOptionalClerkRouteEnv,
+} from './clerk-config';
 import { buildNextPublicAppUrlErrorMessage, resolveConfiguredAppBaseUrl } from './app-url';
 import { enforcePortfolioDemoGuardrail } from './portfolio-demo-guardrail';
 
@@ -103,6 +108,30 @@ function validateDistinctStripePrices() {
   }
 }
 
+function validateClerkConfig() {
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  if (publishableKey && !isLikelyValidClerkPublishableKey(publishableKey)) {
+    throw new Error(
+      'Invalid environment configuration: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be a valid Clerk publishable key starting with pk_.'
+    );
+  }
+
+  const secretKey = process.env.CLERK_SECRET_KEY?.trim();
+  if (secretKey && !isLikelyValidClerkSecretKey(secretKey)) {
+    throw new Error('Invalid environment configuration: CLERK_SECRET_KEY must be a valid Clerk secret key starting with sk_.');
+  }
+
+  const signInUrlError = validateOptionalClerkRouteEnv('NEXT_PUBLIC_CLERK_SIGN_IN_URL');
+  if (signInUrlError) {
+    throw new Error(`Invalid environment configuration: ${signInUrlError}.`);
+  }
+
+  const signUpUrlError = validateOptionalClerkRouteEnv('NEXT_PUBLIC_CLERK_SIGN_UP_URL');
+  if (signUpUrlError) {
+    throw new Error(`Invalid environment configuration: ${signUpUrlError}.`);
+  }
+}
+
 function validateOptionalAbsoluteUrl(name: string, { requireHttps }: { requireHttps: boolean }) {
   const raw = process.env[name]?.trim();
   if (!raw) return;
@@ -189,6 +218,7 @@ export function validateServerEnv() {
   validateTwilioWebhookSecurityMode();
   enforcePortfolioDemoGuardrail(process.env);
   validateAppUrl();
+  validateClerkConfig();
   validateDatabaseUrl();
   validateDistinctStripePrices();
   validateOperationalConfig();

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 type UpgradeBannerProps = {
@@ -26,8 +26,8 @@ export function UpgradeBanner({
           <p className="font-medium">{title}</p>
           <p className="text-sm text-muted-foreground">{description ?? defaultDescription}</p>
         </div>
-        <Link href={ctaHref}>
-          <Button>{ctaLabel}</Button>
+        <Link className={buttonVariants()} href={ctaHref}>
+          {ctaLabel}
         </Link>
       </CardContent>
     </Card>
