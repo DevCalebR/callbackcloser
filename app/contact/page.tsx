@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { PublicSiteFooter } from '@/components/public-site-footer';
 import { PublicSiteNav } from '@/components/public-site-nav';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const outreachInputs = [
@@ -47,14 +47,14 @@ export default function ContactPage() {
                 <span className="font-medium text-foreground">callbackcloser.com</span> so we can match the request to the live pilot setup.
               </p>
               <div className="flex flex-wrap gap-3 pt-2">
-                <Link href="/sign-up">
-                  <Button>Start pilot onboarding</Button>
+                <Link className={buttonVariants()} href="/sign-up">
+                  Start pilot onboarding
                 </Link>
-                <Link href="/pricing">
-                  <Button variant="outline">View pricing</Button>
+                <Link className={buttonVariants({ variant: 'outline' })} href="/pricing">
+                  View pricing
                 </Link>
-                <Link href="/sms-consent">
-                  <Button variant="ghost">Review SMS consent</Button>
+                <Link className={buttonVariants({ variant: 'ghost' })} href="/sms-consent">
+                  Review SMS consent
                 </Link>
               </div>
             </CardContent>

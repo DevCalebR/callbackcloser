@@ -2,6 +2,7 @@ import type { NextFetchEvent, NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 
+import { hasRequiredValidClerkEnv } from '@/lib/clerk-config';
 import {
   getPortfolioDemoGuardrailErrorMessage,
   isPortfolioDemoModeBlockedInProduction,
@@ -21,7 +22,7 @@ let missingClerkEnvLogged = false;
 type EnvMap = Readonly<Record<string, string | undefined>>;
 
 function hasRequiredClerkMiddlewareEnv(env: EnvMap = process.env) {
-  return Boolean(env.CLERK_SECRET_KEY?.trim() && env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim());
+  return hasRequiredValidClerkEnv(env);
 }
 
 function buildAuthUnavailableResponse(request: NextRequest) {
@@ -87,6 +88,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
       console.error('Clerk middleware env is incomplete; protected routes will return 503 until keys are configured.', {
         clerkSecretKeyPresent: Boolean(process.env.CLERK_SECRET_KEY?.trim()),
         clerkPublishableKeyPresent: Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim()),
+        clerkKeysLookValid: hasRequiredValidClerkEnv(process.env),
         nodeEnv: process.env.NODE_ENV ?? null,
         vercelEnv: process.env.VERCEL_ENV ?? null,
       });

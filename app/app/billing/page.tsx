@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -112,10 +112,8 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
             If this does not update shortly, refresh this page and verify `STRIPE_WEBHOOK_SECRET` and the Stripe webhook endpoint configuration.
           </p>
           <div>
-            <Link href="/app/billing">
-              <Button size="sm" variant="outline">
-                Refresh Status
-              </Button>
+            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/app/billing">
+              Refresh Status
             </Link>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 
 const primaryLinks = [
   { href: '/pricing', label: 'Pricing' },
@@ -33,13 +33,11 @@ export function PublicSiteNav() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Link href="/sign-in">
-              <Button size="sm" variant="ghost">
-                Sign in
-              </Button>
+            <Link className={buttonVariants({ size: 'sm', variant: 'ghost' })} href="/sign-in">
+              Sign in
             </Link>
-            <Link href="/sign-up">
-              <Button size="sm">Start pilot</Button>
+            <Link className={buttonVariants({ size: 'sm' })} href="/sign-up">
+              Start pilot
             </Link>
           </div>
         </div>

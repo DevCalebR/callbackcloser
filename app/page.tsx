@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PublicSiteFooter } from '@/components/public-site-footer';
 import { PublicSiteNav } from '@/components/public-site-nav';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const workflowSteps = [
@@ -52,18 +52,14 @@ export default function LandingPage() {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <Link href="/sign-up">
-                  <Button size="lg">Start pilot onboarding</Button>
+                <Link className={buttonVariants({ size: 'lg' })} href="/sign-up">
+                  Start pilot onboarding
                 </Link>
-                <Link href="/pricing">
-                  <Button size="lg" variant="outline">
-                    View pricing
-                  </Button>
+                <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/pricing">
+                  View pricing
                 </Link>
-                <Link href="/contact">
-                  <Button size="lg" variant="ghost">
-                    Talk to us
-                  </Button>
+                <Link className={buttonVariants({ size: 'lg', variant: 'ghost' })} href="/contact">
+                  Talk to us
                 </Link>
               </div>
 
@@ -153,13 +149,11 @@ export default function LandingPage() {
                 <p>The public SMS consent flow is web-form based and explains message frequency, message and data rates, and STOP or HELP handling.</p>
                 <p>The product supports STOP, START, and HELP handling, but businesses still need to use lawful calling and texting practices.</p>
                 <div className="flex flex-wrap gap-3 pt-2">
-                  <Link href="/pricing">
-                    <Button size="sm">View pricing</Button>
+                  <Link className={buttonVariants({ size: 'sm' })} href="/pricing">
+                    View pricing
                   </Link>
-                  <Link href="/sms-consent">
-                    <Button size="sm" variant="outline">
-                      Review SMS consent
-                    </Button>
+                  <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/sms-consent">
+                    Review SMS consent
                   </Link>
                 </div>
               </CardContent>

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PublicSiteFooter } from '@/components/public-site-footer';
 import { PublicSiteNav } from '@/components/public-site-nav';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const starterFeatures = [
@@ -104,13 +104,11 @@ export default function PricingPage() {
               <p>Public pricing, terms, privacy, refund, contact, and SMS consent pages are visible on callbackcloser.com before a pilot goes live.</p>
               <p>Businesses remain responsible for lawful texting practices and consent requirements in their market. CallbackCloser does not claim to replace legal review.</p>
               <div className="flex flex-wrap gap-3 pt-2">
-                <Link href="/contact">
-                  <Button size="sm">Contact us</Button>
+                <Link className={buttonVariants({ size: 'sm' })} href="/contact">
+                  Contact us
                 </Link>
-                <Link href="/sms-consent">
-                  <Button size="sm" variant="outline">
-                    Review SMS consent
-                  </Button>
+                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/sms-consent">
+                  Review SMS consent
                 </Link>
               </div>
             </CardContent>
