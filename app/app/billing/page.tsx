@@ -6,7 +6,9 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getManagedTextingNumber } from '@/lib/managed-twilio';
+import { getPortfolioDemoBlockedCount } from '@/lib/portfolio-demo';
+import { getDemoWorkspaceMode } from '@/lib/review-mode';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getStripe } from '@/lib/stripe';
 import { BILLING_TIME_ZONE, getConversationUsageForBusiness, getCurrentMonthWindowUtc, resolveUsageTierFromSubscription } from '@/lib/usage';
@@ -116,7 +118,10 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const subscriptionActive = billingAccess.billingActive;
   const checkoutSucceeded = checkout === 'success';
   const checkoutCanceled = checkout === 'canceled';
-  const demoMode = isPortfolioDemoMode();
+  const demoWorkspaceMode = await getDemoWorkspaceMode();
+  const demoMode = Boolean(demoWorkspaceMode);
+  const demoModeLabel = demoWorkspaceMode === 'preview_review' ? 'preview review mode' : 'portfolio demo mode';
+  const readOnlyPreviewMode = demoWorkspaceMode === 'preview_review';
   const currentMonth = getCurrentMonthWindowUtc();
 
   const [blockedCount, usage, cycleSmsSent, cycleMissedCalls, cycleOwnerAlerts, stripeSnapshot] = demoMode
@@ -148,7 +153,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
       ]);
 
   const usageTierLabel = formatUsageTierLabel(resolveUsageTierFromSubscription(business));
-  const usageSummary = usage ? formatUsageSummary(usage) : 'Unavailable in portfolio demo mode.';
+  const usageSummary = usage ? formatUsageSummary(usage) : `Unavailable in ${demoModeLabel}.`;
   const automationBlockReason = resolveAutomationBlockReason({
     blockedCount,
     subscriptionStatus: business.subscriptionStatus,
@@ -167,8 +172,9 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const summaryItems = [
     { label: 'Current plan', value: currentPlanLabel },
     { label: 'Next charge date', value: stripeSnapshot ? formatDate(stripeSnapshot.nextChargeDate) : 'Shown in Stripe Billing Portal' },
-    { label: 'Included usage', value: usage ? `${usage.limit} SMS-qualified conversations / month` : 'Unavailable in portfolio demo mode' },
-    { label: 'Overage policy', value: 'No hidden in-app metered overage. Automation pauses at the limit until you upgrade.' },
+    { label: 'Included usage', value: usage ? `${usage.limit} SMS-qualified conversations / month` : `Unavailable in ${demoModeLabel}` },
+    { label: 'Included number', value: getManagedTextingNumber(business) ? 'One business texting number is included' : 'Provisioned during setup' },
+    { label: 'Overage policy', value: 'One business texting number and standard setup are included. Automation pauses at the limit until you upgrade.' },
     { label: 'Payment method', value: stripeSnapshot?.paymentMethodLabel || 'Add or update card in Stripe Billing Portal' },
     { label: 'Billing portal', value: business.stripeCustomerId ? 'Available below' : 'Available after customer setup' },
   ];
@@ -229,7 +235,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
       ) : null}
       {checkoutSucceeded && !billingAccess.rawSubscriptionActive ? (
         <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-          Stripe checkout completed. Subscription status is still syncing from webhook events. Refresh shortly or verify the Stripe webhook endpoint if this state lingers.
+          Stripe checkout completed. Subscription status is still syncing in the background. Refresh shortly if this state lingers.
         </div>
       ) : null}
       {checkoutCanceled ? <div className="rounded-md border bg-muted/40 p-3 text-sm">Checkout canceled. You can restart from the plan cards below.</div> : null}
@@ -253,7 +259,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
             <div className="flex flex-wrap gap-3">
               {business.stripeCustomerId ? (
                 <form action="/api/stripe/portal" method="post">
-                  <Button type="submit">Update Payment Method</Button>
+                  <Button type="submit" disabled={readOnlyPreviewMode}>Update Payment Method</Button>
                 </form>
               ) : (
                 <Link className={buttonVariants()} href="#plan-options">
@@ -326,16 +332,16 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className={requestedPlan === 'starter' ? 'border-primary/40 bg-primary/5' : 'bg-card/90'}>
           <CardHeader>
             <CardTitle>Starter</CardTitle>
-            <CardDescription>Cover missed calls, qualify the lead, and get the owner a clear next call.</CardDescription>
+            <CardDescription>Cover missed calls with one managed texting number, standard setup, and a clean owner handoff.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>{planPrice(starterPriceId)}</p>
-            <p>Best for smaller service teams that want clean activation and fast proof of value.</p>
+            <p>Best for smaller service teams that want missed-call coverage live fast without managing line setup.</p>
           </CardContent>
           <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
               <input type="hidden" name="priceId" value={starterPriceId ?? ''} />
-              <Button type="submit" className="w-full" disabled={!starterPriceId}>
+              <Button type="submit" className="w-full" disabled={!starterPriceId || readOnlyPreviewMode}>
                 Choose Starter
               </Button>
             </form>
@@ -345,16 +351,16 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className={requestedPlan === 'growth' ? 'border-primary/40 bg-primary/5' : 'bg-card/90'}>
           <CardHeader>
             <CardTitle>Growth</CardTitle>
-            <CardDescription>More follow-up capacity and more rollout help for teams with busier inbound traffic.</CardDescription>
+            <CardDescription>More follow-up capacity plus managed rollout help for teams with busier inbound traffic.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>{planPrice(growthPriceId)}</p>
-            <p>Best for service teams that need more follow-up capacity and a clearer path to scale.</p>
+            <p>Best for service teams that need more follow-up capacity, optional add-ons, and a clearer path to scale.</p>
           </CardContent>
           <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
               <input type="hidden" name="priceId" value={growthPriceId ?? ''} />
-              <Button type="submit" className="w-full" disabled={!growthPriceId}>
+              <Button type="submit" className="w-full" disabled={!growthPriceId || readOnlyPreviewMode}>
                 Choose Growth
               </Button>
             </form>
@@ -364,7 +370,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className="bg-card/90">
           <CardHeader>
             <CardTitle>Agency / Multi-location</CardTitle>
-            <CardDescription>For operators managing multiple brands, multiple locations, or multiple client rollouts.</CardDescription>
+            <CardDescription>For operators managing multiple brands, multiple locations, extra numbers, or white-glove launches.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>Talk to us before activation so routing, billing, and onboarding structure match the operating model.</p>
@@ -375,7 +381,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
             </Link>
             {business.stripeCustomerId ? (
               <form action="/api/stripe/portal" method="post" className="w-full">
-                <Button type="submit" variant="outline" className="w-full">
+                <Button type="submit" variant="outline" className="w-full" disabled={readOnlyPreviewMode}>
                   Open Billing Portal
                 </Button>
               </form>

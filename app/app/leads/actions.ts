@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { isPreviewReviewSessionActive } from '@/lib/review-mode';
 import { leadStatusSchema } from '@/lib/validators';
 
 function resolveSafeAppRedirect(value: FormDataEntryValue | null, fallback: string) {
@@ -16,10 +17,14 @@ function resolveSafeAppRedirect(value: FormDataEntryValue | null, fallback: stri
 }
 
 export async function updateLeadStatusAction(formData: FormData) {
-  const business = await requireBusiness();
-  const parsed = leadStatusSchema.safeParse(Object.fromEntries(formData));
   const fallbackPath = '/app/leads';
   const redirectTo = resolveSafeAppRedirect(formData.get('redirectTo'), fallbackPath);
+  if (await isPreviewReviewSessionActive()) {
+    redirect(`${redirectTo}${redirectTo.includes('?') ? '&' : '?'}error=${encodeURIComponent('Preview Review Mode is read-only')}`);
+  }
+
+  const business = await requireBusiness();
+  const parsed = leadStatusSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     redirect(`${redirectTo}${redirectTo.includes('?') ? '&' : '?'}error=Invalid%20status`);
   }

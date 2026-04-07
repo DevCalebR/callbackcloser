@@ -40,7 +40,7 @@ export default async function OnboardingPage({
     {
       key: 'routing',
       label: 'Connect phone / routing',
-      detail: 'Create the business first, then confirm which line should ring and which Twilio number will catch missed calls.',
+      detail: 'Create the business first, then confirm which line should ring while CallbackCloser sets up the texting line that covers missed calls.',
       complete: false,
     },
     {
@@ -70,7 +70,7 @@ export default async function OnboardingPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Create your business workspace</h1>
           <p className="text-sm text-muted-foreground">
-            Start with the business record now. Next, you will land in Business Settings to finish routing, SMS, owner alerts, billing, and the first missed-call test.
+            Start with the business details now. Next, you will land in Business Settings where CallbackCloser helps set up your texting line, routing, owner alerts, billing, and first missed-call test.
           </p>
         </div>
       </div>
@@ -87,7 +87,7 @@ export default async function OnboardingPage({
           <CardDescription>Reduce onboarding drag by keeping the next steps explicit.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-          <div className="rounded-xl border bg-background/80 p-4">1. Business Settings opens so you can confirm routing and Twilio setup.</div>
+          <div className="rounded-xl border bg-background/80 p-4">1. Business Settings opens so you can confirm routing and we can provision your business texting line.</div>
           <div className="rounded-xl border bg-background/80 p-4">2. Billing is activated so live missed calls can trigger automated SMS follow-up.</div>
           <div className="rounded-xl border bg-background/80 p-4">3. You run the missed-call test and confirm the owner alert arrives with a ready-to-call summary.</div>
         </CardContent>
@@ -96,7 +96,7 @@ export default async function OnboardingPage({
       <Card>
         <CardHeader>
           <CardTitle>Business profile and defaults</CardTitle>
-          <CardDescription>Set the core routing and SMS defaults used during activation.</CardDescription>
+          <CardDescription>Set the core business details so we can get your missed-call coverage live fast.</CardDescription>
         </CardHeader>
         <CardContent>
           {error ? (
@@ -117,7 +117,7 @@ export default async function OnboardingPage({
             <div>
               <Label htmlFor="notifyPhone">Owner notify phone</Label>
               <Input id="notifyPhone" name="notifyPhone" placeholder="+15559876543" />
-              <p className="mt-1 text-xs text-muted-foreground">Recommended. Qualified lead summaries are sent here.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Recommended. Ready-to-close lead summaries are sent here.</p>
             </div>
             <div>
               <Label htmlFor="missedCallSeconds">Missed-call timeout (seconds)</Label>

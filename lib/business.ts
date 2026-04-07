@@ -1,4 +1,4 @@
-import { type Prisma, SubscriptionStatus } from '@prisma/client';
+import { ManagedTwilioStatus, type Prisma, SubscriptionStatus } from '@prisma/client';
 
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
@@ -24,6 +24,8 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
     serviceLabel3: input.serviceLabel3,
     timezone: input.timezone,
     subscriptionStatus: SubscriptionStatus.INACTIVE,
+    managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    managedTwilioStatusUpdatedAt: new Date(),
   };
 
   return db.business.upsert({
@@ -38,6 +40,7 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
       serviceLabel2: data.serviceLabel2,
       serviceLabel3: data.serviceLabel3,
       timezone: data.timezone,
+      managedTwilioStatusUpdatedAt: new Date(),
     },
   });
 }
@@ -49,6 +52,8 @@ export async function findBusinessByTwilioNumber(phoneNumber: string) {
   return db.business.findFirst({
     where: {
       OR: [
+        { twilioPrimaryPhoneNumber: normalized },
+        { twilioPrimaryPhoneNumber: phoneNumber },
         { twilioPhoneNumber: normalized },
         { twilioPhoneNumber: phoneNumber },
       ],

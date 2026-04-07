@@ -11,6 +11,8 @@ const pricingPlans = [
     name: 'Starter',
     summary: 'For owner-operators who want missed calls turning back into paying jobs quickly.',
     details: [
+      'Includes one business texting number',
+      'Includes standard setup and managed provisioning',
       'Text missed callers before they move on',
       'Get a qualified lead instead of a dead voicemail',
       'See recovered leads and follow-up status clearly',
@@ -22,6 +24,7 @@ const pricingPlans = [
     summary: 'For growing service teams that need to protect more revenue from missed calls.',
     details: [
       'Everything in Starter',
+      'Optional extra numbers and rollout help',
       'More follow-up capacity for busier inbound volume',
       'Priority rollout help so missed calls stay covered',
       'Clear billing visibility as usage grows',
@@ -32,7 +35,7 @@ const pricingPlans = [
     summary: 'For operators covering multiple locations, brands, or client accounts.',
     details: [
       'Multi-location rollout planning',
-      'Hands-on guidance for multiple phone lines',
+      'Hands-on guidance for multiple phone lines and routing',
       'Custom onboarding and launch sequencing',
       'Contact sales before activation',
     ],
@@ -59,7 +62,7 @@ export default function PricingPage() {
           </p>
           <p className="text-sm text-muted-foreground">
             Exact checkout pricing is still confirmed in Stripe for this environment, but the public structure stays simple:
-            Starter, Growth, and Agency / Multi-location. If you want rollout help before checkout, email{' '}
+            Starter, Growth, and Agency / Multi-location. Base service includes one business texting number, standard setup, and managed provisioning. If you want rollout help before checkout, email{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
               support@callbackcloser.com
             </a>

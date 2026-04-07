@@ -6,6 +6,7 @@ import { db } from '@/lib/db';
 import { getConfiguredAppBaseUrl } from '@/lib/env.server';
 import { getCorrelationIdFromRequest, reportApplicationError, withCorrelationIdHeader } from '@/lib/observability';
 import { isAllowedRequestOrigin } from '@/lib/request-origin';
+import { isPreviewReviewCookieHeaderValid } from '@/lib/review-mode';
 import { getStripe } from '@/lib/stripe';
 import { absoluteUrl } from '@/lib/url';
 
@@ -15,6 +16,11 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   const correlationId = getCorrelationIdFromRequest(request);
   const withCorrelation = (response: NextResponse) => withCorrelationIdHeader(response, correlationId);
+  if (isPreviewReviewCookieHeaderValid(request.headers.get('cookie'), process.env)) {
+    return withCorrelation(
+      NextResponse.redirect(absoluteUrl('/app/billing?error=Preview%20Review%20Mode%20is%20read-only'), { status: 303 })
+    );
+  }
 
   if (process.env.NODE_ENV === 'production' && !isAllowedRequestOrigin(request, getConfiguredAppBaseUrl())) {
     return withCorrelation(NextResponse.json({ error: 'Invalid request origin' }, { status: 403 }));

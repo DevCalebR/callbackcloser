@@ -107,7 +107,7 @@ const screenshotCards = [
 const planTeasers = [
   {
     name: 'Starter',
-    description: 'Start turning missed calls into real opportunities without adding more admin work.',
+    description: 'Start turning missed calls into real opportunities with one included business texting number and less admin work.',
   },
   {
     name: 'Growth',
@@ -120,7 +120,7 @@ const planTeasers = [
 ];
 
 const onboardingSteps = [
-  'We help connect your phone routing so missed callers are covered fast.',
+  'We provision your business texting line and connect routing so missed callers are covered fast.',
   'We confirm the first text and lead questions before live traffic starts.',
   'We verify owner notifications and run a missed-call test with you before go-live.',
 ];

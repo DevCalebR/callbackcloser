@@ -10,7 +10,7 @@ import { enforcePortfolioDemoGuardrail } from './portfolio-demo-guardrail';
 
 type EnvSpec = {
   name: string;
-  provider: 'Vercel' | 'Database' | 'Clerk' | 'Stripe' | 'Twilio';
+  provider: 'Vercel' | 'Database' | 'Clerk' | 'Stripe' | 'Twilio' | 'Preview';
   visibility: 'server' | 'public';
   requiredInProduction: boolean;
 };
@@ -36,6 +36,8 @@ const ENV_SPECS: EnvSpec[] = [
   { name: 'TWILIO_ACCOUNT_SID', provider: 'Twilio', visibility: 'server', requiredInProduction: true },
   { name: 'TWILIO_AUTH_TOKEN', provider: 'Twilio', visibility: 'server', requiredInProduction: true },
   { name: 'TWILIO_WEBHOOK_AUTH_TOKEN', provider: 'Twilio', visibility: 'server', requiredInProduction: true },
+  { name: 'ENABLE_PREVIEW_REVIEW_MODE', provider: 'Preview', visibility: 'server', requiredInProduction: false },
+  { name: 'PREVIEW_REVIEW_TOKEN', provider: 'Preview', visibility: 'server', requiredInProduction: false },
 ];
 
 let validated = false;
@@ -198,6 +200,23 @@ function validateFounderBillingBypassConfig() {
   }
 }
 
+function validatePreviewReviewModeConfig() {
+  const previewReviewEnabled = parseBooleanFlag(process.env.ENABLE_PREVIEW_REVIEW_MODE);
+  if (!previewReviewEnabled) return;
+
+  if (!process.env.PREVIEW_REVIEW_TOKEN?.trim()) {
+    throw new Error(
+      'Invalid environment configuration: ENABLE_PREVIEW_REVIEW_MODE=true requires PREVIEW_REVIEW_TOKEN to be set.'
+    );
+  }
+
+  if (process.env.VERCEL_ENV?.trim().toLowerCase() === 'production') {
+    throw new Error(
+      'Invalid environment configuration: preview review mode must never be enabled on Vercel production.'
+    );
+  }
+}
+
 export function validateServerEnv() {
   if (validated) return;
   if (process.env.NODE_ENV !== 'production') return;
@@ -223,6 +242,7 @@ export function validateServerEnv() {
   validateDistinctStripePrices();
   validateOperationalConfig();
   validateFounderBillingBypassConfig();
+  validatePreviewReviewModeConfig();
   validated = true;
 }
 

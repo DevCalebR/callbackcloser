@@ -13,15 +13,15 @@ test('settings page no longer exposes shared Twilio number inventory', () => {
   const settingsPage = read('app/app/settings/page.tsx');
 
   assert.doesNotMatch(settingsPage, /incomingPhoneNumbers\.list/);
-  assert.match(settingsPage, /does not expose Twilio account inventory in self-serve settings/i);
-  assert.match(settingsPage, /Existing Twilio numbers are founder-managed during pilots/i);
+  assert.match(settingsPage, /internal platform IDs stay server-side/i);
+  assert.match(settingsPage, /CallbackCloser handles the business texting line and messaging setup for you/i);
 });
 
 test('landing page product promise stays aligned to missed-call recovery workflow', () => {
   const home = read('app/page.tsx');
 
-  assert.match(home, /Recover missed calls/i);
-  assert.doesNotMatch(home, /Turn missed calls into booked jobs/i);
+  assert.match(home, /Stop losing jobs from missed calls/i);
+  assert.match(home, /ready-to-close lead/i);
 });
 
 test('message delivery issue helpers flag failed and fallback statuses', () => {

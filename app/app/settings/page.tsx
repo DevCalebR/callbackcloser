@@ -1,6 +1,5 @@
 import Link from 'next/link';
 
-import { CopyValueButton } from '@/components/copy-value-button';
 import { SetupChecklist } from '@/components/setup-checklist';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -9,123 +8,62 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { getLiveSmokeReadiness } from '@/lib/live-smoke-readiness';
+import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getPortfolioDemoWebhookConfig, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getDemoWorkspaceMode } from '@/lib/review-mode';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
-import { getTwilioBusinessClient } from '@/lib/twilio-client';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
-import { getTwilioWebhookConfig } from '@/lib/twilio';
-import { describeUsageLimit, getConversationUsageForBusiness, isConversationLimitReached } from '@/lib/usage';
 
 import { buyTwilioNumberAction, resyncTwilioWebhooksAction, saveBusinessSettingsAction } from './actions';
 
 export default async function SettingsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
-  const demoMode = isPortfolioDemoMode();
+  const demoWorkspaceMode = await getDemoWorkspaceMode();
+  const demoMode = Boolean(demoWorkspaceMode);
+  const readOnlyPreviewMode = demoWorkspaceMode === 'preview_review';
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const saved = searchParams?.saved === '1';
   const numberBought = searchParams?.numberBought === '1';
   const twilioConnected = searchParams?.twilioConnected === '1';
   const twilioSynced = searchParams?.twilioSynced === '1';
-
-  let twilioWebhookConfigError: string | undefined;
-  let twilioWebhookConfig:
-    | {
-        appBaseUrl: string;
-        voiceUrl: string;
-        smsUrl: string;
-        statusUrl: string;
-      }
-    | undefined;
-
-  if (demoMode) {
-    twilioWebhookConfig = getPortfolioDemoWebhookConfig();
-  } else {
-    try {
-      twilioWebhookConfig = getTwilioWebhookConfig();
-    } catch (twilioError) {
-      twilioWebhookConfigError = twilioError instanceof Error ? twilioError.message : 'Failed to compute Twilio webhook URLs';
-    }
-  }
-
-  let assignedTwilioNumberError: string | undefined;
-  let assignedTwilioNumber:
-    | {
-        sid: string;
-        phoneNumber: string;
-        friendlyName: string | null;
-      }
-    | undefined;
-
-  if (demoMode) {
-    if (business.twilioPhoneNumberSid && business.twilioPhoneNumber) {
-      assignedTwilioNumber = {
-        sid: business.twilioPhoneNumberSid,
-        phoneNumber: business.twilioPhoneNumber,
-        friendlyName: `${business.name} demo number`,
-      };
-    }
-  } else if (business.twilioPhoneNumberSid) {
-    try {
-      const client = getTwilioBusinessClient(business.twilioSubaccountSid);
-      const number = await client.incomingPhoneNumbers(business.twilioPhoneNumberSid).fetch();
-      assignedTwilioNumber = {
-        sid: number.sid,
-        phoneNumber: number.phoneNumber,
-        friendlyName: number.friendlyName || null,
-      };
-    } catch (twilioError) {
-      assignedTwilioNumberError = twilioError instanceof Error ? twilioError.message : 'Failed to load the assigned Twilio number';
-    }
-  }
-
-  const assignedTwilioNumberVerified = Boolean(assignedTwilioNumber);
-  const lastTwilioWebhookSync = business.twilioWebhookSyncedAt ? new Date(business.twilioWebhookSyncedAt).toLocaleString() : 'Never';
   const billingAccess = getBusinessBillingAccessState(business);
   const subscriptionReady = billingAccess.billingActive;
   const ownerNotifyPhoneOptedOut =
     demoMode || !business.notifyPhone
       ? false
       : await isSmsRecipientOptedOut({ businessId: business.id, phone: business.notifyPhone });
-  const usage = demoMode || !subscriptionReady ? null : await getConversationUsageForBusiness(business);
-  const conversationLimitReached = usage ? isConversationLimitReached(usage) : undefined;
   const successfulLeadCount = demoMode
     ? 1
     : await db.lead.count({ where: { businessId: business.id, ownerNotifiedAt: { not: null } } });
-
-  const liveSmokeReadiness = getLiveSmokeReadiness({
-    demoModeEnabled: demoMode,
-    hasForwardingNumber: Boolean(business.forwardingNumber),
-    hasNotifyPhone: Boolean(business.notifyPhone),
-    ownerNotifyPhoneOptedOut,
-    hasActiveSubscription: subscriptionReady,
-    conversationLimitReached,
-    usageSummary: usage ? describeUsageLimit(usage) : undefined,
-    hasTwilioNumber: Boolean(business.twilioPhoneNumber),
-    hasTwilioNumberSid: Boolean(business.twilioPhoneNumberSid),
-    hasWebhookConfig: Boolean(twilioWebhookConfig),
-    hasWebhookSync: Boolean(business.twilioWebhookSyncedAt),
-    hasTwilioAccountAccess: !assignedTwilioNumberError,
-    canVerifyAssignedTwilioNumber: Boolean(business.twilioPhoneNumberSid) && !assignedTwilioNumberError,
-    hasAssignedTwilioNumberInAccount: assignedTwilioNumberVerified,
-    webhookAppBaseUrl: twilioWebhookConfig?.appBaseUrl,
-    webhookConfigError: twilioWebhookConfigError,
-    twilioAccountLookupError: assignedTwilioNumberError,
-  });
+  const managedTextingNumber = getManagedTextingNumber(business);
+  const managedTwilioSummary = getManagedTwilioStatusSummary(business);
+  const lastManagedSetupRefresh = business.twilioWebhookSyncedAt ? new Date(business.twilioWebhookSyncedAt).toLocaleString() : 'Never';
+  const activationReady =
+    Boolean(business.forwardingNumber) &&
+    Boolean(managedTextingNumber) &&
+    managedTwilioSummary.messagingServiceReady &&
+    Boolean(business.notifyPhone) &&
+    !ownerNotifyPhoneOptedOut &&
+    subscriptionReady;
 
   const checklistItems = [
     {
       key: 'twilio',
-      label: 'Twilio connected',
-      detail: business.twilioPhoneNumber
-        ? `Inbound number ${formatPhoneForDisplay(business.twilioPhoneNumber)} is connected.`
-        : 'Assign or buy your CallbackCloser number.',
-      complete: Boolean(business.twilioPhoneNumber),
+      label: 'Business info submitted',
+      detail: business.name ? `${business.name} is ready for managed setup.` : 'Start with the basic business profile.',
+      complete: Boolean(business.name),
+    },
+    {
+      key: 'texting-line',
+      label: 'Texting number provisioned',
+      detail: managedTextingNumber
+        ? `Your texting line is ${formatPhoneForDisplay(managedTextingNumber)}.`
+        : 'We still need to provision your business texting line.',
+      complete: Boolean(managedTextingNumber),
     },
     {
       key: 'forwarding',
-      label: 'Forwarding verified',
+      label: 'Forwarding configured',
       detail: business.forwardingNumber
         ? `Forwarding is set to ${formatPhoneForDisplay(business.forwardingNumber)}.`
         : 'Add the business line that should ring first.',
@@ -133,11 +71,17 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
     },
     {
       key: 'sms-template',
-      label: 'SMS template active',
-      detail: business.twilioPhoneNumber
-        ? 'The qualification reply is ready to send once billing and routing are live.'
-        : 'Connect the Twilio line before SMS can start.',
-      complete: Boolean(business.twilioPhoneNumber) && Boolean(business.serviceLabel1 && business.serviceLabel2 && business.serviceLabel3),
+      label: 'Messaging service active',
+      detail: managedTwilioSummary.messagingServiceReady
+        ? 'Managed messaging is connected to your texting line.'
+        : 'Messaging setup is still in progress.',
+      complete: managedTwilioSummary.messagingServiceReady,
+    },
+    {
+      key: 'compliance',
+      label: managedTwilioSummary.complianceReady ? 'Compliance approved' : 'Compliance review in progress',
+      detail: managedTwilioSummary.description,
+      complete: managedTwilioSummary.complianceReady,
     },
     {
       key: 'owner-number',
@@ -193,9 +137,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business settings saved.</div> : null}
-      {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Twilio number purchased and connected.</div> : null}
-      {twilioConnected ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Existing Twilio number connected and webhooks synced.</div> : null}
-      {twilioSynced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Twilio webhooks re-synced.</div> : null}
+      {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was provisioned and connected.</div> : null}
+      {twilioConnected ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was connected and setup was refreshed.</div> : null}
+      {twilioSynced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Managed texting setup refreshed.</div> : null}
       {billingAccess.founderBillingBypassActive ? (
         <div className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-950">
           Founder-only billing bypass is active for this founder-owned business. Use it for smoke testing only, then return to real Stripe-gated billing.
@@ -204,11 +148,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
       <SetupChecklist
         title="Setup checklist"
-        description="The fastest route to first value is simple: cover the missed call, confirm the text, verify alerts, then run the test."
+        description="The fastest route to first value is simple: get the texting line live, confirm routing, verify alerts, then run the missed-call test."
         items={checklistItems}
       />
 
-      <Card className={liveSmokeReadiness.ready ? 'border-accent/40 bg-accent/20' : 'border-primary/20 bg-primary/5'}>
+      <Card className={activationReady ? 'border-accent/40 bg-accent/20' : 'border-primary/20 bg-primary/5'}>
         <CardHeader>
           <CardTitle>Activation guidance</CardTitle>
           <CardDescription>Use these prompts to get to the first successful missed-call handoff quickly.</CardDescription>
@@ -217,9 +161,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
             <p className="font-medium">Run your first test</p>
             <p className="mt-2 text-muted-foreground">
-              {liveSmokeReadiness.ready
-                ? 'Routing and billing look ready. Place a missed call and confirm the owner alert arrives.'
-                : 'Finish the incomplete checklist items, then place the missed call and watch Leads for the handoff.'}
+              {activationReady
+                ? 'Routing, billing, and managed setup look ready. Place a missed call and confirm the owner alert arrives.'
+                : 'Finish the incomplete checklist items, then place the missed call and watch Recovered Leads for the handoff.'}
             </p>
           </div>
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
@@ -240,6 +184,12 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       </Card>
 
       <form action={saveBusinessSettingsAction} className="space-y-6">
+        {readOnlyPreviewMode ? (
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+            Preview Review Mode is read-only. This workspace uses demo data so buttons and form saves stay disabled.
+          </div>
+        ) : null}
+        <fieldset disabled={readOnlyPreviewMode} className="space-y-6">
         <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-6">
             <Card className="bg-card/90">
@@ -303,33 +253,35 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="rounded-xl border bg-muted/20 p-4 text-sm">
-                    <p className="font-medium">Twilio number</p>
+                    <p className="font-medium">Your texting line</p>
                     <p className="mt-2 text-muted-foreground">
-                      {business.twilioPhoneNumber ? formatPhoneForDisplay(business.twilioPhoneNumber) : 'No number assigned yet'}
+                      {managedTextingNumber ? formatPhoneForDisplay(managedTextingNumber) : 'No business texting line assigned yet'}
                     </p>
                   </div>
                   <div className="rounded-xl border bg-muted/20 p-4 text-sm">
-                    <p className="font-medium">Call status</p>
+                    <p className="font-medium">Setup status</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <Badge variant={assignedTwilioNumberVerified ? 'success' : 'outline'}>
-                        {assignedTwilioNumberVerified ? 'Connected' : 'Needs setup'}
+                      <Badge variant={managedTwilioSummary.numberAssigned ? 'success' : 'outline'}>
+                        {managedTwilioSummary.numberAssigned ? 'Line assigned' : 'Needs line'}
                       </Badge>
-                      <Badge variant={liveSmokeReadiness.ready ? 'success' : 'outline'}>
-                        {liveSmokeReadiness.ready ? 'Ready for test' : 'Blocked'}
+                      <Badge variant={activationReady ? 'success' : 'outline'}>
+                        {activationReady ? 'Ready for test' : 'Action needed'}
                       </Badge>
                     </div>
                   </div>
                   <div className="rounded-xl border bg-muted/20 p-4 text-sm">
                     <p className="font-medium">Missed call detection</p>
                     <p className="mt-2 text-muted-foreground">
-                      {liveSmokeReadiness.checks.find((check) => check.key === 'forwarding_number')?.detail || 'Waiting on routing checks.'}
+                      {business.forwardingNumber
+                        ? `Calls ring through to ${formatPhoneForDisplay(business.forwardingNumber)} while missed callers stay covered.`
+                        : 'Add the business line that should still ring when new calls come in.'}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {business.twilioPhoneNumber ? (
-                    <Link className={buttonVariants()} href={`tel:${business.twilioPhoneNumber}`}>
+                  {managedTextingNumber ? (
+                    <Link className={buttonVariants()} href={`tel:${managedTextingNumber}`}>
                       Test Call
                     </Link>
                   ) : (
@@ -444,7 +396,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <Card className="bg-card/90">
               <CardHeader>
                 <CardTitle>5. Compliance and Trust</CardTitle>
-                <CardDescription>Keep the legal and consent surfaces visible while the product presentation stays premium.</CardDescription>
+                <CardDescription>Keep the legal and consent surfaces visible while your texting setup stays easy to understand.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
                 <div className="grid gap-3">
@@ -481,21 +433,18 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
             <Card className="bg-card/90">
               <CardHeader>
-                <CardTitle>Twilio number and webhooks</CardTitle>
-                <CardDescription>Buy a number, confirm the current assignment, and keep the call-routing links in sync.</CardDescription>
+                <CardTitle>Managed texting setup</CardTitle>
+                <CardDescription>CallbackCloser handles the business texting line and messaging setup for you.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-xl border bg-muted/20 p-4 text-sm">
-                  <p className="font-medium">Current number</p>
+                  <p className="font-medium">Current setup</p>
                   <p className="mt-2 text-muted-foreground">
-                    {business.twilioPhoneNumber ? formatPhoneForDisplay(business.twilioPhoneNumber) : 'None assigned'}
+                    {managedTextingNumber ? formatPhoneForDisplay(managedTextingNumber) : 'No business texting line assigned yet'}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">SID: {business.twilioPhoneNumberSid ?? 'None assigned'}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Last webhook sync: {lastTwilioWebhookSync}</p>
-                  {assignedTwilioNumberVerified ? (
-                    <p className="mt-1 text-xs text-muted-foreground">Verified against the current Twilio account.</p>
-                  ) : null}
-                  {assignedTwilioNumberError ? <p className="mt-2 text-xs text-destructive">{assignedTwilioNumberError}</p> : null}
+                  <p className="mt-1 text-xs text-muted-foreground">Status: {managedTwilioSummary.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Last setup refresh: {lastManagedSetupRefresh}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{managedTwilioSummary.description}</p>
                 </div>
 
                 <form action={buyTwilioNumberAction} className="space-y-3">
@@ -507,51 +456,36 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                       inputMode="numeric"
                       placeholder="512"
                       maxLength={3}
-                      disabled={Boolean(business.twilioPhoneNumber)}
+                      disabled={Boolean(managedTextingNumber)}
                     />
                   </div>
-                  <Button type="submit" disabled={Boolean(business.twilioPhoneNumber)}>
-                    {business.twilioPhoneNumber ? 'Twilio Number Already Assigned' : 'Buy Twilio Number'}
+                  <Button type="submit" disabled={Boolean(managedTextingNumber)}>
+                    {managedTextingNumber ? 'Texting Line Already Assigned' : 'Provision Business Texting Line'}
                   </Button>
                 </form>
 
                 <form action={resyncTwilioWebhooksAction} className="space-y-2">
-                  <Button disabled={!business.twilioPhoneNumberSid || !twilioWebhookConfig} type="submit" variant="outline">
-                    Re-sync webhooks
+                  <Button disabled={!business.twilioPhoneNumberSid} type="submit" variant="outline">
+                    Refresh Managed Setup
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    Re-applies the current webhook URLs to the selected Twilio number using the current `NEXT_PUBLIC_APP_URL`.
+                    Refreshes the managed texting-line configuration after provisioning or environment changes.
                   </p>
                 </form>
 
                 <div className="space-y-2 rounded-xl border p-4">
-                  <p className="text-sm font-medium">Webhook URLs</p>
-                  {twilioWebhookConfigError ? <p className="text-xs text-destructive">{twilioWebhookConfigError}</p> : null}
-                  {twilioWebhookConfig ? (
-                    <div className="space-y-2">
-                      <div className="rounded-md bg-muted/40 p-2">
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium">Voice (POST)</p>
-                          <CopyValueButton value={twilioWebhookConfig.voiceUrl} />
-                        </div>
-                        <code className="block break-all text-xs">{twilioWebhookConfig.voiceUrl}</code>
-                      </div>
-                      <div className="rounded-md bg-muted/40 p-2">
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium">Messaging (POST)</p>
-                          <CopyValueButton value={twilioWebhookConfig.smsUrl} />
-                        </div>
-                        <code className="block break-all text-xs">{twilioWebhookConfig.smsUrl}</code>
-                      </div>
-                      <div className="rounded-md bg-muted/40 p-2">
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium">Status (POST)</p>
-                          <CopyValueButton value={twilioWebhookConfig.statusUrl} />
-                        </div>
-                        <code className="block break-all text-xs">{twilioWebhookConfig.statusUrl}</code>
-                      </div>
+                  <p className="text-sm font-medium">Messaging setup</p>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <div className="rounded-md bg-muted/40 p-3">
+                      Messaging service: {managedTwilioSummary.messagingServiceReady ? 'Active' : 'Still being set up'}
                     </div>
-                  ) : null}
+                    <div className="rounded-md bg-muted/40 p-3">
+                      Compliance review: {managedTwilioSummary.complianceReady ? 'Approved and live' : managedTwilioSummary.label}
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-3">
+                      Demo-safe note: internal platform IDs stay server-side so this workspace stays business-facing.
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -564,6 +498,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             Open Recovered Leads
           </Link>
         </div>
+        </fieldset>
       </form>
     </div>
   );

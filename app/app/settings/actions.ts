@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { isPreviewReviewSessionActive } from '@/lib/review-mode';
 import { getTwilioBusinessClient } from '@/lib/twilio-client';
 import { logTwilioError } from '@/lib/twilio-logging';
 import { provisionPhoneNumber } from '@/lib/twilio-provision';
@@ -21,17 +22,24 @@ async function getBusinessForOwner() {
 }
 
 async function saveBusinessTwilioNumber(businessId: string, params: { phoneNumber: string | null; phoneNumberSid: string; syncedAt: Date }) {
+  const normalizedPhoneNumber = normalizePhoneNumber(params.phoneNumber);
   await db.business.update({
     where: { id: businessId },
     data: {
-      twilioPhoneNumber: normalizePhoneNumber(params.phoneNumber),
+      twilioPhoneNumber: normalizedPhoneNumber,
       twilioPhoneNumberSid: params.phoneNumberSid,
+      twilioPrimaryPhoneNumber: normalizedPhoneNumber,
+      twilioPrimaryNumberSid: params.phoneNumberSid,
       twilioWebhookSyncedAt: params.syncedAt,
     },
   });
 }
 
 export async function saveBusinessSettingsAction(formData: FormData) {
+  if (await isPreviewReviewSessionActive()) {
+    redirect('/app/settings?error=Preview%20Review%20Mode%20is%20read-only');
+  }
+
   const business = await getBusinessForOwner();
   const parsed = businessSettingsSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
@@ -54,18 +62,23 @@ export async function saveBusinessSettingsAction(formData: FormData) {
 
   revalidatePath('/app/settings');
   revalidatePath('/app/leads');
+  revalidatePath('/app/call-flow');
   redirect('/app/settings?saved=1');
 }
 
 export async function buyTwilioNumberAction(formData: FormData) {
+  if (await isPreviewReviewSessionActive()) {
+    redirect('/app/settings?error=Preview%20Review%20Mode%20is%20read-only');
+  }
+
   const business = await getBusinessForOwner();
   const parsed = buyNumberSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     redirect('/app/settings?error=Invalid%20area%20code');
   }
 
-  if (business.twilioPhoneNumber) {
-    redirect('/app/settings?error=This%20business%20already%20has%20a%20Twilio%20number');
+  if (business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber) {
+    redirect('/app/settings?error=This%20business%20already%20has%20a%20texting%20line');
   }
 
   const correlationId = `settings_buy_${business.id}`;
@@ -87,11 +100,12 @@ export async function buyTwilioNumberAction(formData: FormData) {
       },
       error
     );
-    const message = error instanceof Error ? error.message : 'Failed to buy number';
+    const message = error instanceof Error ? error.message : 'Failed to provision business texting line';
     redirect(`/app/settings?error=${encodeURIComponent(message)}`);
   }
 
   revalidatePath('/app/settings');
+  revalidatePath('/app/call-flow');
   redirect('/app/settings?numberBought=1');
 }
 
@@ -100,15 +114,19 @@ export async function connectExistingTwilioNumberAction(formData: FormData) {
   redirect(
     '/app/settings?error=' +
       encodeURIComponent(
-        'Existing Twilio numbers are connected manually during founder-led pilots so shared account inventory is not exposed in self-serve settings.'
+        'Existing numbers are connected manually during white-glove launches so shared platform inventory stays off the self-serve settings page.'
       )
   );
 }
 
 export async function resyncTwilioWebhooksAction() {
+  if (await isPreviewReviewSessionActive()) {
+    redirect('/app/settings?error=Preview%20Review%20Mode%20is%20read-only');
+  }
+
   const business = await getBusinessForOwner();
   if (!business.twilioPhoneNumberSid) {
-    redirect('/app/settings?error=No%20Twilio%20number%20is%20assigned%20to%20this%20business');
+    redirect('/app/settings?error=No%20business%20texting%20line%20is%20assigned%20to%20this%20business');
   }
 
   try {
@@ -122,10 +140,11 @@ export async function resyncTwilioWebhooksAction() {
       syncedAt,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to sync Twilio webhooks';
+    const message = error instanceof Error ? error.message : 'Failed to refresh managed texting setup';
     redirect(`/app/settings?error=${encodeURIComponent(message)}`);
   }
 
   revalidatePath('/app/settings');
+  revalidatePath('/app/call-flow');
   redirect('/app/settings?twilioSynced=1');
 }

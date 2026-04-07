@@ -8,11 +8,12 @@ import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { formatDateTime, getLeadCallbackState, getLeadLastActivityAt, getLeadStatusBadgeVariant, leadStatusLabels } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getPortfolioDemoLeadDetail, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getPortfolioDemoLeadDetail, getPortfolioDemoLeads } from '@/lib/portfolio-demo';
+import { getDemoWorkspaceMode } from '@/lib/review-mode';
 
 export default async function ConversationsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
-  const demoMode = isPortfolioDemoMode();
+  const demoMode = Boolean(await getDemoWorkspaceMode());
   const leads = demoMode
     ? getPortfolioDemoLeads(null).filter((lead) => lead.lastInboundAt || lead.lastOutboundAt)
     : await db.lead.findMany({
@@ -51,7 +52,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
           <Badge variant="outline">Conversations</Badge>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Lead conversations</h1>
-            <p className="text-sm text-muted-foreground">Review the latest thread first, then jump back to callback actions.</p>
+            <p className="text-sm text-muted-foreground">Review the latest replies first, then jump back to the lead that is most likely to close.</p>
           </div>
         </div>
         <Link className={buttonVariants({ variant: 'outline' })} href="/app/leads">
@@ -63,7 +64,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
         <Card className="bg-card/90">
           <CardHeader>
             <CardTitle>Open conversations</CardTitle>
-            <CardDescription>{leads.length} conversation{leads.length === 1 ? '' : 's'} with activity</CardDescription>
+            <CardDescription>{leads.length} conversation{leads.length === 1 ? '' : 's'} where a missed caller texted back</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {leads.length === 0 ? (

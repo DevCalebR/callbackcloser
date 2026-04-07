@@ -2,10 +2,10 @@ import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
 import { db } from '@/lib/db';
-import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { isDemoWorkspaceActive } from '@/lib/review-mode';
 
 export default async function AppIndexPage() {
-  if (isPortfolioDemoMode()) {
+  if (await isDemoWorkspaceActive()) {
     redirect('/app/leads');
   }
 

@@ -9,7 +9,7 @@ const outreachInputs = [
   'Business name and service type',
   'Primary service area or ZIP codes served',
   'Approximate missed-call volume or after-hours load',
-  'Whether you already use Twilio or need number setup help',
+  'Whether you need a new business texting line, number porting, or extra numbers',
 ];
 
 export default function ContactPage() {
@@ -41,7 +41,7 @@ export default function ContactPage() {
                 </a>
               </p>
               <p>If you are already ready to try the product, you can also create an account and complete the in-app setup flow.</p>
-              <p>If you are an active pilot customer, include your business name, Twilio number, and the recent call or SMS time when reporting an issue.</p>
+              <p>If you are an active pilot customer, include your business name, texting line, and the recent call or SMS time when reporting an issue.</p>
               <p>
                 For SMS consent, STOP or HELP behavior, or public trust-page questions, email support and reference{' '}
                 <span className="font-medium text-foreground">callbackcloser.com</span> so we can match the request to the live pilot setup.

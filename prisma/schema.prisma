@@ -21,6 +21,19 @@ model Business {
   timezone                    String             @default("America/New_York")
   twilioPhoneNumber           String?            @unique
   twilioPhoneNumberSid        String?            @unique
+  twilioMessagingServiceSid   String?            @unique
+  twilioPrimaryNumberSid      String?            @unique
+  twilioPrimaryPhoneNumber    String?            @unique
+  a2pCustomerProfileSid       String?            @unique
+  a2pBrandSid                 String?            @unique
+  a2pCampaignSid              String?            @unique
+  managedTwilioStatus         ManagedTwilioStatus @default(DRAFT)
+  managedTwilioStatusUpdatedAt DateTime?
+  a2pFailureReason            String?
+  twilioProvisioningStartedAt DateTime?
+  twilioProvisionedAt         DateTime?
+  a2pSubmittedAt              DateTime?
+  a2pApprovedAt               DateTime?
   stripeCustomerId            String?            @unique
   stripeSubscriptionId        String?
   stripePriceId               String?
@@ -185,4 +198,15 @@ enum MessageDirection {
 enum MessageParticipant {
   LEAD
   OWNER
+}
+
+enum ManagedTwilioStatus {
+  DRAFT
+  PROVISIONING
+  AWAITING_BUSINESS_VERIFICATION
+  BRAND_SUBMITTED
+  CAMPAIGN_SUBMITTED
+  COMPLIANT_LIVE
+  PAUSED_NONCOMPLIANT
+  FAILED_REVIEW
 }

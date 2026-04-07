@@ -16,7 +16,15 @@ const navItems = [
   { href: '/app/billing', label: 'Billing' },
 ];
 
-export function AppNav({ business, demoMode = false }: { business: Business | null; demoMode?: boolean }) {
+export function AppNav({
+  business,
+  demoMode = false,
+  demoLabel = 'Demo Workspace',
+}: {
+  business: Business | null;
+  demoMode?: boolean;
+  demoLabel?: string;
+}) {
   const pathname = usePathname();
 
   return (
@@ -52,7 +60,7 @@ export function AppNav({ business, demoMode = false }: { business: Business | nu
           {business && <p className="hidden text-sm text-muted-foreground sm:block">{business.name}</p>}
           {demoMode ? (
             <div className="rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
-              Demo Workspace
+              {demoLabel}
             </div>
           ) : (
             <UserButton afterSignOutUrl="/" />

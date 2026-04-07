@@ -6,43 +6,56 @@ import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { getLiveSmokeReadiness } from '@/lib/live-smoke-readiness';
+import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getDemoWorkspaceMode } from '@/lib/review-mode';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
-import { describeUsageLimit, getConversationUsageForBusiness, isConversationLimitReached } from '@/lib/usage';
 
 export default async function CallFlowPage() {
   const business = await requireBusiness();
-  const demoMode = isPortfolioDemoMode();
+  const demoMode = Boolean(await getDemoWorkspaceMode());
   const billingAccess = getBusinessBillingAccessState(business);
   const ownerNotifyPhoneOptedOut =
     demoMode || !business.notifyPhone
       ? false
       : await isSmsRecipientOptedOut({ businessId: business.id, phone: business.notifyPhone });
-  const usage = demoMode || !billingAccess.billingActive ? null : await getConversationUsageForBusiness(business);
-  const conversationLimitReached = usage ? isConversationLimitReached(usage) : undefined;
   const successfulLeadCount = demoMode
     ? 1
     : await db.lead.count({ where: { businessId: business.id, ownerNotifiedAt: { not: null } } });
-
-  const readiness = getLiveSmokeReadiness({
-    demoModeEnabled: demoMode,
-    hasForwardingNumber: Boolean(business.forwardingNumber),
-    hasNotifyPhone: Boolean(business.notifyPhone),
-    ownerNotifyPhoneOptedOut,
-    hasActiveSubscription: billingAccess.billingActive,
-    conversationLimitReached,
-    usageSummary: usage ? describeUsageLimit(usage) : undefined,
-    hasTwilioNumber: Boolean(business.twilioPhoneNumber),
-    hasTwilioNumberSid: Boolean(business.twilioPhoneNumberSid),
-    hasWebhookConfig: Boolean(business.twilioPhoneNumber),
-    hasWebhookSync: Boolean(business.twilioWebhookSyncedAt),
-    hasTwilioAccountAccess: true,
-    canVerifyAssignedTwilioNumber: Boolean(business.twilioPhoneNumberSid),
-    hasAssignedTwilioNumberInAccount: Boolean(business.twilioPhoneNumber),
-  });
+  const managedTextingNumber = getManagedTextingNumber(business);
+  const managedTwilioSummary = getManagedTwilioStatusSummary(business);
+  const readiness = {
+    ready:
+      Boolean(business.forwardingNumber) &&
+      Boolean(managedTextingNumber) &&
+      managedTwilioSummary.messagingServiceReady &&
+      Boolean(business.notifyPhone) &&
+      !ownerNotifyPhoneOptedOut &&
+      billingAccess.billingActive,
+    blockers: [
+      !managedTextingNumber ? { key: 'texting_line', label: 'Texting line', detail: 'CallbackCloser still needs to provision your business texting line.' } : null,
+      !business.forwardingNumber ? { key: 'routing', label: 'Routing setup', detail: 'Add the business line that should still ring when new calls come in.' } : null,
+      !managedTwilioSummary.messagingServiceReady
+        ? { key: 'messaging', label: 'Messaging service', detail: 'Managed messaging is still being configured for this workspace.' }
+        : null,
+      !managedTwilioSummary.complianceReady
+        ? { key: 'compliance', label: 'Compliance review', detail: managedTwilioSummary.description }
+        : null,
+      !business.notifyPhone || ownerNotifyPhoneOptedOut
+        ? {
+            key: 'owner_alerts',
+            label: 'Owner alerts',
+            detail: !business.notifyPhone
+              ? 'Add the owner mobile number so lead summaries reach the right phone.'
+              : 'The owner alert number is opted out and needs to reply START before go-live.'
+          }
+        : null,
+      !billingAccess.billingActive
+        ? { key: 'billing', label: 'Billing', detail: 'Activate billing so auto-texting can stay live on missed calls.' }
+        : null,
+    ].filter(Boolean) as Array<{ key: string; label: string; detail: string }>,
+  };
 
   const setupItems = [
     {
@@ -55,11 +68,25 @@ export default async function CallFlowPage() {
     },
     {
       key: 'twilio',
-      label: 'Twilio line connected',
-      detail: business.twilioPhoneNumber
-        ? `Inbound line ${formatPhoneForDisplay(business.twilioPhoneNumber)} is assigned.`
-        : 'Assign or buy the inbound number that callers will reach.',
-      complete: Boolean(business.twilioPhoneNumber),
+      label: 'Texting line assigned',
+      detail: managedTextingNumber
+        ? `Your texting line is ${formatPhoneForDisplay(managedTextingNumber)}.`
+        : 'CallbackCloser still needs to provision your business texting line.',
+      complete: Boolean(managedTextingNumber),
+    },
+    {
+      key: 'messaging',
+      label: 'Messaging service active',
+      detail: managedTwilioSummary.messagingServiceReady
+        ? 'Managed messaging is connected to the business texting line.'
+        : 'Managed messaging is still being configured.',
+      complete: managedTwilioSummary.messagingServiceReady,
+    },
+    {
+      key: 'compliance',
+      label: managedTwilioSummary.complianceReady ? 'Compliance approved' : 'Compliance review in progress',
+      detail: managedTwilioSummary.description,
+      complete: managedTwilioSummary.complianceReady,
     },
     {
       key: 'owner-alert',
@@ -83,21 +110,21 @@ export default async function CallFlowPage() {
 
   const flowSteps = [
     {
-      title: 'Inbound call hits your CallbackCloser number',
-      detail: business.twilioPhoneNumber
-        ? `Calls arrive on ${formatPhoneForDisplay(business.twilioPhoneNumber)} before routing to the business line.`
-        : 'Assign a Twilio number so CallbackCloser can catch the missed call.',
+      title: 'A caller reaches your business texting line',
+      detail: managedTextingNumber
+        ? `Calls hit ${formatPhoneForDisplay(managedTextingNumber)} so CallbackCloser can catch the missed-call moment.`
+        : 'CallbackCloser still needs to provision the business texting line that will cover missed calls.',
     },
     {
-      title: 'CallbackCloser detects the missed call',
-      detail: `Current missed-call timeout is ${business.missedCallSeconds} seconds before follow-up logic starts.`,
+      title: 'CallbackCloser sees the missed call',
+      detail: `Current missed-call timeout is ${business.missedCallSeconds} seconds before the recovery flow starts.`,
     },
     {
-      title: 'SMS qualification collects the details',
-      detail: 'The current flow asks for service type, urgency, ZIP, callback timing, and optional name.',
+      title: 'The caller gets a text right away',
+      detail: 'The conversation collects the service type, urgency, ZIP, callback timing, and optional name without extra admin work.',
     },
     {
-      title: 'Owner receives the handoff',
+      title: 'You get the handoff ready to call',
       detail: business.notifyPhone
         ? `Qualified lead summaries are routed to ${formatPhoneForDisplay(business.notifyPhone)}.`
         : 'Add an owner mobile number so the summary can be delivered.',
@@ -111,14 +138,14 @@ export default async function CallFlowPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Call flow and activation</h1>
           <p className="text-sm text-muted-foreground">
-            See how the missed-call route works, what is live already, and what still blocks a confident first test.
+            See how missed calls turn into ready-to-call leads, what is live already, and what still blocks a confident first test.
           </p>
         </div>
       </div>
 
       <SetupChecklist
         title="Activation checklist"
-        description="The fastest path to value is still: connect routing, confirm SMS, verify owner alerts, then run the test call."
+        description="The fastest path to value is still: get the texting line live, confirm routing, verify owner alerts, then run the missed-call test."
         items={setupItems}
       />
 
@@ -126,7 +153,7 @@ export default async function CallFlowPage() {
         <Card className="bg-card/90">
           <CardHeader>
             <CardTitle>Current call flow</CardTitle>
-            <CardDescription>Operational steps from missed call to owner handoff.</CardDescription>
+            <CardDescription>Business-facing steps from missed call to owner handoff.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {flowSteps.map((step, index) => (
@@ -148,7 +175,7 @@ export default async function CallFlowPage() {
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             {readiness.ready ? (
               <div className="rounded-xl border border-accent/40 bg-accent/20 p-4">
-                Routing, notifications, and billing look ready. Run the missed-call test and confirm the owner alert lands.
+                Routing, notifications, billing, and managed setup look ready. Run the missed-call test and confirm the owner alert lands.
               </div>
             ) : (
               <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-destructive">

@@ -17,11 +17,15 @@ import {
   leadStatusLabels,
 } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getPortfolioDemoLeadDetail, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getPortfolioDemoLeadDetail } from '@/lib/portfolio-demo';
+import { getDemoWorkspaceMode } from '@/lib/review-mode';
 
 export default async function LeadDetailPage({ params, searchParams }: { params: { leadId: string }; searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
-  const lead = isPortfolioDemoMode()
+  const demoWorkspaceMode = await getDemoWorkspaceMode();
+  const demoMode = Boolean(demoWorkspaceMode);
+  const readOnlyPreviewMode = demoWorkspaceMode === 'preview_review';
+  const lead = demoMode
     ? getPortfolioDemoLeadDetail(params.leadId)
     : await db.lead.findFirst({
         where: { id: params.leadId, businessId: business.id },
@@ -49,7 +53,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
           </Link>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone)}</h1>
-            <p className="text-sm text-muted-foreground">Lead detail and full conversation history.</p>
+            <p className="text-sm text-muted-foreground">Everything captured before the callback so the next call can focus on booking the work.</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -96,7 +100,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
                 <input type="hidden" name="leadId" value={lead.id} />
                 <input type="hidden" name="status" value="CONTACTED" />
                 <input type="hidden" name="redirectTo" value={`/app/leads/${lead.id}`} />
-                <Button className="w-full" type="submit" variant="outline">
+                <Button className="w-full" type="submit" variant="outline" disabled={readOnlyPreviewMode}>
                   Mark Contacted
                 </Button>
               </form>
@@ -104,7 +108,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
                 <input type="hidden" name="leadId" value={lead.id} />
                 <input type="hidden" name="status" value="BOOKED" />
                 <input type="hidden" name="redirectTo" value={`/app/leads/${lead.id}`} />
-                <Button className="w-full" type="submit">
+                <Button className="w-full" type="submit" disabled={readOnlyPreviewMode}>
                   Mark Booked
                 </Button>
               </form>
@@ -112,7 +116,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
                 <input type="hidden" name="leadId" value={lead.id} />
                 <input type="hidden" name="status" value="LOST" />
                 <input type="hidden" name="redirectTo" value={`/app/leads/${lead.id}`} />
-                <Button className="w-full" type="submit" variant="destructive">
+                <Button className="w-full" type="submit" variant="destructive" disabled={readOnlyPreviewMode}>
                   Mark Lost
                 </Button>
               </form>
@@ -125,7 +129,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
           <Card>
             <CardHeader>
               <CardTitle>Call record</CardTitle>
-              <CardDescription>Voice metadata for the missed-call event.</CardDescription>
+              <CardDescription>The missed-call event that started this recovery flow.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               {lead.call ? (
