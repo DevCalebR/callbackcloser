@@ -188,7 +188,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Billing and usage visibility</h1>
             <p className="text-sm text-muted-foreground">
-              Make the current plan, payment state, and usage readable in under 20 seconds so billing never feels hidden.
+              Make your plan, payment state, and usage clear in under 20 seconds so billing never feels like a surprise.
             </p>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -243,7 +243,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className="border-destructive/30 bg-destructive/5">
           <CardHeader>
             <CardTitle>Billing needs attention now</CardTitle>
-            <CardDescription>This state is intentionally impossible to miss.</CardDescription>
+            <CardDescription>This warning is designed to be impossible to miss.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p>
@@ -273,7 +273,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <CardTitle>Current billing summary</CardTitle>
-              <CardDescription>Stripe remains the source of truth, but this page should still be readable at a glance.</CardDescription>
+              <CardDescription>Stripe remains the source of truth, but this page should still be easy for a business owner to scan.</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant={subscriptionActive ? 'success' : 'outline'}>{billingStatusLabel}</Badge>
@@ -312,7 +312,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
       <Card className={automationBlockReason === 'none' ? 'border-accent/40 bg-accent/20' : 'border-primary/20 bg-primary/5'}>
         <CardHeader>
           <CardTitle>Automation status</CardTitle>
-          <CardDescription>Why missed-call SMS follow-up is currently running or paused.</CardDescription>
+          <CardDescription>Whether missed-call follow-up is actively protecting revenue right now.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p>{automationStatusMessage}</p>
@@ -326,7 +326,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className={requestedPlan === 'starter' ? 'border-primary/40 bg-primary/5' : 'bg-card/90'}>
           <CardHeader>
             <CardTitle>Starter</CardTitle>
-            <CardDescription>Missed-call recovery, SMS qualification, owner alerts, and dashboard visibility.</CardDescription>
+            <CardDescription>Cover missed calls, qualify the lead, and get the owner a clear next call.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>{planPrice(starterPriceId)}</p>
@@ -345,7 +345,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className={requestedPlan === 'growth' ? 'border-primary/40 bg-primary/5' : 'bg-card/90'}>
           <CardHeader>
             <CardTitle>Growth</CardTitle>
-            <CardDescription>Higher conversation volume and more rollout support for teams with busier inbound traffic.</CardDescription>
+            <CardDescription>More follow-up capacity and more rollout help for teams with busier inbound traffic.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>{planPrice(growthPriceId)}</p>

@@ -177,7 +177,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Recovered leads dashboard</h1>
             <p className="text-sm text-muted-foreground">
-              Prioritize callback-ready leads, review the conversation, and move the outcome forward fast.
+              See which missed callers are worth calling first and move them toward booked work faster.
             </p>
           </div>
         </div>
@@ -221,7 +221,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
         <CardHeader>
           <CardTitle>Recovered lead pipeline</CardTitle>
           <CardDescription>
-            {filteredLeads.length} visible lead{filteredLeads.length === 1 ? '' : 's'} · {usageTierLabel} plan · {usageSummary}
+            {filteredLeads.length} visible lead{filteredLeads.length === 1 ? '' : 's'} ready for follow-up · {usageTierLabel} plan · {usageSummary}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
@@ -244,7 +244,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
         <Card className="overflow-hidden bg-card/90">
           <CardHeader>
             <CardTitle>Recovered leads</CardTitle>
-            <CardDescription>Click a row to open the right-side detail panel and take action.</CardDescription>
+            <CardDescription>Open a lead on the right, see what they need, and decide the next move quickly.</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="min-w-full text-sm">

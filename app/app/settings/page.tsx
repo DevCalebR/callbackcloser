@@ -177,7 +177,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Business settings and activation</h1>
             <p className="text-sm text-muted-foreground">
-              Configure routing, SMS behavior, owner alerts, and trust links without hunting through separate setup screens.
+              Get your missed-call coverage live without digging through setup screens or guessing what comes next.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -204,14 +204,14 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
       <SetupChecklist
         title="Setup checklist"
-        description="The fastest route to first value is still: connect phone routing, verify SMS, verify owner alerts, then run the missed-call test."
+        description="The fastest route to first value is simple: cover the missed call, confirm the text, verify alerts, then run the test."
         items={checklistItems}
       />
 
       <Card className={liveSmokeReadiness.ready ? 'border-accent/40 bg-accent/20' : 'border-primary/20 bg-primary/5'}>
         <CardHeader>
           <CardTitle>Activation guidance</CardTitle>
-          <CardDescription>Use these prompts to get to the first successful missed-call test quickly.</CardDescription>
+          <CardDescription>Use these prompts to get to the first successful missed-call handoff quickly.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 lg:grid-cols-3">
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
@@ -225,7 +225,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
             <p className="font-medium">Confirm your SMS template</p>
             <p className="mt-2 text-muted-foreground">
-              Check the first reply and qualification questions below so the lead handoff matches your business workflow.
+              Check the first reply and lead questions below so the handoff feels right for your business.
             </p>
           </div>
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
@@ -277,7 +277,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <Card className="bg-card/90">
               <CardHeader>
                 <CardTitle>2. Phone and Routing</CardTitle>
-                <CardDescription>Inbound line, forwarding destination, and missed-call detection readiness.</CardDescription>
+                <CardDescription>Make sure missed callers get covered and the right phone still rings.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -347,7 +347,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <Card className="bg-card/90">
               <CardHeader>
                 <CardTitle>3. SMS Behavior</CardTitle>
-                <CardDescription>What the lead sees first and how qualification proceeds.</CardDescription>
+                <CardDescription>What the caller sees first and how their lead gets qualified.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid gap-4 md:grid-cols-3">
@@ -409,7 +409,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <Card className="bg-card/90">
               <CardHeader>
                 <CardTitle>4. Owner Notifications</CardTitle>
-                <CardDescription>Where the ready-to-call handoff goes and how it is formatted.</CardDescription>
+                <CardDescription>Where the ready-to-close handoff goes and what the owner sees.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div>
@@ -482,7 +482,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <Card className="bg-card/90">
               <CardHeader>
                 <CardTitle>Twilio number and webhooks</CardTitle>
-                <CardDescription>Buy a number, confirm the current assignment, and keep webhook URLs visible.</CardDescription>
+                <CardDescription>Buy a number, confirm the current assignment, and keep the call-routing links in sync.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-xl border bg-muted/20 p-4 text-sm">

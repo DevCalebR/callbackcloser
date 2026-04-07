@@ -9,40 +9,40 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 const pricingPlans = [
   {
     name: 'Starter',
-    summary: 'For owner-operators who need missed-call recovery live fast.',
+    summary: 'For owner-operators who want missed calls turning back into paying jobs quickly.',
     details: [
-      'Missed-call capture and fast SMS follow-up',
-      'Lead qualification and owner alert handoff',
-      'Protected leads dashboard and billing visibility',
-      'White-glove pilot onboarding to get live cleanly',
+      'Text missed callers before they move on',
+      'Get a qualified lead instead of a dead voicemail',
+      'See recovered leads and follow-up status clearly',
+      'White-glove pilot onboarding to get live quickly',
     ],
   },
   {
     name: 'Growth',
-    summary: 'For growing service teams that need more follow-up capacity and clearer handoff management.',
+    summary: 'For growing service teams that need to protect more revenue from missed calls.',
     details: [
       'Everything in Starter',
-      'Higher conversation capacity for busier inbound volume',
-      'Priority rollout help for phone routing and notification tuning',
-      'Clearer billing visibility and upgrade path as usage grows',
+      'More follow-up capacity for busier inbound volume',
+      'Priority rollout help so missed calls stay covered',
+      'Clear billing visibility as usage grows',
     ],
   },
   {
     name: 'Agency / Multi-location',
-    summary: 'For operators running multiple locations, brands, or client accounts.',
+    summary: 'For operators covering multiple locations, brands, or client accounts.',
     details: [
       'Multi-location rollout planning',
-      'Packaging guidance for multiple phone flows',
-      'Custom onboarding and deployment sequencing',
+      'Hands-on guidance for multiple phone lines',
+      'Custom onboarding and launch sequencing',
       'Contact sales before activation',
     ],
   },
 ];
 
 const clarityPoints = [
-  'Current plan, next billing date, usage, and portal access live inside the app.',
-  'If billing is inactive, lead capture can remain visible while automated SMS follow-up is paused.',
-  'If usage caps are reached, the app warns clearly instead of hiding the state.',
+  'See your current plan, next billing date, and usage clearly inside the app.',
+  'If billing is inactive, you still see captured leads while auto-texting is paused.',
+  'If usage is capped, the app tells you plainly instead of leaving you guessing.',
 ];
 
 export default function PricingPage() {
@@ -55,7 +55,7 @@ export default function PricingPage() {
           <Badge variant="outline">Transparent packaging</Badge>
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Simple pricing for missed-call recovery</h1>
           <p className="text-lg text-muted-foreground">
-            CallbackCloser is packaged so owners can understand the rollout path, the plan tiers, and the billing expectations quickly.
+            CallbackCloser is priced so business owners can understand the value quickly: protect more missed-call revenue without adding more office admin.
           </p>
           <p className="text-sm text-muted-foreground">
             Exact checkout pricing is still confirmed in Stripe for this environment, but the public structure stays simple:
@@ -95,11 +95,11 @@ export default function PricingPage() {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <Card className="bg-card/90">
-            <CardHeader>
-              <CardTitle>Billing clarity inside the app</CardTitle>
-              <CardDescription>The in-app billing page is designed to remove fear of hidden telecom costs.</CardDescription>
-            </CardHeader>
+            <Card className="bg-card/90">
+              <CardHeader>
+                <CardTitle>Billing clarity inside the app</CardTitle>
+                <CardDescription>The billing page is designed to remove the fear of hidden costs and surprise pauses.</CardDescription>
+              </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               {clarityPoints.map((point) => (
                 <div key={point} className="rounded-2xl border bg-background/80 p-4">
@@ -109,11 +109,11 @@ export default function PricingPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-card/90">
-            <CardHeader>
-              <CardTitle>Trust and compliance</CardTitle>
-              <CardDescription>Premium presentation does not mean hiding the guardrails.</CardDescription>
-            </CardHeader>
+            <Card className="bg-card/90">
+              <CardHeader>
+                <CardTitle>Trust and compliance</CardTitle>
+                <CardDescription>Trust stays visible without turning the page into policy copy.</CardDescription>
+              </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               <p>Public pricing, contact, privacy, terms, refund, and SMS consent pages remain visible before activation.</p>
               <p>STOP, START, and HELP handling remain part of the live messaging flow, and the consent page stays public.</p>

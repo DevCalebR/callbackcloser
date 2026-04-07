@@ -8,35 +8,58 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 const roiPoints = [
   {
-    title: 'Respond in seconds',
-    description: 'Missed callers hear back right away instead of calling the next shop on the list.',
+    title: 'Reply before they move on',
+    description: 'Missed callers hear back fast instead of calling the next business on the list.',
   },
   {
-    title: 'Capture lead details automatically',
-    description: 'Service type, urgency, ZIP, and callback timing are collected without manual texting.',
+    title: 'Get the details without chasing them',
+    description: 'You get the job type, urgency, ZIP, and callback timing without manually texting back and forth.',
   },
   {
-    title: 'Alert the owner immediately',
-    description: 'Qualified leads are handed off with a ready-to-call summary instead of a raw voicemail trail.',
+    title: 'Know who is worth calling first',
+    description: 'Qualified leads are handed off with a ready-to-close summary instead of a cold voicemail.',
   },
   {
-    title: 'Cover the monthly cost with one job',
-    description: 'For most service businesses, a single recovered repair or install more than pays for the software.',
+    title: 'One extra job can cover the cost',
+    description: 'For most service businesses, a single recovered repair or install pays for CallbackCloser.',
+  },
+];
+
+const painPoints = [
+  {
+    title: 'Every missed call can become a lost job',
+    description: 'When the phone rings and nobody answers, that customer usually needs help now, not tomorrow.',
+  },
+  {
+    title: 'Customers move on fast',
+    description: 'If they do not hear back quickly, they call the next shop and you never get the chance to close them.',
+  },
+  {
+    title: 'Voicemail rarely saves the lead',
+    description: 'Most callers do not leave enough detail to help you call back with confidence, if they leave one at all.',
+  },
+  {
+    title: 'Most owners never see the lost revenue',
+    description: 'Missed calls feel small until you add up how many booked jobs disappear every month.',
   },
 ];
 
 const workflowSteps = [
   {
-    title: 'Missed call comes in',
-    description: 'Your Twilio number logs the missed call and starts follow-up without waiting on office staff.',
+    title: 'A customer calls and you miss it',
+    description: 'The lead does not have to sit in voicemail while your team is on jobs or with other customers.',
   },
   {
-    title: 'SMS qualification starts',
-    description: 'CallbackCloser texts back in seconds and collects the details your team actually needs.',
+    title: 'CallbackCloser texts them right away',
+    description: 'They hear back in seconds, not hours, so you stay in the running for the job.',
   },
   {
-    title: 'Owner gets the handoff',
-    description: 'You receive a summary with urgency, ZIP, and callback timing so follow-up is faster and cleaner.',
+    title: 'We find out what they need',
+    description: 'The conversation captures the job type, urgency, and location without your team doing the back-and-forth.',
+  },
+  {
+    title: 'You get a qualified lead to follow up with',
+    description: 'You get a ready-to-close handoff so the next call is focused on booking the job.',
   },
 ];
 
@@ -84,22 +107,22 @@ const screenshotCards = [
 const planTeasers = [
   {
     name: 'Starter',
-    description: 'Recover missed calls, qualify by SMS, and notify the owner without hidden setup friction.',
+    description: 'Start turning missed calls into real opportunities without adding more admin work.',
   },
   {
     name: 'Growth',
-    description: 'More volume, more follow-up capacity, and a cleaner handoff for growing service teams.',
+    description: 'Handle more missed-call opportunities and keep follow-up clean as your team gets busier.',
   },
   {
     name: 'Agency / Multi-location',
-    description: 'Founder-led rollout planning for teams managing multiple brands or locations.',
+    description: 'Hands-on rollout planning for teams covering multiple brands or locations.',
   },
 ];
 
 const onboardingSteps = [
-  'Connect your phone routing and verify the number that should ring first.',
-  'Confirm the first SMS reply and qualification flow before live traffic starts.',
-  'Verify owner notifications and run a missed-call test so your team sees the full handoff.',
+  'We help connect your phone routing so missed callers are covered fast.',
+  'We confirm the first text and lead questions before live traffic starts.',
+  'We verify owner notifications and run a missed-call test with you before go-live.',
 ];
 
 export default function LandingPage() {
@@ -115,11 +138,10 @@ export default function LandingPage() {
                 <Badge variant="outline">Built for service businesses that lose jobs to missed calls</Badge>
                 <div className="space-y-4">
                   <h1 className="max-w-4xl text-4xl font-semibold tracking-tight sm:text-5xl">
-                    Recover missed calls before they become lost jobs
+                    Stop losing jobs from missed calls
                   </h1>
                   <p className="max-w-2xl text-lg text-muted-foreground">
-                    CallbackCloser texts missed callers in seconds, qualifies the lead, and sends you a ready-to-call
-                    summary.
+                    CallbackCloser texts missed callers instantly, qualifies them, and sends you a ready-to-close lead.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -134,11 +156,12 @@ export default function LandingPage() {
                   </Link>
                 </div>
                 <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                  <span className="rounded-full border bg-card px-3 py-1">Fast missed-call response</span>
-                  <span className="rounded-full border bg-card px-3 py-1">Less admin follow-up</span>
-                  <span className="rounded-full border bg-card px-3 py-1">Owner-ready lead summaries</span>
-                  <span className="rounded-full border bg-card px-3 py-1">Visible trust pages and SMS compliance</span>
+                  <span className="rounded-full border bg-card px-3 py-1">Reply in seconds</span>
+                  <span className="rounded-full border bg-card px-3 py-1">Recover more jobs</span>
+                  <span className="rounded-full border bg-card px-3 py-1">Ready-to-close leads</span>
+                  <span className="rounded-full border bg-card px-3 py-1">Less admin chasing</span>
                 </div>
+                <p className="text-base font-medium text-foreground">Close one extra job and this can pay for itself.</p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -153,8 +176,8 @@ export default function LandingPage() {
 
             <Card className="overflow-hidden border-primary/20 bg-card/95 shadow-lg">
               <CardHeader className="border-b bg-gradient-to-r from-primary/10 via-background to-secondary/40">
-                <CardTitle>What the owner sees</CardTitle>
-                <CardDescription>Faster response, less admin, and a cleaner handoff back to the business.</CardDescription>
+                <CardTitle>What you get back</CardTitle>
+                <CardDescription>Faster response, fewer cold leads, and a clearer path to closing the job.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 p-6 text-sm">
                 <div className="rounded-2xl border bg-muted/40 p-4">
@@ -170,7 +193,7 @@ export default function LandingPage() {
                     <Badge variant="secondary">Auto-text sent</Badge>
                   </div>
                   <p className="text-muted-foreground">
-                    CallbackCloser replies right away, asks what service is needed, and keeps the conversation moving.
+                    CallbackCloser replies right away so the customer does not disappear before you can get back to them.
                   </p>
                 </div>
                 <div className="rounded-2xl border bg-muted/40 p-4">
@@ -179,7 +202,7 @@ export default function LandingPage() {
                     <Badge variant="secondary">Lead qualified</Badge>
                   </div>
                   <p className="text-muted-foreground">
-                    Service type, urgency, ZIP, and callback time are collected automatically instead of sitting in voicemail.
+                    The job type, urgency, ZIP, and callback timing come in before you even make the next call.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-accent/40 bg-accent/20 p-4">
@@ -187,9 +210,9 @@ export default function LandingPage() {
                     <p className="font-medium">2:16 PM</p>
                     <Badge variant="success">Owner alert sent</Badge>
                   </div>
-                  <p className="font-medium">Ready-to-call summary</p>
+                  <p className="font-medium">Ready-to-close lead</p>
                   <p className="mt-2 text-muted-foreground">
-                    AC repair, urgent today, ZIP 78660, asked for an afternoon callback. Your team can call back with context instead of chasing details.
+                    AC repair, urgent today, ZIP 78660, asked for an afternoon callback. Your team can call back ready to book the job, not hunt for details.
                   </p>
                 </div>
               </CardContent>
@@ -197,17 +220,39 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <section className="border-y bg-muted/20">
+          <div className="container space-y-6 py-16">
+            <div className="max-w-2xl space-y-3">
+              <Badge variant="outline">The real problem</Badge>
+              <h2 className="text-3xl font-semibold tracking-tight">Most missed calls are not just missed calls</h2>
+              <p className="text-muted-foreground">
+                They are missed estimates, missed repairs, missed installs, and missed revenue you never get a clean chance to win back.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {painPoints.map((point) => (
+                <Card key={point.title} className="bg-card/90">
+                  <CardHeader>
+                    <CardTitle>{point.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">{point.description}</CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="container space-y-6 py-16" id="how-it-works">
           <div className="max-w-2xl space-y-3">
-            <Badge variant="outline">Outcome-first workflow</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight">Built to recover revenue, not add another inbox</h2>
+            <Badge variant="outline">Simple follow-up</Badge>
+            <h2 className="text-3xl font-semibold tracking-tight">What happens when you miss a call</h2>
             <p className="text-muted-foreground">
-              CallbackCloser is designed for owners who miss calls because they are busy running jobs. The goal is simple:
-              respond fast, collect what matters, and make the callback obvious.
+              CallbackCloser keeps the handoff simple so you can focus on calling back the right lead and closing the work.
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {workflowSteps.map((step, index) => (
               <Card key={step.title} className="bg-card/85">
                 <CardHeader>
@@ -224,10 +269,9 @@ export default function LandingPage() {
           <div className="container space-y-8 py-16">
             <div className="max-w-2xl space-y-3">
               <Badge variant="outline">Trust and proof</Badge>
-              <h2 className="text-3xl font-semibold tracking-tight">Show the value fast and back it up with visible proof</h2>
+              <h2 className="text-3xl font-semibold tracking-tight">Proof that missed calls can still turn into paying work</h2>
               <p className="text-muted-foreground">
-                The product should feel premium before a visitor ever logs in, so the page highlights speed, handoff quality,
-                and clear trust language without hiding the pilot reality.
+                Lead recovery, response speed, and jobs saved should be obvious at a glance. These placeholders are ready for real proof when you have it.
               </p>
             </div>
 
@@ -246,7 +290,7 @@ export default function LandingPage() {
             <Card className="border-primary/20 bg-gradient-to-r from-card via-card to-primary/5">
               <CardHeader>
                 <CardTitle>White-glove pilot onboarding</CardTitle>
-                <CardDescription>Founder-led does not have to feel unfinished when the rollout path is clear.</CardDescription>
+                <CardDescription>Hands-on setup so your missed calls are covered fast and the first test goes cleanly.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
                 <div className="space-y-3 text-sm text-muted-foreground">
@@ -258,14 +302,14 @@ export default function LandingPage() {
                     </div>
                   ))}
                   <p>
-                    We help you get live fast, verify your routing, and confirm a successful missed-call test before real traffic depends on it.
+                    We help you get live fast, cover the missed-call gap, and confirm the first real handoff before your team depends on it.
                   </p>
                 </div>
                 <div className="rounded-2xl border bg-background/80 p-5 text-sm text-muted-foreground">
                   {/* TODO: Replace this placeholder with a real pilot testimonial or founder quote once verified data is approved. */}
                   <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Pilot placeholder</p>
                   <p className="mt-3 text-lg font-medium text-foreground">
-                    “Pilot customer recovered 7 missed callers in 10 days and cut the callback scramble.”
+                    “Pilot customer recovered 7 missed callers in 10 days and turned missed calls into real follow-up opportunities.”
                   </p>
                   <p className="mt-3">
                     Replace this block with an approved testimonial, logo, or short pilot result before launch.
@@ -279,9 +323,9 @@ export default function LandingPage() {
         <section className="container space-y-8 py-16" id="product-preview">
           <div className="max-w-2xl space-y-3">
             <Badge variant="outline">Product preview</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight">Show the product with clean, credible SaaS structure</h2>
+            <h2 className="text-3xl font-semibold tracking-tight">See how missed calls turn into follow-up-ready leads</h2>
             <p className="text-muted-foreground">
-              These placeholders are ready for real captures so the marketing site can transition from promise to proof without another layout pass.
+              These placeholders are ready for real screenshots so the site can show business value, not just describe it.
             </p>
           </div>
 
@@ -315,8 +359,8 @@ export default function LandingPage() {
           <div className="container grid gap-6 py-16 lg:grid-cols-[1.05fr_0.95fr]">
             <Card className="bg-card/90">
               <CardHeader>
-                <CardTitle>Simple plan language</CardTitle>
-                <CardDescription>Visitors should understand the packaging in under 20 seconds.</CardDescription>
+                <CardTitle>Simple plan choices</CardTitle>
+                <CardDescription>Visitors should understand the offer in under 20 seconds.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm text-muted-foreground">
                 {planTeasers.map((plan) => (
@@ -327,7 +371,7 @@ export default function LandingPage() {
                 ))}
                 <div className="pt-2">
                   <Link className={buttonVariants({ variant: 'outline' })} href="/pricing">
-                    View Pricing
+                    Start capturing missed leads
                   </Link>
                 </div>
               </CardContent>

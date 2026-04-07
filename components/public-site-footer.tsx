@@ -15,7 +15,7 @@ export function PublicSiteFooter() {
       <div className="container flex flex-col gap-4 py-8 text-sm text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           <p className="font-medium text-foreground">CallbackCloser</p>
-          <p>Recover missed calls with fast SMS qualification, owner alerts, and a clearer handoff back to the business.</p>
+          <p>Stop missed calls from turning into lost jobs with fast follow-up and clearer owner handoff.</p>
           <p>White-glove pilot onboarding plus visible pricing, privacy, terms, refund, and SMS consent trust pages.</p>
           <p>
             Contact:{' '}
