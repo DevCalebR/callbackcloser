@@ -13,7 +13,7 @@ import { RATE_LIMIT_PROTECTED_API_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-l
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
 import { withSecurityHeaders } from '@/lib/security-headers';
 
-const isProtectedRoute = createRouteMatcher(['/app(.*)', '/api/stripe/checkout(.*)', '/api/stripe/portal(.*)']);
+const isProtectedRoute = createRouteMatcher(['/app(.*)', '/admin(.*)', '/api/stripe/checkout(.*)', '/api/stripe/portal(.*)']);
 const isProtectedApiMutationRoute = createRouteMatcher(['/api/stripe/checkout', '/api/stripe/portal']);
 let productionDemoGuardrailLogged = false;
 let productionDemoOverrideLogged = false;

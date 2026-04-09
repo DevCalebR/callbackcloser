@@ -67,22 +67,22 @@ const proofStats = [
   {
     label: 'Average response time',
     value: '< 30 sec',
-    detail: 'TODO: Replace placeholder with measured live pilot median.',
+    detail: 'Pilot placeholder until measured live response data is published.',
   },
   {
     label: 'Leads recovered',
     value: '124+',
-    detail: 'TODO: Replace placeholder with verified cumulative recovered-lead count.',
+    detail: 'Placeholder count shown until cumulative recovered-lead data is finalized.',
   },
   {
     label: 'Businesses onboarded',
     value: '18',
-    detail: 'TODO: Replace placeholder with current onboarding count.',
+    detail: 'Placeholder onboarding count shown until the next verified update.',
   },
   {
     label: 'Pilot result',
     value: '7 missed callers in 10 days',
-    detail: 'TODO: Replace placeholder with a real testimonial or pilot quote.',
+    detail: 'Pilot placeholder result shown until an approved customer quote is published.',
   },
 ];
 

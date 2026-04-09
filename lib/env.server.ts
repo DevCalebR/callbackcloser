@@ -26,6 +26,7 @@ const ENV_SPECS: EnvSpec[] = [
   { name: 'NEXT_PUBLIC_CLERK_SIGN_UP_URL', provider: 'Clerk', visibility: 'public', requiredInProduction: false },
   { name: 'ALLOW_FOUNDER_BILLING_BYPASS', provider: 'Clerk', visibility: 'server', requiredInProduction: false },
   { name: 'FOUNDER_CLERK_USER_ID', provider: 'Clerk', visibility: 'server', requiredInProduction: false },
+  { name: 'ADMIN_EMAIL_ALLOWLIST', provider: 'Clerk', visibility: 'server', requiredInProduction: false },
 
   { name: 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', provider: 'Stripe', visibility: 'public', requiredInProduction: false },
   { name: 'STRIPE_SECRET_KEY', provider: 'Stripe', visibility: 'server', requiredInProduction: true },

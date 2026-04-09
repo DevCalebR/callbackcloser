@@ -20,10 +20,14 @@ export function AppNav({
   business,
   demoMode = false,
   demoLabel = 'Demo Workspace',
+  systemStatusLabel = 'Not live yet',
+  systemStatusVariant = 'outline',
 }: {
   business: Business | null;
   demoMode?: boolean;
   demoLabel?: string;
+  systemStatusLabel?: string;
+  systemStatusVariant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'success';
 }) {
   const pathname = usePathname();
 
@@ -34,6 +38,13 @@ export function AppNav({
           <Link href="/app" className="font-semibold tracking-tight">
             CallbackCloser
           </Link>
+          {business ? (
+            <Badge variant={systemStatusVariant}>
+              {systemStatusLabel}
+            </Badge>
+          ) : (
+            <Badge variant="outline">Not live yet</Badge>
+          )}
           {business ? (
             <Badge variant={business.subscriptionStatus === 'ACTIVE' ? 'success' : 'outline'}>
               {business.subscriptionStatus.toLowerCase()}

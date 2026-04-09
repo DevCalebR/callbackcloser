@@ -1,0 +1,85 @@
+import { ManagedTwilioStatus, type Business, type SubscriptionStatus } from '@prisma/client';
+
+import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
+
+type StatusBusiness = Pick<
+  Business,
+  | 'managedTwilioStatus'
+  | 'twilioPrimaryPhoneNumber'
+  | 'twilioPhoneNumber'
+  | 'twilioMessagingServiceSid'
+  | 'a2pFailureReason'
+  | 'a2pApprovedAt'
+  | 'a2pCampaignSid'
+  | 'a2pBrandSid'
+  | 'a2pCustomerProfileSid'
+  | 'subscriptionStatus'
+  | 'forwardingNumber'
+  | 'notifyPhone'
+>;
+
+export type CustomerSystemStatusKey = 'not_live_yet' | 'activating' | 'live';
+export type AdminBusinessStatusKey = 'blocked' | 'activating' | 'live';
+
+export function getCustomerSystemStatus(business: StatusBusiness, successfulLeadCount: number) {
+  const managedSummary = getManagedTwilioStatusSummary(business);
+  const hasSuccessfulTestLead = successfulLeadCount > 0;
+
+  if (managedSummary.messagingServiceReady && managedSummary.complianceReady && hasSuccessfulTestLead) {
+    return {
+      key: 'live' as const,
+      label: 'Live',
+      badgeVariant: 'success' as const,
+      description: 'Missed-call recovery is live and ready for another test call.',
+    };
+  }
+
+  if (managedSummary.messagingServiceReady || managedSummary.complianceStarted || hasSuccessfulTestLead) {
+    return {
+      key: 'activating' as const,
+      label: 'Activating',
+      badgeVariant: 'secondary' as const,
+      description: 'Setup is underway. Finish the remaining activation steps to go live.',
+    };
+  }
+
+  return {
+    key: 'not_live_yet' as const,
+    label: 'Not live yet',
+    badgeVariant: 'outline' as const,
+    description: 'Finish setup and run your first test call to bring the system live.',
+  };
+}
+
+export function getAdminBusinessStatus(business: StatusBusiness, successfulLeadCount: number) {
+  if (
+    business.managedTwilioStatus === ManagedTwilioStatus.PAUSED_NONCOMPLIANT ||
+    business.managedTwilioStatus === ManagedTwilioStatus.FAILED_REVIEW
+  ) {
+    return {
+      key: 'blocked' as const,
+      label: 'Blocked',
+      badgeVariant: 'destructive' as const,
+    };
+  }
+
+  const customerStatus = getCustomerSystemStatus(business, successfulLeadCount);
+  if (customerStatus.key === 'live') {
+    return {
+      key: 'live' as const,
+      label: 'Live',
+      badgeVariant: 'success' as const,
+    };
+  }
+
+  return {
+    key: 'activating' as const,
+    label: 'Activating',
+    badgeVariant: 'secondary' as const,
+  };
+}
+
+export function getBillingDisplayLabel(subscriptionStatus: SubscriptionStatus, billingActive: boolean) {
+  if (billingActive) return 'active';
+  return subscriptionStatus.toLowerCase();
+}

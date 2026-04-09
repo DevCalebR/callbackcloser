@@ -169,6 +169,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
   const selectedLeadReturnPath = selectedLead ? buildLeadsHref(statusFilter, selectedLead.id) : buildLeadsHref(statusFilter);
   const selectedLeadCallbackState = selectedLead ? getLeadCallbackState(selectedLead) : null;
   const selectedLeadMessageIssues = selectedLead?.messages.filter((message) => isMessageDeliveryIssueStatus(message.status)) ?? [];
+  const hasCapturedCalls = allLeads.length > 0;
 
   return (
     <div className="space-y-6">
@@ -203,17 +204,40 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
         />
       ) : null}
 
+      {!hasCapturedCalls ? (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle>No calls captured yet</CardTitle>
+            <CardDescription>Run your first test call to confirm missed-call coverage and watch your first recovered lead appear here.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <Link className={buttonVariants()} href="/app/call-flow">
+              Run your first test call
+            </Link>
+            <Link className={buttonVariants({ variant: 'outline' })} href="/app/settings">
+              Finish setup
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {stats.map((stat) => (
           <Card key={stat.label} className="bg-card/90">
             <CardHeader className="space-y-2 pb-4">
               <CardDescription>{stat.label}</CardDescription>
               <div className="flex items-center justify-between gap-3">
-                <CardTitle className="text-3xl">{stat.value}</CardTitle>
-                <Badge variant={buildBadgeVariant(stat.value)}>{stat.value > 0 ? 'Active' : 'Waiting'}</Badge>
+                <CardTitle className="text-3xl">{hasCapturedCalls ? stat.value : '—'}</CardTitle>
+                <Badge variant={buildBadgeVariant(stat.value)}>{stat.value > 0 ? 'Active' : hasCapturedCalls ? 'Quiet' : 'Run first test'}</Badge>
               </div>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">{stat.detail}</CardContent>
+            <CardContent className="text-sm text-muted-foreground">
+              {hasCapturedCalls
+                ? stat.detail
+                : stat.label === 'Missed calls'
+                  ? 'No calls captured yet — run your first test call.'
+                  : 'Metrics will populate automatically once the system is live.'}
+            </CardContent>
           </Card>
         ))}
       </div>
@@ -297,7 +321,9 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
                 {filteredLeads.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
-                      No recovered leads yet. Once your business texting line is live, missed callers and SMS follow-up will show up here.
+                      {hasCapturedCalls
+                        ? 'No leads match this filter right now.'
+                        : 'No recovered leads yet. Run your first test call and qualified missed callers will show up here.'}
                     </td>
                   </tr>
                 ) : null}
@@ -455,8 +481,12 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
           ) : (
             <Card className="bg-card/90">
               <CardHeader>
-                <CardTitle>No lead selected</CardTitle>
-                <CardDescription>Select a recovered lead from the table to open the detail panel.</CardDescription>
+                <CardTitle>{hasCapturedCalls ? 'No lead selected' : 'Ready for your first recovered lead'}</CardTitle>
+                <CardDescription>
+                  {hasCapturedCalls
+                    ? 'Select a recovered lead from the table to open the detail panel.'
+                    : 'Once the system is live, the next missed call that texts back will appear here with a ready-to-close summary.'}
+                </CardDescription>
               </CardHeader>
             </Card>
           )}

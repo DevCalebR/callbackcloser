@@ -9,6 +9,7 @@ import { db } from '@/lib/db';
 import { getManagedTextingNumber } from '@/lib/managed-twilio';
 import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
+import { getBillingDisplayLabel } from '@/lib/system-status';
 import { getStripe } from '@/lib/stripe';
 import { BILLING_TIME_ZONE, getConversationUsageForBusiness, getCurrentMonthWindowUtc, resolveUsageTierFromSubscription } from '@/lib/usage';
 import {
@@ -163,7 +164,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   });
 
   const currentPlanLabel = mapPlanLabel(stripeSnapshot?.stripePlanLabel, business.stripePriceId, process.env);
-  const billingStatusLabel = billingAccess.founderBillingBypassActive ? 'Founder bypass active' : business.subscriptionStatus.toLowerCase();
+  const billingStatusLabel = getBillingDisplayLabel(business.subscriptionStatus, billingAccess.billingActive);
   const billingNeedsAttention = business.subscriptionStatus === 'PAST_DUE' || business.subscriptionStatus === 'CANCELED' || !subscriptionActive;
 
   const summaryItems = [
@@ -236,12 +237,6 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         </div>
       ) : null}
       {checkoutCanceled ? <div className="rounded-md border bg-muted/40 p-3 text-sm">Checkout canceled. You can restart from the plan cards below.</div> : null}
-      {billingAccess.founderBillingBypassActive ? (
-        <div className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-950">
-          Founder-only billing bypass is active for this founder-owned workspace. Use it for smoke testing, not as the steady-state billing mode.
-        </div>
-      ) : null}
-
       {billingNeedsAttention ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardHeader>

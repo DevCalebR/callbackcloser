@@ -67,7 +67,18 @@ export default async function ConversationsPage({ searchParams }: { searchParams
           </CardHeader>
           <CardContent className="space-y-3">
             {leads.length === 0 ? (
-              <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">No active conversations yet.</div>
+              <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">No conversations yet</p>
+                <p className="mt-2">Once your system is live, missed callers who text back will appear here automatically.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link className={buttonVariants({ size: 'sm' })} href="/app/call-flow">
+                    Run your first test call
+                  </Link>
+                  <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/app/settings">
+                    Check setup
+                  </Link>
+                </div>
+              </div>
             ) : (
               leads.map((lead) => {
                 const latestMessage = lead.messages[0];
@@ -107,7 +118,9 @@ export default async function ConversationsPage({ searchParams }: { searchParams
           <CardContent className="space-y-3">
             {!selectedLead ? (
               <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
-                Pick a conversation on the left to review the full thread.
+                {leads.length === 0
+                  ? 'Once your system is live, conversations will appear here with the full SMS thread and callback context.'
+                  : 'Pick a conversation on the left to review the full thread.'}
               </div>
             ) : (
               <>

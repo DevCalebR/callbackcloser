@@ -138,11 +138,6 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was provisioned and connected.</div> : null}
       {twilioConnected ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was connected and setup was refreshed.</div> : null}
       {twilioSynced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Managed texting setup refreshed.</div> : null}
-      {billingAccess.founderBillingBypassActive ? (
-        <div className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-950">
-          Founder-only billing bypass is active for this founder-owned business. Use it for smoke testing only, then return to real Stripe-gated billing.
-        </div>
-      ) : null}
 
       <SetupChecklist
         title="Setup checklist"
@@ -200,18 +195,15 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                 </div>
                 <div>
                   <Label htmlFor="serviceArea">Service area</Label>
-                  <Input id="serviceArea" defaultValue="TODO: Add stored service area field" disabled />
-                  {/* TODO: Persist business service area once the product model is expanded beyond the current onboarding fields. */}
+                  <Input id="serviceArea" defaultValue="Managed during launch" disabled />
                 </div>
                 <div>
                   <Label htmlFor="ownerName">Owner name</Label>
-                  <Input id="ownerName" defaultValue="TODO: Add stored owner name field" disabled />
-                  {/* TODO: Persist owner name instead of relying on external auth profile data. */}
+                  <Input id="ownerName" defaultValue="Uses your account owner profile" disabled />
                 </div>
                 <div>
                   <Label htmlFor="supportEmail">Support email</Label>
-                  <Input id="supportEmail" defaultValue="TODO: Add stored support email field" disabled />
-                  {/* TODO: Persist business support email for owner-facing notifications and trust surfaces. */}
+                  <Input id="supportEmail" defaultValue="Uses your billing contact email" disabled />
                 </div>
               </CardContent>
             </Card>
@@ -329,8 +321,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                 <div className="grid gap-4 lg:grid-cols-3">
                   <div className="rounded-xl border bg-muted/20 p-4 text-sm">
                     <p className="font-medium">Quiet hours</p>
-                    <p className="mt-2 text-muted-foreground">TODO: Add stored quiet-hours rules before exposing customer-configurable send windows.</p>
-                    {/* TODO: Quiet hours are not yet persisted in the business model. */}
+                    <p className="mt-2 text-muted-foreground">
+                      Standard daytime sending windows are used today. If your team needs a custom quiet-hours schedule, we can set that up during launch.
+                    </p>
                   </div>
                   <div className="rounded-xl border bg-muted/20 p-4 text-sm">
                     <p className="font-medium">STOP / HELP preview</p>
@@ -378,8 +371,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                   </div>
                   <div className="rounded-xl border bg-muted/20 p-4 text-sm">
                     <p className="font-medium">Daily digest</p>
-                    <p className="mt-2 text-muted-foreground">TODO: Add stored digest preferences before exposing a real toggle.</p>
-                    {/* TODO: Daily digest preference does not exist in the current schema yet. */}
+                    <p className="mt-2 text-muted-foreground">
+                      Instant owner alerts stay on by default so every qualified lead reaches the right phone quickly.
+                    </p>
                   </div>
                 </div>
               </CardContent>

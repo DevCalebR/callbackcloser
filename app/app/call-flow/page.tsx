@@ -10,6 +10,7 @@ import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/ma
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
+import { getCustomerSystemStatus } from '@/lib/system-status';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
 
 export default async function CallFlowPage() {
@@ -107,6 +108,8 @@ export default async function CallFlowPage() {
       complete: successfulLeadCount > 0,
     },
   ];
+  const allChecklistComplete = setupItems.every((item) => item.complete);
+  const systemStatus = getCustomerSystemStatus(business, successfulLeadCount);
 
   const flowSteps = [
     {
@@ -138,10 +141,31 @@ export default async function CallFlowPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Call flow and activation</h1>
           <p className="text-sm text-muted-foreground">
-            See how missed calls turn into ready-to-call leads, what is live already, and what still blocks a confident first test.
+            This is exactly what happens when a missed call occurs, what is already live, and what still needs attention before a confident first test.
           </p>
         </div>
       </div>
+
+      {allChecklistComplete ? (
+        <Card className="border-accent/40 bg-accent/20">
+          <CardHeader>
+            <CardTitle>🎉 Your system is live — run a test call now</CardTitle>
+            <CardDescription>
+              Messaging, compliance, and test-lead handoff are all complete. One more test call is the fastest way to confirm everything still feels right.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            {managedTextingNumber ? (
+              <Link className={buttonVariants()} href={`tel:${managedTextingNumber}`}>
+                Run test call
+              </Link>
+            ) : null}
+            <Link className={buttonVariants({ variant: 'outline' })} href="/app/leads">
+              Open Recovered Leads
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <SetupChecklist
         title="Activation checklist"
@@ -158,10 +182,15 @@ export default async function CallFlowPage() {
           <CardContent className="space-y-3">
             {flowSteps.map((step, index) => (
               <div key={step.title} className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">
-                  {index + 1}. {step.title}
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">{step.detail}</p>
+                <div className="flex items-start gap-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <p className="font-medium">{step.title}</p>
+                    <p className="mt-2 text-sm text-muted-foreground">{step.detail}</p>
+                  </div>
+                </div>
               </div>
             ))}
           </CardContent>
@@ -170,7 +199,7 @@ export default async function CallFlowPage() {
         <Card className="bg-card/90">
           <CardHeader>
             <CardTitle>Next activation move</CardTitle>
-            <CardDescription>Keep the first successful missed-call test moving.</CardDescription>
+            <CardDescription>{systemStatus.description}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             {readiness.ready ? (
@@ -179,7 +208,10 @@ export default async function CallFlowPage() {
               </div>
             ) : (
               <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-destructive">
-                <p className="font-medium">Current blockers</p>
+                <p className="font-medium">Action needed before go-live</p>
+                <p className="mt-1 text-sm text-destructive/80">
+                  {readiness.blockers.length} blocker{readiness.blockers.length === 1 ? '' : 's'} still need attention before the system is fully live.
+                </p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   {readiness.blockers.map((blocker) => (
                     <li key={blocker.key}>
