@@ -8,12 +8,11 @@ import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { formatDateTime, getLeadCallbackState, getLeadLastActivityAt, getLeadStatusBadgeVariant, leadStatusLabels } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getPortfolioDemoLeadDetail, getPortfolioDemoLeads } from '@/lib/portfolio-demo';
-import { getDemoWorkspaceMode } from '@/lib/review-mode';
+import { getPortfolioDemoLeadDetail, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
 export default async function ConversationsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
-  const demoMode = Boolean(await getDemoWorkspaceMode());
+  const demoMode = isPortfolioDemoMode();
   const leads = demoMode
     ? getPortfolioDemoLeads(null).filter((lead) => lead.lastInboundAt || lead.lastOutboundAt)
     : await db.lead.findMany({

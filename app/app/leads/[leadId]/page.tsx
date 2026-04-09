@@ -17,14 +17,11 @@ import {
   leadStatusLabels,
 } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getPortfolioDemoLeadDetail } from '@/lib/portfolio-demo';
-import { getDemoWorkspaceMode } from '@/lib/review-mode';
+import { getPortfolioDemoLeadDetail, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
 export default async function LeadDetailPage({ params, searchParams }: { params: { leadId: string }; searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
-  const demoWorkspaceMode = await getDemoWorkspaceMode();
-  const demoMode = Boolean(demoWorkspaceMode);
-  const readOnlyPreviewMode = demoWorkspaceMode === 'preview_review';
+  const demoMode = isPortfolioDemoMode();
   const lead = demoMode
     ? getPortfolioDemoLeadDetail(params.leadId)
     : await db.lead.findFirst({
@@ -100,7 +97,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
                 <input type="hidden" name="leadId" value={lead.id} />
                 <input type="hidden" name="status" value="CONTACTED" />
                 <input type="hidden" name="redirectTo" value={`/app/leads/${lead.id}`} />
-                <Button className="w-full" type="submit" variant="outline" disabled={readOnlyPreviewMode}>
+                <Button className="w-full" type="submit" variant="outline">
                   Mark Contacted
                 </Button>
               </form>
@@ -108,7 +105,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
                 <input type="hidden" name="leadId" value={lead.id} />
                 <input type="hidden" name="status" value="BOOKED" />
                 <input type="hidden" name="redirectTo" value={`/app/leads/${lead.id}`} />
-                <Button className="w-full" type="submit" disabled={readOnlyPreviewMode}>
+                <Button className="w-full" type="submit">
                   Mark Booked
                 </Button>
               </form>
@@ -116,7 +113,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
                 <input type="hidden" name="leadId" value={lead.id} />
                 <input type="hidden" name="status" value="LOST" />
                 <input type="hidden" name="redirectTo" value={`/app/leads/${lead.id}`} />
-                <Button className="w-full" type="submit" variant="destructive" disabled={readOnlyPreviewMode}>
+                <Button className="w-full" type="submit" variant="destructive">
                   Mark Lost
                 </Button>
               </form>

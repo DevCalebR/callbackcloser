@@ -7,8 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getManagedTextingNumber } from '@/lib/managed-twilio';
-import { getPortfolioDemoBlockedCount } from '@/lib/portfolio-demo';
-import { getDemoWorkspaceMode } from '@/lib/review-mode';
+import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getStripe } from '@/lib/stripe';
 import { BILLING_TIME_ZONE, getConversationUsageForBusiness, getCurrentMonthWindowUtc, resolveUsageTierFromSubscription } from '@/lib/usage';
@@ -118,10 +117,8 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const subscriptionActive = billingAccess.billingActive;
   const checkoutSucceeded = checkout === 'success';
   const checkoutCanceled = checkout === 'canceled';
-  const demoWorkspaceMode = await getDemoWorkspaceMode();
-  const demoMode = Boolean(demoWorkspaceMode);
-  const demoModeLabel = demoWorkspaceMode === 'preview_review' ? 'preview review mode' : 'portfolio demo mode';
-  const readOnlyPreviewMode = demoWorkspaceMode === 'preview_review';
+  const demoMode = isPortfolioDemoMode();
+  const demoModeLabel = 'portfolio demo mode';
   const currentMonth = getCurrentMonthWindowUtc();
 
   const [blockedCount, usage, cycleSmsSent, cycleMissedCalls, cycleOwnerAlerts, stripeSnapshot] = demoMode
@@ -259,7 +256,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
             <div className="flex flex-wrap gap-3">
               {business.stripeCustomerId ? (
                 <form action="/api/stripe/portal" method="post">
-                  <Button type="submit" disabled={readOnlyPreviewMode}>Update Payment Method</Button>
+                  <Button type="submit">Update Payment Method</Button>
                 </form>
               ) : (
                 <Link className={buttonVariants()} href="#plan-options">
@@ -341,7 +338,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
               <input type="hidden" name="priceId" value={starterPriceId ?? ''} />
-              <Button type="submit" className="w-full" disabled={!starterPriceId || readOnlyPreviewMode}>
+              <Button type="submit" className="w-full" disabled={!starterPriceId}>
                 Choose Starter
               </Button>
             </form>
@@ -360,7 +357,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
               <input type="hidden" name="priceId" value={growthPriceId ?? ''} />
-              <Button type="submit" className="w-full" disabled={!growthPriceId || readOnlyPreviewMode}>
+              <Button type="submit" className="w-full" disabled={!growthPriceId}>
                 Choose Growth
               </Button>
             </form>
@@ -381,7 +378,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
             </Link>
             {business.stripeCustomerId ? (
               <form action="/api/stripe/portal" method="post" className="w-full">
-                <Button type="submit" variant="outline" className="w-full" disabled={readOnlyPreviewMode}>
+                <Button type="submit" variant="outline" className="w-full">
                   Open Billing Portal
                 </Button>
               </form>

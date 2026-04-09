@@ -10,7 +10,7 @@ import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getDemoWorkspaceMode } from '@/lib/review-mode';
+import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
 
@@ -18,9 +18,7 @@ import { buyTwilioNumberAction, resyncTwilioWebhooksAction, saveBusinessSettings
 
 export default async function SettingsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
-  const demoWorkspaceMode = await getDemoWorkspaceMode();
-  const demoMode = Boolean(demoWorkspaceMode);
-  const readOnlyPreviewMode = demoWorkspaceMode === 'preview_review';
+  const demoMode = isPortfolioDemoMode();
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const saved = searchParams?.saved === '1';
   const numberBought = searchParams?.numberBought === '1';
@@ -184,12 +182,6 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       </Card>
 
       <form action={saveBusinessSettingsAction} className="space-y-6">
-        {readOnlyPreviewMode ? (
-          <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-            Preview Review Mode is read-only. This workspace uses demo data so buttons and form saves stay disabled.
-          </div>
-        ) : null}
-        <fieldset disabled={readOnlyPreviewMode} className="space-y-6">
         <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-6">
             <Card className="bg-card/90">
@@ -498,7 +490,6 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             Open Recovered Leads
           </Link>
         </div>
-        </fieldset>
       </form>
     </div>
   );

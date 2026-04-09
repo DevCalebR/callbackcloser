@@ -6,7 +6,6 @@ import { db } from '@/lib/db';
 import { getConfiguredAppBaseUrl } from '@/lib/env.server';
 import { getCorrelationIdFromRequest, reportApplicationError, withCorrelationIdHeader } from '@/lib/observability';
 import { isAllowedRequestOrigin } from '@/lib/request-origin';
-import { isPreviewReviewCookieHeaderValid } from '@/lib/review-mode';
 import { getStripe } from '@/lib/stripe';
 import { absoluteUrl } from '@/lib/url';
 import { checkoutSchema } from '@/lib/validators';
@@ -21,9 +20,6 @@ function errorRedirect(message: string) {
 export async function POST(request: Request) {
   const correlationId = getCorrelationIdFromRequest(request);
   const withCorrelation = (response: NextResponse) => withCorrelationIdHeader(response, correlationId);
-  if (isPreviewReviewCookieHeaderValid(request.headers.get('cookie'), process.env)) {
-    return withCorrelation(errorRedirect('Preview Review Mode is read-only'));
-  }
 
   if (process.env.NODE_ENV === 'production' && !isAllowedRequestOrigin(request, getConfiguredAppBaseUrl())) {
     return withCorrelation(NextResponse.json({ error: 'Invalid request origin' }, { status: 403 }));

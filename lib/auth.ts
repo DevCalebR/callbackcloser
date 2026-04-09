@@ -3,10 +3,9 @@ import { redirect } from 'next/navigation';
 
 import { db } from '@/lib/db';
 import { getPortfolioDemoAuth, getPortfolioDemoBusiness, isPortfolioDemoMode } from '@/lib/portfolio-demo';
-import { getDemoWorkspaceMode } from '@/lib/review-mode';
 
 export async function requireAuth() {
-  if (isPortfolioDemoMode() || (await getDemoWorkspaceMode()) === 'preview_review') {
+  if (isPortfolioDemoMode()) {
     return getPortfolioDemoAuth();
   }
 
@@ -18,7 +17,7 @@ export async function requireAuth() {
 }
 
 export async function getCurrentBusiness() {
-  if (isPortfolioDemoMode() || (await getDemoWorkspaceMode()) === 'preview_review') {
+  if (isPortfolioDemoMode()) {
     return getPortfolioDemoBusiness();
   }
 
@@ -31,7 +30,7 @@ export async function getCurrentBusiness() {
 }
 
 export async function requireBusiness() {
-  if (isPortfolioDemoMode() || (await getDemoWorkspaceMode()) === 'preview_review') {
+  if (isPortfolioDemoMode()) {
     return getPortfolioDemoBusiness();
   }
 

@@ -8,13 +8,13 @@ import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getDemoWorkspaceMode } from '@/lib/review-mode';
+import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
 
 export default async function CallFlowPage() {
   const business = await requireBusiness();
-  const demoMode = Boolean(await getDemoWorkspaceMode());
+  const demoMode = isPortfolioDemoMode();
   const billingAccess = getBusinessBillingAccessState(business);
   const ownerNotifyPhoneOptedOut =
     demoMode || !business.notifyPhone

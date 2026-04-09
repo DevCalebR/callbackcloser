@@ -5,7 +5,6 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
 import { upsertBusinessForOwner } from '@/lib/business';
-import { isPreviewReviewSessionActive } from '@/lib/review-mode';
 import { logTwilioError } from '@/lib/twilio-logging';
 import { getTwilioProvisioningBlockReason, provisionPhoneNumber } from '@/lib/twilio-provision';
 import { onboardingSchema } from '@/lib/validators';
@@ -27,10 +26,6 @@ function resolveSafePostOnboardingRedirectPath(value: FormDataEntryValue | null)
 }
 
 export async function saveOnboardingAction(formData: FormData) {
-  if (await isPreviewReviewSessionActive()) {
-    redirect('/app/onboarding?error=Preview%20Review%20Mode%20is%20read-only');
-  }
-
   const { userId } = await auth();
   if (!userId) {
     redirect('/sign-in');

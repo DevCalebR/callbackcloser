@@ -6,7 +6,6 @@ import { redirect } from 'next/navigation';
 
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
-import { isPreviewReviewSessionActive } from '@/lib/review-mode';
 import { getTwilioBusinessClient } from '@/lib/twilio-client';
 import { logTwilioError } from '@/lib/twilio-logging';
 import { provisionPhoneNumber } from '@/lib/twilio-provision';
@@ -36,10 +35,6 @@ async function saveBusinessTwilioNumber(businessId: string, params: { phoneNumbe
 }
 
 export async function saveBusinessSettingsAction(formData: FormData) {
-  if (await isPreviewReviewSessionActive()) {
-    redirect('/app/settings?error=Preview%20Review%20Mode%20is%20read-only');
-  }
-
   const business = await getBusinessForOwner();
   const parsed = businessSettingsSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
@@ -67,10 +62,6 @@ export async function saveBusinessSettingsAction(formData: FormData) {
 }
 
 export async function buyTwilioNumberAction(formData: FormData) {
-  if (await isPreviewReviewSessionActive()) {
-    redirect('/app/settings?error=Preview%20Review%20Mode%20is%20read-only');
-  }
-
   const business = await getBusinessForOwner();
   const parsed = buyNumberSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
@@ -120,10 +111,6 @@ export async function connectExistingTwilioNumberAction(formData: FormData) {
 }
 
 export async function resyncTwilioWebhooksAction() {
-  if (await isPreviewReviewSessionActive()) {
-    redirect('/app/settings?error=Preview%20Review%20Mode%20is%20read-only');
-  }
-
   const business = await getBusinessForOwner();
   if (!business.twilioPhoneNumberSid) {
     redirect('/app/settings?error=No%20business%20texting%20line%20is%20assigned%20to%20this%20business');

@@ -19,8 +19,7 @@ import {
   smsStateLabels,
 } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getPortfolioDemoBlockedCount, getPortfolioDemoLeadDetail, getPortfolioDemoLeads } from '@/lib/portfolio-demo';
-import { getDemoWorkspaceMode } from '@/lib/review-mode';
+import { getPortfolioDemoBlockedCount, getPortfolioDemoLeadDetail, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getConversationUsageForBusiness, resolveUsageTierFromSubscription } from '@/lib/usage';
 import {
@@ -52,10 +51,8 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
   const selectedLeadId = typeof searchParams?.leadId === 'string' ? searchParams.leadId : undefined;
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const saved = searchParams?.saved === '1';
-  const demoWorkspaceMode = await getDemoWorkspaceMode();
-  const demoMode = Boolean(demoWorkspaceMode);
-  const demoModeLabel = demoWorkspaceMode === 'preview_review' ? 'preview review mode' : 'portfolio demo mode';
-  const readOnlyPreviewMode = demoWorkspaceMode === 'preview_review';
+  const demoMode = isPortfolioDemoMode();
+  const demoModeLabel = 'portfolio demo mode';
   const billingAccess = getBusinessBillingAccessState(business);
 
   const [filteredLeads, allLeads, blockedCount, usage] = demoMode
@@ -390,7 +387,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
                         <input type="hidden" name="leadId" value={selectedLead.id} />
                         <input type="hidden" name="status" value="CONTACTED" />
                         <input type="hidden" name="redirectTo" value={selectedLeadReturnPath} />
-                        <Button className="w-full" type="submit" variant="outline" disabled={readOnlyPreviewMode}>
+                        <Button className="w-full" type="submit" variant="outline">
                           Mark Contacted
                         </Button>
                       </form>
@@ -398,7 +395,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
                         <input type="hidden" name="leadId" value={selectedLead.id} />
                         <input type="hidden" name="status" value="BOOKED" />
                         <input type="hidden" name="redirectTo" value={selectedLeadReturnPath} />
-                        <Button className="w-full" type="submit" disabled={readOnlyPreviewMode}>
+                        <Button className="w-full" type="submit">
                           Mark Booked
                         </Button>
                       </form>
@@ -406,7 +403,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
                         <input type="hidden" name="leadId" value={selectedLead.id} />
                         <input type="hidden" name="status" value="LOST" />
                         <input type="hidden" name="redirectTo" value={selectedLeadReturnPath} />
-                        <Button className="w-full" type="submit" variant="destructive" disabled={readOnlyPreviewMode}>
+                        <Button className="w-full" type="submit" variant="destructive">
                           Mark Lost
                         </Button>
                       </form>

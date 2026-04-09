@@ -11,7 +11,6 @@ import {
 } from '@/lib/portfolio-demo-guardrail';
 import { RATE_LIMIT_PROTECTED_API_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
-import { isPreviewReviewCookieHeaderValid } from '@/lib/review-mode';
 import { withSecurityHeaders } from '@/lib/security-headers';
 
 const isProtectedRoute = createRouteMatcher(['/app(.*)', '/api/stripe/checkout(.*)', '/api/stripe/portal(.*)']);
@@ -57,8 +56,6 @@ const protectedMiddleware = clerkMiddleware(async (auth, req) => {
 });
 
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
-  const previewReviewActive = isPreviewReviewCookieHeaderValid(req.headers.get('cookie'), process.env);
-
   if (isPortfolioDemoModeBlockedInProduction(process.env)) {
     if (!productionDemoGuardrailLogged) {
       productionDemoGuardrailLogged = true;
@@ -83,19 +80,6 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
 
   if (!isProtectedRoute(req)) {
     return withSecurityHeaders(NextResponse.next());
-  }
-
-  if (previewReviewActive) {
-    if (req.nextUrl.pathname.startsWith('/app') && req.method === 'GET') {
-      return withSecurityHeaders(NextResponse.next());
-    }
-
-    if (req.nextUrl.pathname.startsWith('/app') || isProtectedApiMutationRoute(req) || req.method !== 'GET') {
-      const response = req.nextUrl.pathname.startsWith('/api/')
-        ? NextResponse.json({ error: 'Preview Review Mode is read-only.' }, { status: 403 })
-        : new NextResponse('Preview Review Mode is read-only.', { status: 403 });
-      return withSecurityHeaders(response);
-    }
   }
 
   if (!hasRequiredClerkMiddlewareEnv(process.env)) {
