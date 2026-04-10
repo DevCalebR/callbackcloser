@@ -14,6 +14,7 @@ import {
   getLeadLastActivityAt,
   getLeadStatusBadgeVariant,
   isMessageDeliveryIssueStatus,
+  leadReadinessLabels,
   leadStatusLabels,
   leadStatusOrder,
   smsStateLabels,
@@ -138,9 +139,13 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
           demoSmsSent,
           demoLeadDetails.filter((lead) => lead.lastInboundAt).length,
           demoLeadDetails.filter(
-            (lead) => lead.status === LeadStatus.QUALIFIED || lead.status === LeadStatus.CONTACTED || lead.status === LeadStatus.BOOKED
+            (lead) =>
+              lead.status === LeadStatus.QUALIFIED ||
+              lead.status === LeadStatus.NOTIFIED ||
+              lead.status === LeadStatus.CONTACTED ||
+              lead.status === LeadStatus.BOOKED
           ).length,
-          demoLeadDetails.filter((lead) => lead.ownerNotifiedAt).length,
+          demoLeadDetails.filter((lead) => lead.ownerNotifiedAt || lead.notifiedAt).length,
         ];
       })()
     : await Promise.all([
@@ -151,11 +156,11 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
           where: {
             businessId: business.id,
             status: {
-              in: [LeadStatus.QUALIFIED, LeadStatus.CONTACTED, LeadStatus.BOOKED],
+              in: [LeadStatus.QUALIFIED, LeadStatus.NOTIFIED, LeadStatus.CONTACTED, LeadStatus.BOOKED],
             },
           },
         }),
-        db.lead.count({ where: { businessId: business.id, ownerNotifiedAt: { not: null } } }),
+        db.lead.count({ where: { businessId: business.id, OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }] } }),
       ]);
 
   const stats = [
@@ -265,6 +270,29 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
         </CardContent>
       </Card>
 
+      {allLeads.some((lead) => lead.status === LeadStatus.NOTIFIED) ? (
+        <Card className="border-accent/30 bg-accent/10">
+          <CardHeader>
+            <CardTitle>New qualified leads</CardTitle>
+            <CardDescription>These leads are qualified and already delivered to the owner.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {allLeads
+              .filter((lead) => lead.status === LeadStatus.NOTIFIED)
+              .slice(0, 3)
+              .map((lead) => (
+                <Link key={lead.id} href={buildLeadsHref(statusFilter, lead.id)} className="rounded-xl border bg-background/90 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium">{lead.serviceType || lead.serviceRequested || 'Missed-call lead'}</p>
+                    <Badge variant={lead.readiness === 'URGENT' ? 'destructive' : 'secondary'}>{leadReadinessLabels[lead.readiness]}</Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{lead.summary || 'Structured summary will appear here.'}</p>
+                </Link>
+              ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <Card className="overflow-hidden bg-card/90">
           <CardHeader>
@@ -278,7 +306,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
                   <th className="px-3 py-3 font-medium">Caller</th>
                   <th className="px-3 py-3 font-medium">Service type</th>
                   <th className="px-3 py-3 font-medium">Urgency</th>
-                  <th className="px-3 py-3 font-medium">ZIP</th>
+                  <th className="px-3 py-3 font-medium">ZIP / location</th>
                   <th className="px-3 py-3 font-medium">Last message time</th>
                   <th className="px-3 py-3 font-medium">Status</th>
                   <th className="px-3 py-3 font-medium">Assigned owner / callback state</th>
@@ -297,16 +325,19 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
                         <Link href={buildLeadsHref(statusFilter, lead.id)} className="font-medium hover:underline">
                           {formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone)}
                         </Link>
-                        <div className="text-xs text-muted-foreground">{lead.contactName || 'Caller name pending'}</div>
+                        <div className="text-xs text-muted-foreground">{lead.callerName || lead.contactName || 'Caller name pending'}</div>
                       </td>
-                      <td className="px-3 py-3 align-top text-muted-foreground">{lead.serviceRequested || 'Waiting on service reply'}</td>
+                      <td className="px-3 py-3 align-top text-muted-foreground">{lead.serviceType || lead.serviceRequested || 'Waiting on service reply'}</td>
                       <td className="px-3 py-3 align-top text-muted-foreground">{lead.urgency || 'Waiting'}</td>
-                      <td className="px-3 py-3 align-top text-muted-foreground">{lead.zipCode || 'Waiting'}</td>
+                      <td className="px-3 py-3 align-top text-muted-foreground">{lead.location || lead.zipCode || 'Waiting'}</td>
                       <td className="px-3 py-3 align-top text-muted-foreground">{formatDateTime(lastMessage)}</td>
                       <td className="px-3 py-3 align-top">
                         <div className="flex flex-wrap gap-1">
                           <Badge variant={getLeadStatusBadgeVariant(lead.status)}>{leadStatusLabels[lead.status]}</Badge>
-                          {lead.ownerNotifiedAt ? <Badge variant="secondary">Owner alerted</Badge> : null}
+                          <Badge variant={lead.readiness === 'URGENT' ? 'destructive' : lead.readiness === 'QUALIFIED' ? 'secondary' : 'outline'}>
+                            {leadReadinessLabels[lead.readiness]}
+                          </Badge>
+                          {lead.ownerNotifiedAt || lead.notifiedAt ? <Badge variant="secondary">Owner alerted</Badge> : null}
                           {lead.billingRequired ? <Badge variant="destructive">Billing paused</Badge> : null}
                           {lastMessageIssue ? <Badge variant="outline">Message attention</Badge> : null}
                         </div>
@@ -358,24 +389,31 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
                       <div className="mt-2 space-y-2 text-sm">
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Service</span>
-                          <span>{selectedLead.serviceRequested || '-'}</span>
+                          <span>{selectedLead.serviceType || selectedLead.serviceRequested || '-'}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Urgency</span>
                           <span>{selectedLead.urgency || '-'}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">ZIP</span>
-                          <span>{selectedLead.zipCode || '-'}</span>
+                          <span className="text-muted-foreground">Location</span>
+                          <span>{selectedLead.location || selectedLead.zipCode || '-'}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">Best time</span>
-                          <span>{selectedLead.bestTime || '-'}</span>
+                          <span className="text-muted-foreground">Callback</span>
+                          <span>
+                            {typeof selectedLead.callbackRequested === 'boolean'
+                              ? selectedLead.callbackRequested
+                                ? selectedLead.bestTime || 'Requested'
+                                : 'Not requested'
+                              : '-'}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">SMS state</span>
-                          <span>{smsStateLabels[selectedLead.smsState]}</span>
+                          <span className="text-muted-foreground">Readiness</span>
+                          <span>{leadReadinessLabels[selectedLead.readiness]}</span>
                         </div>
+                        <p className="rounded-md bg-muted/40 p-2 text-muted-foreground">{selectedLead.summary || 'Lead summary pending.'}</p>
                       </div>
                     </div>
 
@@ -388,7 +426,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Owner alerted</span>
-                          <span>{selectedLead.ownerNotifiedAt ? 'Yes' : 'No'}</span>
+                          <span>{selectedLead.notifiedAt || selectedLead.ownerNotifiedAt ? 'Yes' : 'No'}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Voice attempt status</span>
@@ -401,6 +439,10 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Last activity</span>
                           <span>{formatDateTime(getLeadLastActivityAt(selectedLead))}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Qualified at</span>
+                          <span>{formatDateTime(selectedLead.qualifiedAt)}</span>
                         </div>
                       </div>
                     </div>

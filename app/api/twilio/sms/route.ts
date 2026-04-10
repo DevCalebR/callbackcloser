@@ -1,4 +1,3 @@
-import { LeadStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 
 import { findBusinessByTwilioNumber } from '@/lib/business';
@@ -7,20 +6,16 @@ import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/obse
 import { normalizePhoneNumber } from '@/lib/phone';
 import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
-import { advanceLeadConversation } from '@/lib/sms-state-machine';
+import { processLeadInboundReply } from '@/lib/missed-call-flow';
 import { isSubscriptionActive } from '@/lib/subscription';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { handleInboundSmsComplianceCommand } from '@/lib/twilio-sms-compliance';
 import {
-  buildOwnerNotificationMessage,
   persistInboundMessage,
-  persistOutboundMessageRecord,
-  sendAndPersistOutboundMessage,
 } from '@/lib/twilio-messaging';
 import { buildTwilioRetryableErrorResponse } from '@/lib/twilio-webhook-retry';
 import { hasValidTwilioWebhookRequest } from '@/lib/twilio-webhook';
 import { messagingTwiML } from '@/lib/twiml';
-import { absoluteUrl } from '@/lib/url';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -222,7 +217,8 @@ export async function POST(request: Request) {
       },
     });
 
-    if (!isSubscriptionActive(business) || lead.billingRequired || !business.twilioPhoneNumber) {
+    const businessTextingNumber = business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber;
+    if (!isSubscriptionActive(business) || lead.billingRequired || !businessTextingNumber) {
       logTwilioInfo('sms', 'automation_blocked', {
         messageSid,
         correlationId,
@@ -238,19 +234,31 @@ export async function POST(request: Request) {
       return withCorrelation(xmlOk());
     }
 
-    const transition = advanceLeadConversation(lead, body, business);
-    const now = new Date();
-    const updatedLead = await db.lead.update({
-      where: { id: lead.id },
-      data: {
-        ...(transition.nextState ? { smsState: transition.nextState } : {}),
-        ...(transition.leadUpdates ?? {}),
-        ...(transition.markQualified && lead.status === 'NEW' ? { status: LeadStatus.QUALIFIED } : {}),
-        ...(transition.completed ? { smsCompletedAt: now } : {}),
-        lastInboundAt: now,
-        lastInteractionAt: now,
-      },
+    const result = await processLeadInboundReply({
+      business,
+      leadId: lead.id,
+      body,
+      fromPhone: from,
+      toPhone: to,
+      twilioSid: messageSid || null,
+      rawPayload: payload,
+      transport: 'twilio',
+      skipInboundPersist: true,
     });
+    const updatedLead = result.lead;
+    const transition = result.transition;
+
+    if (!transition) {
+      logTwilioInfo('sms', 'duplicate_message_retry', {
+        messageSid,
+        correlationId,
+        eventType: 'inbound_sms',
+        businessId: business.id,
+        leadId: lead.id,
+        decision: 'noop_duplicate_after_processing',
+      });
+      return withCorrelation(xmlOk());
+    }
 
     logTwilioInfo('sms', 'state_machine_transition', {
       messageSid,
@@ -260,171 +268,9 @@ export async function POST(request: Request) {
       leadId: updatedLead.id,
       decision: transition.ok ? 'advance_conversation' : 'validation_retry_prompt',
       nextState: transition.nextState ?? updatedLead.smsState,
-      notifyOwner: Boolean(transition.notifyOwner),
+      notifyOwner: Boolean(result.notificationResult?.notified),
       completed: Boolean(transition.completed),
     });
-
-    if (transition.notifyOwner && !updatedLead.ownerNotifiedAt && business.notifyPhone) {
-      try {
-        const leadUrl = absoluteUrl(`/app/leads/${updatedLead.id}`);
-        const ownerMsg = buildOwnerNotificationMessage({
-          businessName: business.name,
-          leadId: updatedLead.id,
-          callerPhone: updatedLead.callerPhoneNormalized,
-          serviceRequested: updatedLead.serviceRequested,
-          urgency: updatedLead.urgency,
-          zipCode: updatedLead.zipCode,
-          bestTime: updatedLead.bestTime,
-          leadUrl,
-        });
-
-        const ownerSend = await sendAndPersistOutboundMessage({
-          businessId: business.id,
-          leadId: updatedLead.id,
-          fromPhone: business.twilioPhoneNumber,
-          toPhone: business.notifyPhone,
-          body: ownerMsg,
-          participant: 'OWNER',
-        });
-
-        if (ownerSend.suppressed) {
-          logTwilioWarn('sms', 'owner_notification_suppressed', {
-            messageSid,
-            correlationId,
-            eventType: 'inbound_sms',
-            businessId: business.id,
-            leadId: updatedLead.id,
-            decision: 'owner_notify_suppressed_opted_out',
-          });
-        } else {
-          await db.lead.update({
-            where: { id: updatedLead.id },
-            data: { ownerNotifiedAt: new Date(), lastOutboundAt: new Date() },
-          });
-          logTwilioInfo('sms', 'owner_notification_sent', {
-            messageSid,
-            correlationId,
-            eventType: 'inbound_sms',
-            businessId: business.id,
-            leadId: updatedLead.id,
-            decision: 'owner_notified',
-          });
-        }
-      } catch (error) {
-        await persistOutboundMessageRecord({
-          businessId: business.id,
-          leadId: updatedLead.id,
-          fromPhone: business.twilioPhoneNumber,
-          toPhone: business.notifyPhone,
-          body: buildOwnerNotificationMessage({
-            businessName: business.name,
-            leadId: updatedLead.id,
-            callerPhone: updatedLead.callerPhoneNormalized,
-            serviceRequested: updatedLead.serviceRequested,
-            urgency: updatedLead.urgency,
-            zipCode: updatedLead.zipCode,
-            bestTime: updatedLead.bestTime,
-            leadUrl: absoluteUrl(`/app/leads/${updatedLead.id}`),
-          }),
-          participant: 'OWNER',
-          status: 'failed',
-          rawPayload: {
-            source: 'twilio.sms',
-            stage: 'owner_notification',
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
-        logTwilioError(
-          'sms',
-          'owner_notification_failed',
-          {
-            messageSid,
-            correlationId,
-            eventType: 'inbound_sms',
-            businessId: business.id,
-            leadId: updatedLead.id,
-            decision: 'owner_notify_failed',
-          },
-          error
-        );
-      }
-    }
-
-    try {
-      const leadSend = await sendAndPersistOutboundMessage({
-        businessId: business.id,
-        leadId: updatedLead.id,
-        fromPhone: business.twilioPhoneNumber,
-        toPhone: updatedLead.callerPhoneNormalized,
-        body: transition.responseText,
-      });
-
-      if (leadSend.suppressed) {
-        logTwilioWarn('sms', 'lead_reply_suppressed', {
-          messageSid,
-          correlationId,
-          eventType: 'inbound_sms',
-          businessId: business.id,
-          leadId: updatedLead.id,
-          decision: 'reply_suppressed_opted_out',
-        });
-      } else {
-        await db.lead.update({
-          where: { id: updatedLead.id },
-          data: {
-            lastOutboundAt: new Date(),
-            lastInteractionAt: new Date(),
-          },
-        });
-
-        logTwilioInfo('sms', 'lead_reply_sent', {
-          messageSid,
-          correlationId,
-          eventType: 'inbound_sms',
-          businessId: business.id,
-          leadId: updatedLead.id,
-          decision: 'send_automated_reply',
-        });
-      }
-    } catch (error) {
-      await persistOutboundMessageRecord({
-        businessId: business.id,
-        leadId: updatedLead.id,
-        fromPhone: business.twilioPhoneNumber,
-        toPhone: updatedLead.callerPhoneNormalized,
-        body: transition.responseText,
-        status: 'fallback_webhook_response',
-        rawPayload: {
-          source: 'twilio.sms',
-          stage: 'lead_reply',
-          fallback: 'webhook_response',
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-
-      await db.lead.update({
-        where: { id: updatedLead.id },
-        data: {
-          lastOutboundAt: new Date(),
-          lastInteractionAt: new Date(),
-        },
-      });
-
-      logTwilioError(
-        'sms',
-        'lead_reply_send_failed',
-        {
-          messageSid,
-          correlationId,
-          eventType: 'inbound_sms',
-          businessId: business.id,
-          leadId: updatedLead.id,
-          decision: 'reply_send_failed_fallback_to_twiML',
-        },
-        error
-      );
-      return withCorrelation(xmlOk(transition.responseText));
-    }
 
     return withCorrelation(xmlOk());
   } catch (error) {

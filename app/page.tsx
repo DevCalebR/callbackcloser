@@ -148,7 +148,7 @@ export default function LandingPage() {
                   <Link className={buttonVariants({ size: 'lg' })} href="/sign-up">
                     Start Free Pilot
                   </Link>
-                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/#product-preview">
+                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/simulator">
                     See Demo
                   </Link>
                   <Link className={buttonVariants({ size: 'lg', variant: 'ghost' })} href="/pricing">
@@ -214,6 +214,15 @@ export default function LandingPage() {
                   <p className="mt-2 text-muted-foreground">
                     AC repair, urgent today, ZIP 78660, asked for an afternoon callback. Your team can call back ready to book the job, not hunt for details.
                   </p>
+                </div>
+                <div className="rounded-2xl border bg-background/80 p-4">
+                  <p className="font-medium">Try the live product demo loop</p>
+                  <p className="mt-2 text-muted-foreground">
+                    Open the missed-call simulator to watch the recovery text, caller intake, owner alert, and dashboard handoff play out end to end.
+                  </p>
+                  <Link className={buttonVariants({ className: 'mt-4' })} href="/simulator">
+                    Open missed-call simulator
+                  </Link>
                 </div>
               </CardContent>
             </Card>

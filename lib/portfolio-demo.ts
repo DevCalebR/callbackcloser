@@ -1,7 +1,10 @@
 import {
   LeadStatus,
+  LeadReadiness,
   ManagedTwilioStatus,
   MessageDirection,
+  OwnerNotificationChannel,
+  OwnerNotificationStatus,
   MessageParticipant,
   SmsConversationState,
   SubscriptionStatus,
@@ -9,10 +12,11 @@ import {
   type Call,
   type Lead,
   type Message,
+  type OwnerNotification,
 } from '@prisma/client';
 
 type LeadListRow = Lead & { messages: Message[] };
-type LeadDetailRecord = Lead & { call: Call | null; messages: Message[] };
+type LeadDetailRecord = Lead & { call: Call | null; messages: Message[]; ownerNotifications: OwnerNotification[] };
 
 const DEMO_USER_ID = 'user_portfolio_demo';
 const DEMO_BUSINESS_ID = 'biz_portfolio_demo';
@@ -75,6 +79,7 @@ function makeCall(input: Partial<Call> & Pick<Call, 'id' | 'twilioCallSid' | 'fr
     recordingDurationSeconds: null,
     answered: false,
     missed: true,
+    isSimulator: false,
     rawPayload: null,
     createdAt: new Date('2026-02-24T15:00:00.000Z'),
     updatedAt: new Date('2026-02-24T15:00:18.000Z'),
@@ -90,8 +95,16 @@ function makeLead(input: Partial<Lead> & Pick<Lead, 'id' | 'businessId' | 'calle
     serviceSelectionRaw: null,
     urgency: null,
     zipCode: null,
+    location: null,
     bestTime: null,
     contactName: null,
+    callerName: null,
+    serviceType: null,
+    callbackRequested: null,
+    summary: null,
+    readiness: LeadReadiness.PENDING,
+    qualifiedAt: null,
+    notifiedAt: null,
     ownerNotifiedAt: null,
     usageLimitNotifiedAt: null,
     smsStartedAt: null,
@@ -99,6 +112,7 @@ function makeLead(input: Partial<Lead> & Pick<Lead, 'id' | 'businessId' | 'calle
     lastInboundAt: null,
     lastOutboundAt: null,
     lastInteractionAt: null,
+    isSimulator: false,
     createdAt: new Date('2026-02-24T14:00:00.000Z'),
     updatedAt: new Date('2026-02-24T14:05:00.000Z'),
     ...input,
@@ -110,10 +124,27 @@ function makeMessage(input: Partial<Message> & Pick<Message, 'id' | 'businessId'
     leadId: null,
     twilioSid: null,
     status: 'delivered',
+    isSimulator: false,
     rawPayload: null,
     twilioCreatedAt: null,
     createdAt: new Date('2026-02-24T14:00:00.000Z'),
     updatedAt: new Date('2026-02-24T14:00:00.000Z'),
+    ...input,
+  };
+}
+
+function makeOwnerNotification(
+  input: Partial<OwnerNotification> &
+    Pick<OwnerNotification, 'id' | 'businessId' | 'leadId' | 'channel' | 'status' | 'body'>
+): OwnerNotification {
+  return {
+    destination: null,
+    subject: null,
+    error: null,
+    metadata: null,
+    sentAt: new Date('2026-02-24T14:10:12.000Z'),
+    createdAt: new Date('2026-02-24T14:10:12.000Z'),
+    updatedAt: new Date('2026-02-24T14:10:12.000Z'),
     ...input,
   };
 }
@@ -140,12 +171,20 @@ const leadA = makeLead({
   status: LeadStatus.BOOKED,
   billingRequired: false,
   smsState: SmsConversationState.COMPLETED,
+  readiness: LeadReadiness.URGENT,
   serviceRequested: 'Water heater repair',
+  serviceType: 'Water heater repair',
   serviceSelectionRaw: '1',
   urgency: 'Today',
   zipCode: '78704',
+  location: '78704',
   bestTime: 'Afternoon',
   contactName: 'Pat Morgan',
+  callerName: 'Pat Morgan',
+  callbackRequested: true,
+  summary: 'Service: Water heater repair | Urgency: Today | Location: 78704 | Callback requested | Caller: Pat Morgan | Phone: +15125550177',
+  qualifiedAt: new Date('2026-02-24T14:09:20.000Z'),
+  notifiedAt: new Date('2026-02-24T14:10:12.000Z'),
   ownerNotifiedAt: new Date('2026-02-24T14:10:12.000Z'),
   smsStartedAt: new Date('2026-02-24T14:08:45.000Z'),
   smsCompletedAt: new Date('2026-02-24T14:12:01.000Z'),
@@ -165,7 +204,7 @@ const leadAMessages: Message[] = [
     participant: MessageParticipant.OWNER,
     fromPhone: '+15125550123',
     toPhone: '+15125550177',
-    body: 'Thanks for calling Northside HVAC & Plumbing. What do you need help with? Reply 1 Repair, 2 Install, 3 Maintenance.',
+    body: 'CallbackCloser: We missed your call. What service do you need? Reply 1 Repair, 2 Install, 3 Maintenance, or reply with a short description. Reply STOP to opt out or HELP for help. Msg freq varies. Msg & data rates may apply.',
     twilioSid: 'SMaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     createdAt: new Date('2026-02-24T14:08:46.000Z'),
     updatedAt: new Date('2026-02-24T14:08:46.000Z'),
@@ -217,7 +256,7 @@ const leadAMessages: Message[] = [
     participant: MessageParticipant.OWNER,
     fromPhone: '+15125550123',
     toPhone: '+15125550177',
-    body: 'What is the job ZIP code?',
+    body: 'What ZIP code or service area is the job in?',
     twilioSid: 'SMeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
     createdAt: new Date('2026-02-24T14:09:21.000Z'),
     updatedAt: new Date('2026-02-24T14:09:21.000Z'),
@@ -243,7 +282,7 @@ const leadAMessages: Message[] = [
     participant: MessageParticipant.OWNER,
     fromPhone: '+15125550123',
     toPhone: '+15125550177',
-    body: 'Best time for a callback? Reply morning, afternoon, or evening.',
+    body: 'Would you like a callback today? Reply yes or no.',
     twilioSid: 'SM11111111111111111111111111111111',
     createdAt: new Date('2026-02-24T14:10:13.000Z'),
     updatedAt: new Date('2026-02-24T14:10:13.000Z'),
@@ -256,7 +295,7 @@ const leadAMessages: Message[] = [
     participant: MessageParticipant.LEAD,
     fromPhone: '+15125550177',
     toPhone: '+15125550123',
-    body: 'Afternoon',
+    body: 'Yes',
     twilioSid: 'SM22222222222222222222222222222222',
     createdAt: new Date('2026-02-24T14:10:48.000Z'),
     updatedAt: new Date('2026-02-24T14:10:48.000Z'),
@@ -269,7 +308,7 @@ const leadAMessages: Message[] = [
     participant: MessageParticipant.OWNER,
     fromPhone: '+15125550123',
     toPhone: '+15125550177',
-    body: 'Optional: what name should we ask for? Reply with your name or type skip.',
+    body: 'What name should we attach to this request? Reply with your name or type skip.',
     twilioSid: 'SM33333333333333333333333333333333',
     createdAt: new Date('2026-02-24T14:10:50.000Z'),
     updatedAt: new Date('2026-02-24T14:10:50.000Z'),
@@ -307,13 +346,20 @@ const leadB = makeLead({
   businessId: DEMO_BUSINESS_ID,
   callerPhone: '+15125550222',
   callerPhoneNormalized: '+15125550222',
-  status: LeadStatus.QUALIFIED,
+  status: LeadStatus.NOTIFIED,
   billingRequired: false,
-  smsState: SmsConversationState.AWAITING_BEST_TIME,
+  smsState: SmsConversationState.AWAITING_NAME,
+  readiness: LeadReadiness.URGENT,
   serviceRequested: 'AC not cooling',
+  serviceType: 'AC not cooling',
   serviceSelectionRaw: 'AC not cooling',
   urgency: 'Today',
   zipCode: '78660',
+  location: '78660',
+  callbackRequested: true,
+  summary: 'Service: AC not cooling | Urgency: Today | Location: 78660 | Callback requested | Phone: +15125550222',
+  qualifiedAt: new Date('2026-02-24T13:35:53.000Z'),
+  notifiedAt: new Date('2026-02-24T13:36:02.000Z'),
   ownerNotifiedAt: new Date('2026-02-24T13:36:02.000Z'),
   smsStartedAt: new Date('2026-02-24T13:33:21.000Z'),
   lastInboundAt: new Date('2026-02-24T13:35:52.000Z'),
@@ -332,7 +378,7 @@ const leadBMessages: Message[] = [
     participant: MessageParticipant.OWNER,
     fromPhone: '+15125550123',
     toPhone: '+15125550222',
-    body: 'Thanks for calling Northside HVAC & Plumbing. What do you need help with?',
+    body: 'CallbackCloser: We missed your call. What service do you need? Reply 1 Repair, 2 Install, 3 Maintenance, or reply with a short description. Reply STOP to opt out or HELP for help. Msg freq varies. Msg & data rates may apply.',
     createdAt: new Date('2026-02-24T13:33:21.000Z'),
     updatedAt: new Date('2026-02-24T13:33:21.000Z'),
   }),
@@ -358,16 +404,62 @@ const leadC = makeLead({
   status: LeadStatus.NEW,
   billingRequired: true,
   smsState: SmsConversationState.NOT_STARTED,
+  readiness: LeadReadiness.PENDING,
   createdAt: new Date('2026-02-24T12:52:10.000Z'),
   updatedAt: new Date('2026-02-24T12:52:10.000Z'),
 });
 
 const leadCMessages: Message[] = [];
 
+const leadAOwnerNotifications: OwnerNotification[] = [
+  makeOwnerNotification({
+    id: 'notify_demo_001',
+    businessId: DEMO_BUSINESS_ID,
+    leadId: leadA.id,
+    channel: OwnerNotificationChannel.SMS,
+    status: OwnerNotificationStatus.SENT,
+    destination: '+15125550199',
+    body: 'CallbackCloser lead for Northside HVAC & Plumbing (Demo): Water heater repair. Urgency: Today. Location: 78704. Readiness: Urgent.',
+  }),
+  makeOwnerNotification({
+    id: 'notify_demo_002',
+    businessId: DEMO_BUSINESS_ID,
+    leadId: leadA.id,
+    channel: OwnerNotificationChannel.EMAIL,
+    status: OwnerNotificationStatus.SENT,
+    destination: 'owner@northsidedemo.com',
+    subject: 'CallbackCloser lead: Water heater repair for Northside HVAC & Plumbing (Demo)',
+    body: 'CallbackCloser qualified a missed-call lead for Northside HVAC & Plumbing (Demo).',
+  }),
+  makeOwnerNotification({
+    id: 'notify_demo_003',
+    businessId: DEMO_BUSINESS_ID,
+    leadId: leadA.id,
+    channel: OwnerNotificationChannel.IN_APP,
+    status: OwnerNotificationStatus.SENT,
+    body: leadA.summary || 'Lead ready in dashboard',
+  }),
+];
+
+const leadBOwnerNotifications: OwnerNotification[] = [
+  makeOwnerNotification({
+    id: 'notify_demo_004',
+    businessId: DEMO_BUSINESS_ID,
+    leadId: leadB.id,
+    channel: OwnerNotificationChannel.SMS,
+    status: OwnerNotificationStatus.SENT,
+    destination: '+15125550199',
+    body: 'CallbackCloser lead for Northside HVAC & Plumbing (Demo): AC not cooling. Urgency: Today. Location: 78660. Readiness: Urgent.',
+    createdAt: new Date('2026-02-24T13:36:02.000Z'),
+    updatedAt: new Date('2026-02-24T13:36:02.000Z'),
+    sentAt: new Date('2026-02-24T13:36:02.000Z'),
+  }),
+];
+
 const demoLeadRecords: LeadDetailRecord[] = [
-  { ...leadA, call: callA, messages: leadAMessages },
-  { ...leadB, call: null, messages: leadBMessages },
-  { ...leadC, call: null, messages: leadCMessages },
+  { ...leadA, call: callA, messages: leadAMessages, ownerNotifications: leadAOwnerNotifications },
+  { ...leadB, call: null, messages: leadBMessages, ownerNotifications: leadBOwnerNotifications },
+  { ...leadC, call: null, messages: leadCMessages, ownerNotifications: [] },
 ];
 
 export function getPortfolioDemoBusiness(): Business {

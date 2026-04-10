@@ -160,7 +160,7 @@ export async function POST(request: Request) {
         timeout: business.missedCallSeconds,
         action: actionUrl,
         method: 'POST',
-        callerId: business.twilioPhoneNumber || undefined,
+        callerId: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || undefined,
         ...buildDialRecordingOptions(actionUrl),
       });
       dial.number(business.forwardingNumber);

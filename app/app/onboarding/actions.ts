@@ -1,6 +1,6 @@
 'use server';
 
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
@@ -38,7 +38,13 @@ export async function saveOnboardingAction(formData: FormData) {
     redirect(`/app/onboarding?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid form data')}`);
   }
 
-  const business = await upsertBusinessForOwner(userId, parsed.data);
+  const user = await currentUser();
+  const ownerEmail =
+    (user?.primaryEmailAddressId
+      ? user.emailAddresses.find((email) => email.id === user.primaryEmailAddressId)?.emailAddress
+      : user?.emailAddresses[0]?.emailAddress) || null;
+
+  const business = await upsertBusinessForOwner(userId, { ...parsed.data, ownerEmail });
   const provisioningBlockReason = getTwilioProvisioningBlockReason(business);
 
   if (!provisioningBlockReason) {

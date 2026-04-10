@@ -144,7 +144,10 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         db.lead.count({
           where: {
             businessId: business.id,
-            ownerNotifiedAt: { gte: currentMonth.start, lt: currentMonth.end },
+            OR: [
+              { ownerNotifiedAt: { gte: currentMonth.start, lt: currentMonth.end } },
+              { notifiedAt: { gte: currentMonth.start, lt: currentMonth.end } },
+            ],
           },
         }),
         getStripeBillingSnapshot(business),

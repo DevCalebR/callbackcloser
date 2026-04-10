@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MessageDirection } from '@prisma/client';
+import { MessageDirection, OwnerNotificationChannel } from '@prisma/client';
 import { notFound } from 'next/navigation';
 
 import { updateLeadStatusAction } from '@/app/app/leads/actions';
@@ -14,6 +14,7 @@ import {
   getLeadLastActivityAt,
   getLeadStatusBadgeVariant,
   isMessageDeliveryIssueStatus,
+  leadReadinessLabels,
   leadStatusLabels,
 } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
@@ -28,6 +29,9 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
         where: { id: params.leadId, businessId: business.id },
         include: {
           call: true,
+          ownerNotifications: {
+            orderBy: { createdAt: 'desc' },
+          },
           messages: {
             orderBy: { createdAt: 'asc' },
           },
@@ -40,6 +44,13 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
   const messageIssues = lead.messages.filter((message) => isMessageDeliveryIssueStatus(message.status));
   const callbackState = getLeadCallbackState(lead);
   const returnPath = `/app/leads?leadId=${lead.id}`;
+  const ownerNotifications = 'ownerNotifications' in lead ? lead.ownerNotifications : [];
+  const latestSmsNotification =
+    ownerNotifications.find((notification) => notification.channel === OwnerNotificationChannel.SMS) ?? null;
+  const latestEmailNotification =
+    ownerNotifications.find((notification) => notification.channel === OwnerNotificationChannel.EMAIL) ?? null;
+  const latestInAppNotification =
+    ownerNotifications.find((notification) => notification.channel === OwnerNotificationChannel.IN_APP) ?? null;
 
   return (
     <div className="space-y-6">
@@ -76,14 +87,18 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
               <CardDescription>What CallbackCloser captured before the callback.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Service</span><span>{lead.serviceRequested || '-'}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Service</span><span>{lead.serviceType || lead.serviceRequested || '-'}</span></div>
               <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Urgency</span><span>{lead.urgency || '-'}</span></div>
-              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">ZIP</span><span>{lead.zipCode || '-'}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Location</span><span>{lead.location || lead.zipCode || '-'}</span></div>
               <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Best time</span><span>{lead.bestTime || '-'}</span></div>
-              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Name</span><span>{lead.contactName || '-'}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Name</span><span>{lead.callerName || lead.contactName || '-'}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Callback requested</span><span>{typeof lead.callbackRequested === 'boolean' ? (lead.callbackRequested ? 'Yes' : 'No') : '-'}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Readiness</span><span>{leadReadinessLabels[lead.readiness]}</span></div>
               <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Callback state</span><span>{callbackState}</span></div>
               <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Last activity</span><span>{formatDateTime(getLeadLastActivityAt(lead))}</span></div>
-              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Owner alerted</span><span>{formatDateTime(lead.ownerNotifiedAt)}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Qualified at</span><span>{formatDateTime(lead.qualifiedAt)}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Owner alerted</span><span>{formatDateTime(lead.notifiedAt || lead.ownerNotifiedAt)}</span></div>
+              <div className="rounded-lg bg-muted/30 p-3 text-muted-foreground">{lead.summary || 'Lead summary will appear as the intake flow captures more detail.'}</div>
             </CardContent>
           </Card>
 
@@ -120,6 +135,19 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
               <Link className={buttonVariants({ variant: 'secondary', className: 'w-full' })} href={`tel:${lead.callerPhoneNormalized || lead.callerPhone}`}>
                 Call Now
               </Link>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Owner delivery</CardTitle>
+              <CardDescription>What was sent once the lead became ready to call back.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">SMS alert</span><span>{latestSmsNotification ? formatDateTime(latestSmsNotification.sentAt || latestSmsNotification.createdAt) : 'Not sent yet'}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Email alert</span><span>{latestEmailNotification ? formatDateTime(latestEmailNotification.sentAt || latestEmailNotification.createdAt) : 'Not sent yet'}</span></div>
+              <div className="grid grid-cols-2 gap-2"><span className="text-muted-foreground">Dashboard alert</span><span>{latestInAppNotification ? 'Visible in app' : 'Pending'}</span></div>
+              {latestSmsNotification ? <div className="rounded-lg bg-muted/30 p-3 text-muted-foreground">{latestSmsNotification.body}</div> : null}
             </CardContent>
           </Card>
 

@@ -7,8 +7,11 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - records the call and lead in Postgres
 - starts an SMS qualification flow (subscription-gated)
 - stores all inbound/outbound messages in Prisma
-- notifies the owner by SMS after ZIP is collected
+- extracts service type, urgency, location, callback intent, caller name, and a lead summary
+- qualifies the lead once enough detail is captured
+- delivers the lead to the business owner by SMS, email, and in-app visibility
 - lets the owner manage leads in a protected dashboard
+- includes a public missed-call simulator route for end-to-end demos without touching real customer workspaces
 
 ## Tech Stack
 
@@ -29,7 +32,9 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - Missed-call lead creation + idempotent callback handling
 - Persisted SMS state machine per lead (`smsState` in DB)
 - Twilio SMS webhook (`/api/twilio/sms`) with lead qualification steps
+- Qualified-lead delivery with idempotent SMS/email/in-app owner notifications
 - Lead dashboard + filters + lead detail transcript + status updates
+- Public missed-call simulator (`/simulator`) with isolated demo lead runs
 - Stripe billing page + checkout + billing portal
 - Public purchase entry route (`/buy`) for external marketing-site links
 - Stripe webhook sync for subscription status gating
@@ -67,6 +72,8 @@ Required categories:
 - Clerk keys
 - Stripe keys + price IDs + webhook secret
 - Twilio credentials + webhook auth token
+- Optional owner email delivery (`RESEND_API_KEY`, `CALLBACKCLOSER_FROM_EMAIL`)
+- Optional public simulator config (`ENABLE_PUBLIC_MISSED_CALL_SIMULATOR`, `SIMULATOR_BUSINESS_ID`, `ENABLE_PUBLIC_SIMULATOR_REAL_SMS`)
 - Database URL
 - Optional rate-limit tuning vars (defaults are built in)
 
@@ -258,11 +265,19 @@ State machine steps (persisted on `Lead.smsState`):
 
 1. Service (1/2/3 or free text)
 2. Urgency (1 Emergency / 2 Today / 3 This week / 4 Quote)
-3. ZIP
-4. Best time (morning/afternoon/evening)
+3. Location / ZIP
+4. Callback requested (yes / no)
 5. Optional name
 
-After ZIP is collected, the owner receives a summary SMS + lead link (if `notifyPhone` is set).
+Qualification + owner delivery:
+
+- A lead becomes **qualified** once CallbackCloser knows the service type and either urgency or callback intent
+- `Lead.readiness` becomes `urgent` when the caller indicates an urgent need
+- The first time a lead qualifies, CallbackCloser creates idempotent owner notification records and delivers the lead through:
+  - SMS alert
+  - email alert
+  - in-app dashboard visibility
+- Simulator leads never send owner notifications to real businesses; they only create simulated preview records
 
 Compliance handling:
 
@@ -309,6 +324,19 @@ Where to access recordings:
 - These leads are marked `billingRequired=true` and flagged in the dashboard.
 - New missed calls begin SMS follow-up automatically once subscription status becomes active again.
 
+## Owner notification settings
+
+Each business can control owner delivery with `BusinessNotificationSettings`:
+
+- `ownerPhone`
+- `ownerEmail`
+- `notifySms`
+- `notifyEmail`
+- `notifyInApp`
+- `urgentOnly`
+
+If `urgentOnly=true`, the lead must reach urgent readiness before CallbackCloser sends owner delivery alerts.
+
 ## Database Models
 
 Prisma models included:
@@ -317,6 +345,32 @@ Prisma models included:
 - `Lead`
 - `Message`
 - `Call`
+- `OwnerNotification`
+- `BusinessNotificationSettings`
+- `SimulatorRun`
+
+## Public missed-call simulator
+
+Route:
+
+- `/simulator`
+
+What it demonstrates:
+
+1. A missed call is detected
+2. CallbackCloser sends the first recovery text
+3. The caller completes the short intake flow
+4. The lead is qualified and summarized
+5. Owner delivery previews are generated
+6. The dashboard-ready lead card is shown
+
+Simulator safety:
+
+- The simulator is enabled only when `ENABLE_PUBLIC_MISSED_CALL_SIMULATOR=true`
+- It uses the business identified by `SIMULATOR_BUSINESS_ID`
+- Simulator records are isolated with `Lead.isSimulator`, `Call.isSimulator`, `Message.isSimulator`, and `SimulatorRun`
+- Owner notifications for simulator runs are stored as preview records and do not send to real customer destinations
+- If `ENABLE_PUBLIC_SIMULATOR_REAL_SMS=true`, the simulator can send the caller-side SMS to the supplied demo number, but owner delivery remains simulated
 
 ## Production Setup (Vercel)
 
@@ -401,6 +455,7 @@ Use this checklist before sending paid traffic to `callbackcloser.com` or allowi
 - `/privacy` - privacy policy
 - `/refund` - refund policy
 - `/contact` - public support/contact page
+- `/simulator` - public missed-call simulator
 - `/sign-in` - Clerk sign-in
 - `/sign-up` - Clerk sign-up
 - `/app/onboarding` - create business record

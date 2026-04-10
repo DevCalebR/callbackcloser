@@ -1,8 +1,9 @@
-import { LeadStatus, SmsConversationState, type Lead } from '@prisma/client';
+import { LeadReadiness, LeadStatus, SmsConversationState, type Lead } from '@prisma/client';
 
 export const leadStatusOrder: LeadStatus[] = [
   LeadStatus.NEW,
   LeadStatus.QUALIFIED,
+  LeadStatus.NOTIFIED,
   LeadStatus.CONTACTED,
   LeadStatus.BOOKED,
   LeadStatus.LOST,
@@ -11,9 +12,16 @@ export const leadStatusOrder: LeadStatus[] = [
 export const leadStatusLabels: Record<LeadStatus, string> = {
   NEW: 'New',
   QUALIFIED: 'Qualified',
+  NOTIFIED: 'Notified',
   CONTACTED: 'Contacted',
   BOOKED: 'Booked',
   LOST: 'Lost',
+};
+
+export const leadReadinessLabels: Record<LeadReadiness, string> = {
+  PENDING: 'Pending',
+  QUALIFIED: 'Qualified',
+  URGENT: 'Urgent',
 };
 
 export const smsStateLabels: Record<SmsConversationState, string> = {
@@ -56,6 +64,7 @@ export function getLeadStatusBadgeVariant(status: LeadStatus) {
   if (status === LeadStatus.BOOKED) return 'success';
   if (status === LeadStatus.LOST) return 'destructive';
   if (status === LeadStatus.NEW) return 'outline';
+  if (status === LeadStatus.NOTIFIED) return 'success';
   return 'secondary';
 }
 
@@ -65,14 +74,17 @@ export function getLeadLastActivityAt(lead: LeadActivityInput) {
   return lead.lastInteractionAt ?? lead.lastInboundAt ?? lead.lastOutboundAt ?? lead.createdAt;
 }
 
-type LeadCallbackStateInput = Pick<Lead, 'status' | 'billingRequired' | 'smsState' | 'ownerNotifiedAt'>;
+type LeadCallbackStateInput = Pick<Lead, 'status' | 'billingRequired' | 'smsState' | 'ownerNotifiedAt' | 'notifiedAt'>;
 
 export function getLeadCallbackState(lead: LeadCallbackStateInput) {
   if (lead.status === LeadStatus.BOOKED) return 'Booked';
   if (lead.status === LeadStatus.LOST) return 'Lost';
   if (lead.status === LeadStatus.CONTACTED) return 'Contacted';
   if (lead.billingRequired) return 'Billing paused';
-  if (lead.ownerNotifiedAt || lead.smsState === SmsConversationState.COMPLETED) return 'Ready to call';
+  if (lead.status === LeadStatus.NOTIFIED || lead.notifiedAt || lead.ownerNotifiedAt || lead.smsState === SmsConversationState.COMPLETED) {
+    return 'Owner notified';
+  }
+  if (lead.status === LeadStatus.QUALIFIED) return 'Qualified';
   if (lead.smsState === SmsConversationState.NOT_STARTED) return 'Awaiting first SMS';
   return 'Qualifying by text';
 }

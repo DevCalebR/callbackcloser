@@ -32,7 +32,15 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       : await isSmsRecipientOptedOut({ businessId: business.id, phone: business.notifyPhone });
   const successfulLeadCount = demoMode
     ? 1
-    : await db.lead.count({ where: { businessId: business.id, ownerNotifiedAt: { not: null } } });
+    : await db.lead.count({
+        where: {
+          businessId: business.id,
+          OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
+        },
+      });
+  const notificationSettings = demoMode
+    ? null
+    : await db.businessNotificationSettings.findUnique({ where: { businessId: business.id } });
   const managedTextingNumber = getManagedTextingNumber(business);
   const managedTwilioSummary = getManagedTwilioStatusSummary(business);
   const lastManagedSetupRefresh = business.twilioWebhookSyncedAt ? new Date(business.twilioWebhookSyncedAt).toLocaleString() : 'Never';
@@ -108,8 +116,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
     },
   ];
 
-  const firstReplyPreview = `Thanks for calling ${business.name}. What do you need help with? Reply 1 ${business.serviceLabel1}, 2 ${business.serviceLabel2}, 3 ${business.serviceLabel3}.`;
-  const ownerSummaryPreview = `New missed-call lead: ${business.serviceLabel1} | Urgency: Today | ZIP: 78704 | Best time: Afternoon`;
+  const firstReplyPreview = `CallbackCloser: We missed your call. What service do you need? Reply 1 ${business.serviceLabel1}, 2 ${business.serviceLabel2}, 3 ${business.serviceLabel3}, or reply with a short description. Reply STOP to opt out or HELP for help. Msg freq varies. Msg & data rates may apply.`;
+  const ownerSummaryPreview = `New missed-call lead: ${business.serviceLabel1} | Urgency: Today | Location: 78704 | Callback: Afternoon | Open in dashboard`;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -311,9 +319,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                     <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
                       <li>What service do you need?</li>
                       <li>How urgent is it?</li>
-                      <li>What ZIP code is the job in?</li>
-                      <li>Best time for a callback?</li>
-                      <li>Optional name capture.</li>
+                      <li>What ZIP code or service area should the owner know?</li>
+                      <li>Would you like a callback today?</li>
+                      <li>Name capture if the caller shares it.</li>
                     </ol>
                   </div>
                 </div>
@@ -349,10 +357,17 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                 <CardDescription>Where the ready-to-close handoff goes and what the owner sees.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
-                <div>
-                  <Label htmlFor="notifyPhone">Owner mobile number</Label>
-                  <Input id="notifyPhone" name="notifyPhone" defaultValue={business.notifyPhone ?? ''} />
-                  <p className="mt-1 text-xs text-muted-foreground">The owner summary SMS is sent here after the lead shares their ZIP code.</p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label htmlFor="notifyPhone">Owner mobile number</Label>
+                    <Input id="notifyPhone" name="notifyPhone" defaultValue={notificationSettings?.ownerPhone ?? business.notifyPhone ?? ''} />
+                    <p className="mt-1 text-xs text-muted-foreground">The owner summary SMS is sent here as soon as the lead is qualified.</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="ownerEmail">Owner email</Label>
+                    <Input id="ownerEmail" name="ownerEmail" defaultValue={notificationSettings?.ownerEmail ?? ''} placeholder="owner@business.com" />
+                    <p className="mt-1 text-xs text-muted-foreground">Qualified lead emails include the structured summary and a direct link to the lead.</p>
+                  </div>
                 </div>
 
                 <div className="rounded-xl border bg-background/80 p-4 text-sm">
@@ -361,20 +376,42 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border bg-muted/20 p-4 text-sm">
-                    <p className="font-medium">Notify mode</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Badge variant="success">Qualified-only</Badge>
-                      <Badge variant="outline">Current behavior</Badge>
+                  <label className="rounded-xl border bg-muted/20 p-4 text-sm">
+                    <div className="flex items-start gap-3">
+                      <input defaultChecked={notificationSettings?.notifySms ?? true} name="notifySms" type="checkbox" value="true" />
+                      <div>
+                        <p className="font-medium">Send owner SMS alerts</p>
+                        <p className="mt-2 text-muted-foreground">Useful when the lead needs a fast callback and the owner wants a text immediately.</p>
+                      </div>
                     </div>
-                    <p className="mt-2 text-muted-foreground">The current product sends owner alerts once the lead reaches the ZIP stage of qualification.</p>
-                  </div>
-                  <div className="rounded-xl border bg-muted/20 p-4 text-sm">
-                    <p className="font-medium">Daily digest</p>
-                    <p className="mt-2 text-muted-foreground">
-                      Instant owner alerts stay on by default so every qualified lead reaches the right phone quickly.
-                    </p>
-                  </div>
+                  </label>
+                  <label className="rounded-xl border bg-muted/20 p-4 text-sm">
+                    <div className="flex items-start gap-3">
+                      <input defaultChecked={notificationSettings?.notifyEmail ?? true} name="notifyEmail" type="checkbox" value="true" />
+                      <div>
+                        <p className="font-medium">Send owner email alerts</p>
+                        <p className="mt-2 text-muted-foreground">Email includes the structured summary and direct link back into CallbackCloser.</p>
+                      </div>
+                    </div>
+                  </label>
+                  <label className="rounded-xl border bg-muted/20 p-4 text-sm">
+                    <div className="flex items-start gap-3">
+                      <input defaultChecked={notificationSettings?.notifyInApp ?? true} name="notifyInApp" type="checkbox" value="true" />
+                      <div>
+                        <p className="font-medium">Show in-app notifications</p>
+                        <p className="mt-2 text-muted-foreground">New qualified leads stay visible in the dashboard even if the owner misses the alert.</p>
+                      </div>
+                    </div>
+                  </label>
+                  <label className="rounded-xl border bg-muted/20 p-4 text-sm">
+                    <div className="flex items-start gap-3">
+                      <input defaultChecked={notificationSettings?.urgentOnly ?? false} name="urgentOnly" type="checkbox" value="true" />
+                      <div>
+                        <p className="font-medium">Urgent leads only</p>
+                        <p className="mt-2 text-muted-foreground">Turn this on if the owner only wants outbound alerts for urgent missed-call leads.</p>
+                      </div>
+                    </div>
+                  </label>
                 </div>
               </CardContent>
             </Card>

@@ -7,6 +7,7 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
   name: string;
   forwardingNumber: string;
   notifyPhone?: string | null;
+  ownerEmail?: string | null;
   missedCallSeconds: number;
   serviceLabel1: string;
   serviceLabel2: string;
@@ -28,7 +29,7 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
     managedTwilioStatusUpdatedAt: new Date(),
   };
 
-  return db.business.upsert({
+  const business = await db.business.upsert({
     where: { ownerClerkId },
     create: data,
     update: {
@@ -43,6 +44,21 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
       managedTwilioStatusUpdatedAt: new Date(),
     },
   });
+
+  await db.businessNotificationSettings.upsert({
+    where: { businessId: business.id },
+    create: {
+      businessId: business.id,
+      ownerPhone: data.notifyPhone,
+      ownerEmail: input.ownerEmail?.trim() || null,
+    },
+    update: {
+      ownerPhone: data.notifyPhone,
+      ownerEmail: input.ownerEmail?.trim() || undefined,
+    },
+  });
+
+  return business;
 }
 
 export async function findBusinessByTwilioNumber(phoneNumber: string) {

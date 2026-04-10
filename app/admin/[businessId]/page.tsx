@@ -18,7 +18,12 @@ export default async function AdminBusinessDetailPage({ params }: { params: { bu
 
   const [business, successfulLeadCount, leadCount, callCount, messageCount] = await Promise.all([
     db.business.findUnique({ where: { id: params.businessId } }),
-    db.lead.count({ where: { businessId: params.businessId, ownerNotifiedAt: { not: null } } }),
+    db.lead.count({
+      where: {
+        businessId: params.businessId,
+        OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
+      },
+    }),
     db.lead.count({ where: { businessId: params.businessId } }),
     db.call.count({ where: { businessId: params.businessId } }),
     db.message.count({ where: { businessId: params.businessId } }),

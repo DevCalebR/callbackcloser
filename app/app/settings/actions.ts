@@ -1,6 +1,6 @@
 'use server';
 
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
@@ -41,6 +41,12 @@ export async function saveBusinessSettingsAction(formData: FormData) {
     redirect(`/app/settings?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid form data')}`);
   }
 
+  const user = await currentUser();
+  const fallbackOwnerEmail =
+    (user?.primaryEmailAddressId
+      ? user.emailAddresses.find((email) => email.id === user.primaryEmailAddressId)?.emailAddress
+      : user?.emailAddresses[0]?.emailAddress) || null;
+
   await db.business.update({
     where: { id: business.id },
     data: {
@@ -55,8 +61,30 @@ export async function saveBusinessSettingsAction(formData: FormData) {
     },
   });
 
+  await db.businessNotificationSettings.upsert({
+    where: { businessId: business.id },
+    create: {
+      businessId: business.id,
+      ownerPhone: normalizePhoneNumber(parsed.data.notifyPhone || '') || null,
+      ownerEmail: parsed.data.ownerEmail?.trim().toLowerCase() || fallbackOwnerEmail?.trim().toLowerCase() || null,
+      notifySms: parsed.data.notifySms,
+      notifyEmail: parsed.data.notifyEmail,
+      notifyInApp: parsed.data.notifyInApp,
+      urgentOnly: parsed.data.urgentOnly,
+    },
+    update: {
+      ownerPhone: normalizePhoneNumber(parsed.data.notifyPhone || '') || null,
+      ownerEmail: parsed.data.ownerEmail?.trim().toLowerCase() || fallbackOwnerEmail?.trim().toLowerCase() || null,
+      notifySms: parsed.data.notifySms,
+      notifyEmail: parsed.data.notifyEmail,
+      notifyInApp: parsed.data.notifyInApp,
+      urgentOnly: parsed.data.urgentOnly,
+    },
+  });
+
   revalidatePath('/app/settings');
   revalidatePath('/app/leads');
+  revalidatePath(`/app/leads`);
   revalidatePath('/app/call-flow');
   redirect('/app/settings?saved=1');
 }

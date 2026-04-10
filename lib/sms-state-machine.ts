@@ -2,9 +2,13 @@ import type { Lead } from '@prisma/client';
 import { SmsConversationState } from '@prisma/client';
 
 type LeadFieldUpdates = {
+  serviceType?: string | null;
   serviceRequested?: string | null;
   serviceSelectionRaw?: string | null;
   urgency?: string | null;
+  location?: string | null;
+  callbackRequested?: boolean | null;
+  callerName?: string | null;
   zipCode?: string | null;
   bestTime?: string | null;
   contactName?: string | null;
@@ -35,27 +39,27 @@ function lower(text: string) {
 }
 
 export function getServicePrompt(business: BusinessPromptConfig) {
-  return `Thanks for calling. What do you need help with? Reply 1 for ${business.serviceLabel1}, 2 for ${business.serviceLabel2}, 3 for ${business.serviceLabel3}, or reply with a short description.`;
+  return `CallbackCloser: We missed your call. What service do you need? Reply 1 for ${business.serviceLabel1}, 2 for ${business.serviceLabel2}, 3 for ${business.serviceLabel3}, or reply with a short description. Reply STOP to opt out or HELP for help. Msg freq varies. Msg & data rates may apply.`;
 }
 
 export function getUrgencyPrompt() {
-  return 'How urgent is it? Reply 1 Emergency, 2 Today, 3 This week, 4 Quote.';
+  return 'How urgent is it? Reply emergency, today, this week, or quote.';
 }
 
 export function getZipPrompt() {
-  return 'What is the job ZIP code?';
+  return 'What ZIP code or service area should the tech know about?';
 }
 
 export function getBestTimePrompt() {
-  return 'Best time for a callback? Reply morning, afternoon, or evening.';
+  return 'Would you like a callback today? Reply yes, no, or tell us a preferred time.';
 }
 
 export function getNamePrompt() {
-  return 'Optional: what name should we ask for? Reply with your name or type skip.';
+  return 'What name should we ask for? Reply with your name or type skip.';
 }
 
 export function getCompletionPrompt() {
-  return 'Thanks - we have your details and will reach out shortly.';
+  return 'Thanks. CallbackCloser has your details and will pass them along for follow-up shortly.';
 }
 
 function parseService(input: string, business: BusinessPromptConfig) {
@@ -78,6 +82,7 @@ function parseUrgency(input: string) {
     '2': 'Today',
     today: 'Today',
     asap: 'Today',
+    now: 'Today',
     '3': 'This week',
     week: 'This week',
     'this week': 'This week',
@@ -96,20 +101,21 @@ function parseZip(input: string) {
   return null;
 }
 
-function parseBestTime(input: string) {
+function parseCallbackPreference(input: string) {
   const value = lower(input);
-  const map: Record<string, string> = {
-    '1': 'Morning',
-    morning: 'Morning',
-    am: 'Morning',
-    '2': 'Afternoon',
-    afternoon: 'Afternoon',
-    pm: 'Afternoon',
-    '3': 'Evening',
-    evening: 'Evening',
-    tonight: 'Evening',
-  };
-  return map[value] ?? null;
+  if (!value) return null;
+  if (['no', 'no callback', 'text only'].includes(value)) {
+    return { callbackRequested: false, bestTime: null };
+  }
+  if (['yes', 'call', 'call me', 'please call', 'today'].includes(value)) {
+    return { callbackRequested: true, bestTime: 'Today' };
+  }
+
+  if (value.length >= 2 && value.length <= 40) {
+    return { callbackRequested: true, bestTime: normalizeText(input) };
+  }
+
+  return null;
 }
 
 export function advanceLeadConversation(lead: Pick<Lead, 'smsState'>, body: string, business: BusinessPromptConfig): TransitionResult {
@@ -135,9 +141,8 @@ export function advanceLeadConversation(lead: Pick<Lead, 'smsState'>, body: stri
       return {
         ok: true,
         nextState: SmsConversationState.AWAITING_URGENCY,
-        leadUpdates: { serviceRequested: service, serviceSelectionRaw: text || service },
+        leadUpdates: { serviceType: service, serviceRequested: service, serviceSelectionRaw: text || service },
         responseText: getUrgencyPrompt(),
-        markQualified: true,
       };
     }
 
@@ -154,39 +159,41 @@ export function advanceLeadConversation(lead: Pick<Lead, 'smsState'>, body: stri
         nextState: SmsConversationState.AWAITING_ZIP,
         leadUpdates: { urgency },
         responseText: getZipPrompt(),
+        markQualified: true,
       };
     }
 
     case SmsConversationState.AWAITING_ZIP: {
-      const zipCode = parseZip(text);
-      if (!zipCode) {
+      const location = normalizeText(text);
+      if (!location || location.length < 3 || location.length > 80) {
         return {
           ok: false,
-          responseText: 'Please reply with a valid ZIP/postal code.',
+          responseText: 'Please reply with a ZIP code or short service area description.',
         };
       }
+      const zipCode = parseZip(text);
       return {
         ok: true,
         nextState: SmsConversationState.AWAITING_BEST_TIME,
-        leadUpdates: { zipCode },
+        leadUpdates: { location, zipCode },
         responseText: getBestTimePrompt(),
-        notifyOwner: true,
       };
     }
 
     case SmsConversationState.AWAITING_BEST_TIME: {
-      const bestTime = parseBestTime(text);
-      if (!bestTime) {
+      const callback = parseCallbackPreference(text);
+      if (!callback) {
         return {
           ok: false,
-          responseText: 'Please reply morning, afternoon, or evening.',
+          responseText: 'Please reply yes, no, or tell us the best callback time.',
         };
       }
       return {
         ok: true,
         nextState: SmsConversationState.AWAITING_NAME,
-        leadUpdates: { bestTime },
+        leadUpdates: { callbackRequested: callback.callbackRequested, bestTime: callback.bestTime },
         responseText: getNamePrompt(),
+        markQualified: true,
       };
     }
 
@@ -196,8 +203,9 @@ export function advanceLeadConversation(lead: Pick<Lead, 'smsState'>, body: stri
       return {
         ok: true,
         nextState: SmsConversationState.COMPLETED,
-        leadUpdates: { contactName },
+        leadUpdates: { contactName, callerName: contactName },
         responseText: getCompletionPrompt(),
+        notifyOwner: true,
         completed: true,
       };
     }

@@ -46,6 +46,9 @@ model Business {
   calls                       Call[]
   leads                       Lead[]
   messages                    Message[]
+  ownerNotifications          OwnerNotification[]
+  notificationSettings        BusinessNotificationSettings?
+  simulatorRuns               SimulatorRun[]
   smsConsents                 SmsConsent[]
 
   @@index([subscriptionStatus])
@@ -74,6 +77,7 @@ model Call {
   recordingUrl             String?
   recordingStatus          String?
   recordingDurationSeconds Int?
+  isSimulator              Boolean  @default(false)
   business                 Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   lead                     Lead?
 
@@ -89,8 +93,17 @@ model Lead {
   callerPhone           String
   callerPhoneNormalized String
   status                LeadStatus           @default(NEW)
+  readiness             LeadReadiness        @default(PENDING)
   billingRequired       Boolean              @default(false)
   smsState              SmsConversationState @default(NOT_STARTED)
+  serviceType           String?
+  location              String?
+  callerName            String?
+  callbackRequested     Boolean?
+  summary               String?
+  qualifiedAt           DateTime?
+  notifiedAt            DateTime?
+  isSimulator           Boolean              @default(false)
   serviceRequested      String?
   serviceSelectionRaw   String?
   urgency               String?
@@ -109,11 +122,15 @@ model Lead {
   business              Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
   call                  Call?                @relation(fields: [callId], references: [id], onDelete: SetNull)
   messages              Message[]
+  ownerNotifications    OwnerNotification[]
+  simulatorRun          SimulatorRun?
 
   @@index([businessId, status])
+  @@index([businessId, readiness])
   @@index([businessId, billingRequired])
   @@index([businessId, callerPhoneNormalized])
   @@index([businessId, smsState])
+  @@index([businessId, isSimulator, createdAt])
   @@index([createdAt])
 }
 
@@ -128,6 +145,7 @@ model Message {
   toPhone         String
   body            String
   status          String?
+  isSimulator     Boolean             @default(false)
   rawPayload      Json?
   twilioCreatedAt DateTime?
   createdAt       DateTime           @default(now())
@@ -138,6 +156,57 @@ model Message {
   @@index([businessId, createdAt])
   @@index([leadId, createdAt])
   @@index([direction])
+}
+
+model OwnerNotification {
+  id          String                  @id @default(cuid())
+  businessId  String
+  leadId      String
+  channel     OwnerNotificationChannel
+  status      OwnerNotificationStatus @default(PENDING)
+  destination String?
+  body        String
+  subject     String?
+  error       String?
+  metadata    Json?
+  sentAt      DateTime?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  business    Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  lead        Lead                    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, channel])
+  @@index([businessId, createdAt])
+  @@index([leadId, status])
+}
+
+model BusinessNotificationSettings {
+  id          String   @id @default(cuid())
+  businessId  String   @unique
+  ownerPhone  String?
+  ownerEmail  String?
+  notifySms   Boolean  @default(true)
+  notifyEmail Boolean  @default(true)
+  notifyInApp Boolean  @default(true)
+  urgentOnly  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model SimulatorRun {
+  id          String            @id @default(cuid())
+  publicId    String            @unique
+  businessId  String
+  leadId      String            @unique
+  callerPhone String
+  status      SimulatorRunStatus @default(ACTIVE)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  lead        Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
 }
 
 model SmsConsent {
@@ -175,9 +244,16 @@ enum SubscriptionStatus {
 enum LeadStatus {
   NEW
   QUALIFIED
+  NOTIFIED
   CONTACTED
   BOOKED
   LOST
+}
+
+enum LeadReadiness {
+  PENDING
+  QUALIFIED
+  URGENT
 }
 
 enum SmsConversationState {
@@ -198,6 +274,25 @@ enum MessageDirection {
 enum MessageParticipant {
   LEAD
   OWNER
+}
+
+enum OwnerNotificationChannel {
+  SMS
+  EMAIL
+  IN_APP
+}
+
+enum OwnerNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum SimulatorRunStatus {
+  ACTIVE
+  QUALIFIED
+  COMPLETED
 }
 
 enum ManagedTwilioStatus {

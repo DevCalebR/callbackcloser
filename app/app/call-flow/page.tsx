@@ -23,7 +23,12 @@ export default async function CallFlowPage() {
       : await isSmsRecipientOptedOut({ businessId: business.id, phone: business.notifyPhone });
   const successfulLeadCount = demoMode
     ? 1
-    : await db.lead.count({ where: { businessId: business.id, ownerNotifiedAt: { not: null } } });
+    : await db.lead.count({
+        where: {
+          businessId: business.id,
+          OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
+        },
+      });
   const managedTextingNumber = getManagedTextingNumber(business);
   const managedTwilioSummary = getManagedTwilioStatusSummary(business);
   const readiness = {

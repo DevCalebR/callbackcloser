@@ -2,15 +2,15 @@ import { NextResponse } from 'next/server';
 
 import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
+import { startMissedCallRecovery } from '@/lib/missed-call-flow';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
-import { getServicePrompt } from '@/lib/sms-state-machine';
 import { isSubscriptionActive } from '@/lib/subscription';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
-import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import { extractTwilioRecordingMetadata } from '@/lib/twilio-recording';
+import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import { buildTwilioRetryableErrorResponse } from '@/lib/twilio-webhook-retry';
 import { hasValidTwilioWebhookRequest } from '@/lib/twilio-webhook';
 import { messagingTwiML } from '@/lib/twiml';
@@ -305,7 +305,8 @@ export async function POST(request: Request) {
       return withCorrelation(xmlOk());
     }
 
-    if (!business.twilioPhoneNumber || lead.smsStartedAt) {
+    const businessTextingNumber = business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber;
+    if (!businessTextingNumber || lead.smsStartedAt) {
       logTwilioInfo('status', 'already_started_or_missing_twilio_number', {
         callSid,
         dialCallSid,
@@ -372,7 +373,7 @@ export async function POST(request: Request) {
             const notifyResult = await sendAndPersistOutboundMessage({
               businessId: business.id,
               leadId: lead.id,
-              fromPhone: business.twilioPhoneNumber,
+              fromPhone: businessTextingNumber,
               toPhone: business.notifyPhone,
               body:
                 `CallbackCloser: Monthly conversation limit reached (${usage.used}/${usage.limit}). ` +
@@ -433,16 +434,14 @@ export async function POST(request: Request) {
         return withCorrelation(xmlOk());
       }
 
-      const prompt = getServicePrompt(business);
-      const promptResult = await sendAndPersistOutboundMessage({
-        businessId: business.id,
-        leadId: lead.id,
-        fromPhone: business.twilioPhoneNumber,
-        toPhone: callerPhoneNormalized,
-        body: prompt,
+      const recovery = await startMissedCallRecovery({
+        business,
+        callerPhone: callerPhoneNormalized,
+        callId: call.id,
+        transport: 'twilio',
       });
 
-      if (promptResult.suppressed) {
+      if (!recovery.started) {
         logTwilioWarn('status', 'initial_missed_call_sms_suppressed', {
           callSid,
           dialCallSid,
@@ -455,24 +454,13 @@ export async function POST(request: Request) {
         return withCorrelation(xmlOk());
       }
 
-      await db.lead.update({
-        where: { id: lead.id },
-        data: {
-          billingRequired: false,
-          smsState: 'AWAITING_SERVICE',
-          smsStartedAt: new Date(),
-          lastOutboundAt: new Date(),
-          lastInteractionAt: new Date(),
-        },
-      });
-
       logTwilioInfo('status', 'initial_missed_call_sms_started', {
         callSid,
         dialCallSid,
         correlationId,
         eventType: 'dial_status_callback',
         businessId: business.id,
-        leadId: lead.id,
+        leadId: recovery.lead.id,
         decision: 'send_initial_sms_and_mark_started',
       });
     } catch (error) {

@@ -6,7 +6,14 @@ import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { formatDateTime, getLeadCallbackState, getLeadLastActivityAt, getLeadStatusBadgeVariant, leadStatusLabels } from '@/lib/lead-presenters';
+import {
+  formatDateTime,
+  getLeadCallbackState,
+  getLeadLastActivityAt,
+  getLeadStatusBadgeVariant,
+  leadReadinessLabels,
+  leadStatusLabels,
+} from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { getPortfolioDemoLeadDetail, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
@@ -92,13 +99,20 @@ export default async function ConversationsPage({ searchParams }: { searchParams
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-medium">{formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone)}</p>
-                        <p className="text-xs text-muted-foreground">{lead.contactName || 'Name pending'}</p>
+                        <p className="text-xs text-muted-foreground">{lead.callerName || lead.contactName || 'Name pending'}</p>
                       </div>
-                      <Badge variant={getLeadStatusBadgeVariant(lead.status)}>{leadStatusLabels[lead.status]}</Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant={getLeadStatusBadgeVariant(lead.status)}>{leadStatusLabels[lead.status]}</Badge>
+                        <Badge variant={lead.readiness === 'URGENT' ? 'destructive' : lead.readiness === 'QUALIFIED' ? 'secondary' : 'outline'}>
+                          {leadReadinessLabels[lead.readiness]}
+                        </Badge>
+                      </div>
                     </div>
-                    <p className="mt-3 text-sm text-muted-foreground">{latestMessage?.body || 'No message preview available.'}</p>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {lead.summary || latestMessage?.body || 'No message preview available.'}
+                    </p>
                     <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                      <span>{getLeadCallbackState(lead)}</span>
+                      <span>{lead.serviceType || lead.serviceRequested || getLeadCallbackState(lead)}</span>
                       <span>{formatDateTime(getLeadLastActivityAt(lead))}</span>
                     </div>
                   </Link>
@@ -127,9 +141,16 @@ export default async function ConversationsPage({ searchParams }: { searchParams
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={getLeadStatusBadgeVariant(selectedLead.status)}>{leadStatusLabels[selectedLead.status]}</Badge>
                   <Badge variant="outline">{getLeadCallbackState(selectedLead)}</Badge>
+                  <Badge variant={selectedLead.readiness === 'URGENT' ? 'destructive' : selectedLead.readiness === 'QUALIFIED' ? 'secondary' : 'outline'}>
+                    {leadReadinessLabels[selectedLead.readiness]}
+                  </Badge>
                   <Link className="text-sm underline underline-offset-4" href={`/app/leads?leadId=${selectedLead.id}`}>
                     Open in leads view
                   </Link>
+                </div>
+                <div className="rounded-xl border bg-muted/20 p-4 text-sm">
+                  <p className="font-medium">Lead summary</p>
+                  <p className="mt-2 text-muted-foreground">{selectedLead.summary || 'CallbackCloser is still gathering the summary for this lead.'}</p>
                 </div>
                 <div className="space-y-3">
                   {selectedLead.messages.map((message) => (

@@ -32,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
   const successfulLeadCount = business
-    ? await db.lead.count({ where: { businessId: business.id, ownerNotifiedAt: { not: null } } })
+    ? await db.lead.count({ where: { businessId: business.id, OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }] } })
     : 0;
   const systemStatus = business ? getCustomerSystemStatus(business, successfulLeadCount) : null;
 

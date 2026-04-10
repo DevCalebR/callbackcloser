@@ -20,7 +20,7 @@ export default async function AdminPage() {
     db.lead.groupBy({
       by: ['businessId'],
       where: {
-        ownerNotifiedAt: { not: null },
+        OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
       },
       _count: { _all: true },
     }),

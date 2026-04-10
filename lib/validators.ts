@@ -11,11 +11,17 @@ export const onboardingSchema = z.object({
   timezone: z.string().min(2).max(100),
 });
 
-export const businessSettingsSchema = onboardingSchema;
+export const businessSettingsSchema = onboardingSchema.extend({
+  ownerEmail: z.string().email().optional().or(z.literal('')),
+  notifySms: z.coerce.boolean().optional().default(false),
+  notifyEmail: z.coerce.boolean().optional().default(false),
+  notifyInApp: z.coerce.boolean().optional().default(false),
+  urgentOnly: z.coerce.boolean().optional().default(false),
+});
 
 export const leadStatusSchema = z.object({
   leadId: z.string().min(1),
-  status: z.enum(['NEW', 'QUALIFIED', 'CONTACTED', 'BOOKED', 'LOST']),
+  status: z.enum(['NEW', 'QUALIFIED', 'NOTIFIED', 'CONTACTED', 'BOOKED', 'LOST']),
 });
 
 export const checkoutSchema = z.object({

@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 const footerLinks = [
   { href: '/pricing', label: 'Pricing' },
+  { href: '/simulator', label: 'Missed-Call Demo' },
   { href: '/contact', label: 'Contact' },
   { href: '/privacy', label: 'Privacy Policy' },
   { href: '/terms', label: 'Terms & Conditions' },
