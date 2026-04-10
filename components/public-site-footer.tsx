@@ -3,8 +3,8 @@ import Link from 'next/link';
 const footerLinks = [
   { href: '/pricing', label: 'Pricing' },
   { href: '/contact', label: 'Contact' },
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
+  { href: '/privacy', label: 'Privacy Policy' },
+  { href: '/terms', label: 'Terms & Conditions' },
   { href: '/refund', label: 'Refund' },
   { href: '/sms-consent', label: 'SMS Consent' },
 ];
@@ -16,7 +16,7 @@ export function PublicSiteFooter() {
         <div className="space-y-1">
           <p className="font-medium text-foreground">CallbackCloser</p>
           <p>Stop missed calls from turning into lost jobs with fast follow-up and clearer owner handoff.</p>
-          <p>White-glove pilot onboarding plus visible pricing, privacy, terms, refund, and SMS consent trust pages.</p>
+          <p>White-glove onboarding plus visible Pricing, Privacy Policy, Terms &amp; Conditions, Refund, and SMS Consent trust pages.</p>
           <p>
             Contact:{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">

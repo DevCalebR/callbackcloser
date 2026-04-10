@@ -1,14 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
-const CONSENT_COPY =
-  'By providing your phone number and submitting this form, you agree to receive SMS messages from CallbackCloser related to callback coordination, customer support, service updates, and account or service notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help.';
 
 export function PublicSmsConsentForm() {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -20,10 +18,9 @@ export function PublicSmsConsentForm() {
   return (
     <Card className="border-primary/20 bg-card/95">
       <CardHeader>
-        <CardTitle>Web-form opt-in example</CardTitle>
+        <CardTitle>Web-form SMS opt-in</CardTitle>
         <CardDescription>
-          This public form shows the CallbackCloser SMS consent disclosure used for Twilio review. It is visual-only today and does
-          not store phone numbers or create an account.
+          Enter your phone number to receive SMS messages related to missed call follow-ups and service updates.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -50,6 +47,7 @@ export function PublicSmsConsentForm() {
               value={phoneNumber}
               onChange={(event) => setPhoneNumber(event.target.value)}
             />
+            <p className="text-xs text-muted-foreground">A phone number is required before submission.</p>
           </div>
 
           <div className="rounded-lg border bg-muted/30 p-4">
@@ -62,8 +60,23 @@ export function PublicSmsConsentForm() {
                 type="checkbox"
                 onChange={(event) => setIsChecked(event.target.checked)}
               />
-              <span>{CONSENT_COPY}</span>
+              <span>
+                By checking this box, you agree to receive SMS messages from CallbackCloser related to customer care and account
+                notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. See
+                our{' '}
+                <Link className="underline underline-offset-4" href="/privacy">
+                  Privacy Policy
+                </Link>{' '}
+                and{' '}
+                <Link className="underline underline-offset-4" href="/terms">
+                  Terms &amp; Conditions
+                </Link>
+                .
+              </span>
             </label>
+            <p className="mt-3 text-xs text-muted-foreground">
+              The consent checkbox is unchecked by default and must be selected before submission.
+            </p>
           </div>
 
           <Button disabled={!canSubmit} type="submit">
@@ -73,7 +86,7 @@ export function PublicSmsConsentForm() {
 
         <p aria-live="polite" className="text-sm text-muted-foreground">
           {submitted
-            ? 'Demo consent captured visually for compliance review only. CallbackCloser does not store this form submission in the current pilot.'
+            ? 'Form requirements met. CallbackCloser uses this consent pattern so web-form opt-in stays clear before submission.'
             : 'The submit button stays disabled until the phone field is filled and consent is checked.'}
         </p>
       </CardContent>

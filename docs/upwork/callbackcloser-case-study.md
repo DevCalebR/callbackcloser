@@ -1,6 +1,6 @@
 # CallbackCloser
 
-*Product by RelayWorks*
+*Product by CallbackCloser*
 
 CallbackCloser is a backend-heavy SaaS product that captures missed-call leads, launches automated follow-up, and gives service businesses a protected workflow for reviewing conversations, recordings, and subscription-controlled automation.
 
@@ -37,4 +37,4 @@ Next.js 14 App Router, TypeScript, Prisma, Postgres with Neon-compatible configu
 
 CallbackCloser demonstrates a complete product engineering build for a real SaaS workflow: protected dashboard on the surface, but substantial backend logic underneath. The repo shows practical experience with auth, billing, database modeling, webhook orchestration, messaging automation, and third-party service integration in a production-oriented application.
 
-Built by Caleb Rogers / RelayWorks
+Built by Caleb Rogers / CallbackCloser

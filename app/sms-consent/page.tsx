@@ -7,10 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 const EFFECTIVE_DATE = 'April 5, 2026';
 
-const messageTypes = ['Callback coordination', 'Customer support', 'Service updates', 'Account and service notifications'];
+const messageTypes = ['Missed call follow-up', 'Customer care', 'Service updates', 'Account notifications'];
 
 const expectations = [
-  'Message frequency varies based on the callback or support conversation.',
+  'This page describes a website-based SMS opt-in for CallbackCloser.',
+  'Message frequency varies based on the callback or service conversation.',
   'Message and data rates may apply depending on the recipient mobile plan.',
   'Reply STOP at any time to opt out of future messages.',
   'Reply HELP for help or contact support@callbackcloser.com.',
@@ -27,8 +28,8 @@ export default function SmsConsentPage() {
             <h1 className="text-4xl font-semibold tracking-tight">SMS Consent</h1>
             <p className="text-sm text-muted-foreground">Effective date: {EFFECTIVE_DATE}</p>
             <p className="text-base text-muted-foreground">
-              This page explains the public SMS consent language used by CallbackCloser for website-based opt-in during founder-led
-              pilots. It is intended for callback coordination, customer support, service updates, and account or service notifications.
+              CallbackCloser uses this page to explain the web-form opt-in language shown before someone submits a phone number for SMS
+              follow-up and service-related updates.
             </p>
           </header>
 
@@ -37,13 +38,12 @@ export default function SmsConsentPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>What users are opting into</CardTitle>
-                  <CardDescription>CallbackCloser uses SMS to keep callback and service conversations moving.</CardDescription>
+                  <CardDescription>CallbackCloser uses SMS to keep missed-call follow-up and service communication moving.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <p>
-                    By providing a phone number and submitting the web form below, the user agrees to receive SMS messages from
-                    CallbackCloser related to callback coordination, customer support, service updates, and account or service
-                    notifications.
+                    The web form below is intended for people who want SMS messages from CallbackCloser about missed call follow-up,
+                    customer care, service updates, and account notifications.
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {messageTypes.map((type) => (
@@ -77,7 +77,7 @@ export default function SmsConsentPage() {
                     Privacy Policy
                   </Link>
                   <Link className="underline underline-offset-4" href="/terms">
-                    Terms of Service
+                    Terms &amp; Conditions
                   </Link>
                   <Link className="underline underline-offset-4" href="/contact">
                     Contact
@@ -90,7 +90,7 @@ export default function SmsConsentPage() {
                 <p className="text-sm text-muted-foreground">
                   Businesses using CallbackCloser remain responsible for lawful use of text messaging, including the consent and
                   contact practices required by their market, campaign type, and jurisdiction. CallbackCloser does not claim that this
-                  page replaces legal advice.
+                  page replaces legal advice or account-specific compliance review.
                 </p>
               </section>
             </div>

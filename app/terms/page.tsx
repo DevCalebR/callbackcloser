@@ -13,7 +13,7 @@ export default function TermsPage() {
       <main className="container py-12">
         <article className="mx-auto max-w-3xl space-y-8">
           <header className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight">Terms of Service</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">Terms &amp; Conditions</h1>
             <p className="text-sm text-muted-foreground">Effective date: {EFFECTIVE_DATE}</p>
           </header>
 
@@ -21,13 +21,6 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold">Service Scope</h2>
             <p className="text-sm text-muted-foreground">
               CallbackCloser provides automation tools for missed-call recovery workflows, including SMS qualification, owner notification, and lead tracking.
-            </p>
-          </section>
-
-          <section className="space-y-2">
-            <h2 className="text-xl font-semibold">Founder-Led Pilot</h2>
-            <p className="text-sm text-muted-foreground">
-              Current accounts are launched as founder-led pilots. Setup, Twilio attachment, and rollout steps may include manual support before live traffic is turned on.
             </p>
           </section>
 
@@ -41,15 +34,16 @@ export default function TermsPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">SMS Messaging</h2>
             <p className="text-sm text-muted-foreground">
-              Current CallbackCloser pilots use SMS for callback coordination, customer support, service updates, and account or service
-              notifications. CallbackCloser is not presented as a promotional SMS program on the public website.
+              CallbackCloser currently uses SMS for customer care, account notifications, missed call follow-up, and service updates.
+              CallbackCloser is not presented on the public website as a promotional SMS marketing program.
             </p>
             <p className="text-sm text-muted-foreground">
               Public opt-in language is described on the{' '}
               <Link className="underline underline-offset-4" href="/sms-consent">
                 SMS Consent
               </Link>{' '}
-              page. Recipients can use STOP to opt out and HELP for help where messaging is active.
+              page. Recipients can use STOP to opt out and HELP for help where messaging is active. Message frequency varies and
+              message and data rates may apply.
             </p>
           </section>
 
@@ -64,8 +58,8 @@ export default function TermsPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Customer Responsibilities</h2>
             <p className="text-sm text-muted-foreground">
-              You are responsible for your business phone routing, Twilio account permissions, lawful messaging practices, and the accuracy of any call forwarding
-              or notification numbers you configure.
+              You are responsible for accurate business phone routing, lawful messaging practices, honoring opt-out requests, and the
+              accuracy of any call forwarding or notification numbers you configure.
             </p>
           </section>
 
@@ -78,6 +72,10 @@ export default function TermsPage() {
 
           <footer className="text-sm text-muted-foreground">
             Questions: <a className="underline" href="mailto:support@callbackcloser.com">support@callbackcloser.com</a> ·{' '}
+            <Link className="underline" href="/privacy">
+              Privacy Policy
+            </Link>{' '}
+            ·{' '}
             <Link className="underline" href="/contact">
               Contact
             </Link>{' '}

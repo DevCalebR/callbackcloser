@@ -20,23 +20,24 @@ export default function PrivacyPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Information We Collect</h2>
             <p className="text-sm text-muted-foreground">
-              We collect account details, call/message metadata, lead qualification responses, and billing-related identifiers needed to operate CallbackCloser.
+              We collect account details, business contact details, call and message metadata, missed-call records, lead qualification
+              responses, SMS conversation content, and billing-related identifiers needed to operate CallbackCloser.
             </p>
           </section>
 
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">How We Use Data</h2>
             <p className="text-sm text-muted-foreground">
-              Data is used to deliver automation workflows, surface leads in the dashboard, maintain service reliability, and support account operations.
+              Data is used to deliver missed-call follow-up, surface leads in the dashboard, support customer care, send account
+              notifications, deliver service updates, maintain service reliability, and support account operations.
             </p>
           </section>
 
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">SMS And Customer Communications</h2>
             <p className="text-sm text-muted-foreground">
-              CallbackCloser may process phone numbers, missed-call records, and SMS conversation content to coordinate callbacks,
-              send customer support replies, deliver service updates, and handle account or service notifications tied to the
-              CallbackCloser workflow.
+              CallbackCloser may process phone numbers, missed-call records, and SMS conversation content to provide customer care,
+              account notifications, missed call follow-up, and service updates tied to the CallbackCloser workflow.
             </p>
             <p className="text-sm text-muted-foreground">
               Message frequency varies by conversation. Message and data rates may apply. Recipients can reply STOP to opt out or HELP
@@ -66,22 +67,27 @@ export default function PrivacyPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Pilot Operations</h2>
             <p className="text-sm text-muted-foreground">
-              During founder-led pilots, CallbackCloser may review account setup details, webhook health, and recent lead activity to help diagnose launch issues.
-              That access is limited to support and rollout needs.
+              During white-glove launch periods, CallbackCloser may review account setup details, webhook health, and recent lead
+              activity to diagnose rollout issues. That access is limited to support and operational launch needs.
             </p>
           </section>
 
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">Data Requests</h2>
             <p className="text-sm text-muted-foreground">
-              For access, correction, or deletion requests, contact support and include your business name and account email.
+              For access, correction, or deletion requests, contact support@callbackcloser.com and include your business name and
+              account email.
             </p>
           </section>
 
           <footer className="text-sm text-muted-foreground">
-            Contact: <a className="underline" href="mailto:support@callbackcloser.com">support@callbackcloser.com</a> · Founder-led pilot support ·{' '}
+            Contact: <a className="underline" href="mailto:support@callbackcloser.com">support@callbackcloser.com</a> ·{' '}
             <Link className="underline" href="/sms-consent">
-              SMS consent
+              SMS Consent
+            </Link>{' '}
+            ·{' '}
+            <Link className="underline" href="/terms">
+              Terms &amp; Conditions
             </Link>{' '}
             ·{' '}
             <Link className="underline" href="/">

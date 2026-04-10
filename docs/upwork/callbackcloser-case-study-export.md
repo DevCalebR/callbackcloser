@@ -1,5 +1,5 @@
 # CallbackCloser
-**RelayWorks | Backend SaaS Case Study**
+**CallbackCloser | Backend SaaS Case Study**
 
 **Summary:** CallbackCloser is a missed-call lead capture and follow-up SaaS product built around protected operations tooling, webhook-driven automation, and subscription-aware backend workflows.
 
@@ -30,4 +30,4 @@ Next.js 14, TypeScript, Prisma, Postgres/Neon, Clerk, Stripe, Twilio, Vercel, Ta
 ## Outcome
 This sample shows product engineering work that goes well beyond UI: authenticated SaaS architecture, webhook orchestration, payments integration, conversation state management, and operational backend logic tied to a clear business workflow.
 
-Built by Caleb Rogers / RelayWorks
+Built by Caleb Rogers / CallbackCloser

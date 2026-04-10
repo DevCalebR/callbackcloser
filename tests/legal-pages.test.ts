@@ -15,7 +15,7 @@ test('legal public pages exist with required headings', () => {
   const contact = read('app/contact/page.tsx');
   const smsConsent = read('app/sms-consent/page.tsx');
 
-  assert.match(terms, /Terms of Service/);
+  assert.match(terms, /Terms &amp; Conditions|Terms & Conditions/);
   assert.match(privacy, /Privacy Policy/);
   assert.match(refund, /Refund Policy/);
   assert.match(pricing, /Pricing/);
@@ -30,18 +30,19 @@ test('sms consent page includes Twilio review disclosures and trust links', () =
   const terms = read('app/terms/page.tsx');
   const contact = read('app/contact/page.tsx');
 
-  assert.match(smsConsent, /callback coordination/i);
-  assert.match(smsConsent, /customer support/i);
+  assert.match(smsConsent, /missed call follow-up/i);
+  assert.match(smsConsent, /customer care/i);
   assert.match(smsConsent, /service updates/i);
-  assert.match(smsConsent, /account or service notifications/i);
+  assert.match(smsConsent, /account notifications/i);
   assert.match(smsConsent, /Message and data rates may apply/i);
   assert.match(smsConsent, /Reply STOP/i);
   assert.match(smsConsent, /HELP/i);
   assert.match(smsConsent, /href="\/privacy"/);
   assert.match(smsConsent, /href="\/terms"/);
   assert.match(smsConsent, /href="\/contact"/);
-  assert.match(smsConsentForm, /does\s+not store phone numbers/i);
+  assert.match(smsConsentForm, /By checking this box, you agree to receive SMS messages from CallbackCloser related to customer care and account notifications\./);
   assert.match(smsConsentForm, /Submit consent/);
+  assert.match(smsConsentForm, /disabled={!canSubmit}/);
   assert.match(privacy, /does not sell mobile numbers/i);
   assert.match(terms, /SMS Consent/);
   assert.match(contact, /support@callbackcloser\.com/);

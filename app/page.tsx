@@ -65,24 +65,24 @@ const workflowSteps = [
 
 const proofStats = [
   {
-    label: 'Average response time',
-    value: '< 30 sec',
-    detail: 'Pilot placeholder until measured live response data is published.',
+    label: 'Response timing',
+    value: 'Seconds, not hours',
+    detail: 'Missed callers hear back quickly while the job is still active and the lead still wants help.',
   },
   {
-    label: 'Leads recovered',
-    value: '124+',
-    detail: 'Placeholder count shown until cumulative recovered-lead data is finalized.',
+    label: 'Lead handoff',
+    value: 'Qualified before callback',
+    detail: 'Owners see the job type, urgency, ZIP, and callback context before the next phone call.',
   },
   {
-    label: 'Businesses onboarded',
-    value: '18',
-    detail: 'Placeholder onboarding count shown until the next verified update.',
+    label: 'Setup model',
+    value: 'Managed for you',
+    detail: 'CallbackCloser handles the texting line, routing support, and activation checklist in one place.',
   },
   {
-    label: 'Pilot result',
-    value: '7 missed callers in 10 days',
-    detail: 'Pilot placeholder result shown until an approved customer quote is published.',
+    label: 'Public trust',
+    value: 'Visible and clear',
+    detail: 'Privacy Policy, Terms & Conditions, Refund Policy, and SMS Consent stay public and easy to review.',
   },
 ];
 
@@ -90,17 +90,17 @@ const screenshotCards = [
   {
     label: 'Leads list',
     title: 'Recovered leads prioritized for callback',
-    description: 'Placeholder for the recovered-leads dashboard screenshot.',
+    description: 'See new leads, urgency, location, and follow-up status in one clean queue.',
   },
   {
     label: 'Conversation detail',
     title: 'Full SMS thread with quick follow-up actions',
-    description: 'Placeholder for the lead detail or conversation view screenshot.',
+    description: 'Read the conversation, confirm what the caller needs, and move the lead forward fast.',
   },
   {
     label: 'Business settings',
     title: 'Activation checklist, routing, and owner alerts in one place',
-    description: 'Placeholder for the business settings or notification setup screenshot.',
+    description: 'Keep routing, owner alerts, and launch status visible before your team depends on it.',
   },
 ];
 
@@ -271,7 +271,8 @@ export default function LandingPage() {
               <Badge variant="outline">Trust and proof</Badge>
               <h2 className="text-3xl font-semibold tracking-tight">Proof that missed calls can still turn into paying work</h2>
               <p className="text-muted-foreground">
-                Lead recovery, response speed, and jobs saved should be obvious at a glance. These placeholders are ready for real proof when you have it.
+                The public site should make the operational value obvious: faster response, cleaner handoff, and trust pages that are
+                easy to verify before a business ever goes live.
               </p>
             </div>
 
@@ -306,14 +307,15 @@ export default function LandingPage() {
                   </p>
                 </div>
                 <div className="rounded-2xl border bg-background/80 p-5 text-sm text-muted-foreground">
-                  {/* TODO: Replace this placeholder with a real pilot testimonial or founder quote once verified data is approved. */}
-                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Pilot placeholder</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Launch standard</p>
                   <p className="mt-3 text-lg font-medium text-foreground">
-                    “Pilot customer recovered 7 missed callers in 10 days and turned missed calls into real follow-up opportunities.”
+                    Every rollout is built to give the business a managed texting line, visible trust pages, and a clean first test call.
                   </p>
-                  <p className="mt-3">
-                    Replace this block with an approved testimonial, logo, or short pilot result before launch.
-                  </p>
+                  <div className="mt-4 space-y-2">
+                  <p>- One business texting number is included in the base service.</p>
+                    <p>- SMS Consent, Privacy Policy, Refund, and Terms &amp; Conditions pages stay public before activation.</p>
+                    <p>- Owner alerts and callback summaries are verified before launch.</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -325,7 +327,7 @@ export default function LandingPage() {
             <Badge variant="outline">Product preview</Badge>
             <h2 className="text-3xl font-semibold tracking-tight">See how missed calls turn into follow-up-ready leads</h2>
             <p className="text-muted-foreground">
-              These placeholders are ready for real screenshots so the site can show business value, not just describe it.
+              A quick look at the product surfaces that keep missed-call follow-up organized for the owner and the office.
             </p>
           </div>
 
@@ -333,11 +335,10 @@ export default function LandingPage() {
             {screenshotCards.map((card) => (
               <Card key={card.label} className="overflow-hidden bg-card/90">
                 <div className="aspect-[4/3] border-b bg-[linear-gradient(135deg,rgba(234,88,12,0.08),rgba(13,148,136,0.12),rgba(255,255,255,0.85))] p-6">
-                  {/* TODO: Replace this placeholder surface with an actual product screenshot export. */}
                   <div className="flex h-full flex-col justify-between rounded-2xl border border-dashed border-foreground/20 bg-background/70 p-5">
                     <div className="flex items-center justify-between gap-3">
                       <Badge variant="outline">{card.label}</Badge>
-                      <span className="text-xs text-muted-foreground">Screenshot placeholder</span>
+                      <span className="text-xs text-muted-foreground">Inside CallbackCloser</span>
                     </div>
                     <div className="space-y-2">
                       <div className="h-3 w-2/3 rounded-full bg-muted" />
@@ -384,7 +385,8 @@ export default function LandingPage() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-muted-foreground">
                 <p>
-                  CallbackCloser keeps pricing, refund, privacy, terms, contact, and SMS consent pages visible before a business ever starts a pilot.
+                  CallbackCloser keeps pricing, refund, Privacy Policy, Terms &amp; Conditions, contact, and SMS Consent pages visible
+                  before a business ever starts a pilot.
                 </p>
                 <p>
                   STOP, START, and HELP support remain part of the product flow, and the public consent page still explains message frequency and message/data rates.
@@ -394,7 +396,7 @@ export default function LandingPage() {
                     Review SMS consent
                   </Link>
                   <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/privacy">
-                    Privacy and terms
+                    Privacy Policy &amp; Terms
                   </Link>
                 </div>
               </CardContent>

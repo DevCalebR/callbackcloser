@@ -21,9 +21,8 @@ export default function ContactPage() {
         <section className="max-w-3xl space-y-4">
           <h1 className="text-4xl font-semibold tracking-tight">Contact CallbackCloser</h1>
           <p className="text-lg text-muted-foreground">
-            CallbackCloser is currently onboarded founder-to-founder. If you run a local service business and want to see how
-            missed-call recovery, SMS qualification, and owner alerts would work for your team, email us and we will walk through fit,
-            setup, and pilot rollout.
+            If you run a local service business and want to see how missed-call recovery, SMS qualification, and owner alerts would
+            work for your team, email us and we will walk through fit, setup, and launch.
           </p>
         </section>
 
@@ -70,8 +69,8 @@ export default function ContactPage() {
                 <p key={item}>- {item}</p>
               ))}
               <p className="pt-2">
-                Public trust pages: <Link className="underline underline-offset-4" href="/privacy">Privacy</Link>,{' '}
-                <Link className="underline underline-offset-4" href="/terms">Terms</Link>, and{' '}
+                Public trust pages: <Link className="underline underline-offset-4" href="/privacy">Privacy Policy</Link>,{' '}
+                <Link className="underline underline-offset-4" href="/terms">Terms &amp; Conditions</Link>, and{' '}
                 <Link className="underline underline-offset-4" href="/sms-consent">SMS Consent</Link>.
               </p>
             </CardContent>

@@ -61,8 +61,8 @@ export default function PricingPage() {
             CallbackCloser is priced so business owners can understand the value quickly: protect more missed-call revenue without adding more office admin.
           </p>
           <p className="text-sm text-muted-foreground">
-            Exact checkout pricing is still confirmed in Stripe for this environment, but the public structure stays simple:
-            Starter, Growth, and Agency / Multi-location. Base service includes one business texting number, standard setup, and managed provisioning. If you want rollout help before checkout, email{' '}
+            CallbackCloser keeps the public structure simple: Starter, Growth, and Agency / Multi-location. Base service includes one
+            business texting number, standard setup, and managed provisioning. If you want rollout help before checkout, email{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
               support@callbackcloser.com
             </a>
@@ -115,10 +115,10 @@ export default function PricingPage() {
             <Card className="bg-card/90">
               <CardHeader>
                 <CardTitle>Trust and compliance</CardTitle>
-                <CardDescription>Trust stays visible without turning the page into policy copy.</CardDescription>
+              <CardDescription>Trust stays visible without turning the page into policy copy.</CardDescription>
               </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>Public pricing, contact, privacy, terms, refund, and SMS consent pages remain visible before activation.</p>
+              <p>Public pricing, contact, Privacy Policy, Terms &amp; Conditions, refund, and SMS Consent pages remain visible before activation.</p>
               <p>STOP, START, and HELP handling remain part of the live messaging flow, and the consent page stays public.</p>
               <p>Businesses remain responsible for lawful texting practices and consent requirements in their market.</p>
               <div className="flex flex-wrap gap-3 pt-2">
