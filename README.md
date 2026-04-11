@@ -372,6 +372,14 @@ Simulator safety:
 - Owner notifications for simulator runs are stored as preview records and do not send to real customer destinations
 - If `ENABLE_PUBLIC_SIMULATOR_REAL_SMS=true`, the simulator can send the caller-side SMS to the supplied demo number, but owner delivery remains simulated
 
+Creating a dedicated simulator workspace:
+
+- Open `/admin`
+- Use **Create Demo Business**
+- The action creates or refreshes a dedicated business named `CallbackCloser Demo`
+- The success banner shows the business ID to use for `SIMULATOR_BUSINESS_ID`
+- The demo workspace uses a synthetic owner account so it does not replace a real customer workspace tied to a Clerk user
+
 ## Production Setup (Vercel)
 
 1. Push repo to Git.

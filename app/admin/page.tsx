@@ -1,17 +1,24 @@
 import Link from 'next/link';
 
+import { createDemoBusinessAction } from '@/app/admin/actions';
 import { requireAdmin } from '@/lib/admin';
 import { db } from '@/lib/db';
 import { formatDateTime } from '@/lib/lead-presenters';
 import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { getAdminBusinessStatus } from '@/lib/system-status';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export const dynamic = 'force-dynamic';
 
-export default async function AdminPage() {
-  await requireAdmin();
+export default async function AdminPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+  const admin = await requireAdmin();
+  const createdDemo = searchParams?.createdDemo === '1';
+  const createdBusinessId = typeof searchParams?.businessId === 'string' ? searchParams.businessId : null;
+  const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
   const [businesses, successfulLeadCounts] = await Promise.all([
     db.business.findMany({
@@ -39,6 +46,67 @@ export default async function AdminPage() {
           </p>
         </div>
       </div>
+
+      {createdDemo && createdBusinessId ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          Demo business ready. Use <code className="rounded bg-background px-1 py-0.5">{createdBusinessId}</code> as `SIMULATOR_BUSINESS_ID`, or open the
+          workspace below.
+        </div>
+      ) : null}
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader>
+          <CardTitle>Create dedicated simulator workspace</CardTitle>
+          <CardDescription>
+            Creates or refreshes a safe business named <strong>CallbackCloser Demo</strong> with a synthetic owner account so it never replaces a real
+            customer workspace.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={createDemoBusinessAction} className="grid gap-4 lg:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="ownerPhone">Owner phone for previews</Label>
+              <Input
+                id="ownerPhone"
+                name="ownerPhone"
+                type="tel"
+                defaultValue={adminBusiness?.notifyPhone || ''}
+                placeholder="+1 555 123 4567"
+              />
+              <p className="text-xs text-muted-foreground">Used for demo owner-alert previews and settings defaults.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ownerEmail">Owner email for previews</Label>
+              <Input
+                id="ownerEmail"
+                name="ownerEmail"
+                type="email"
+                defaultValue={admin.email || ''}
+                placeholder="owner@callbackcloser.com"
+              />
+              <p className="text-xs text-muted-foreground">Used for demo email-alert previews and notification defaults.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="forwardingNumber">Forwarding number</Label>
+              <Input
+                id="forwardingNumber"
+                name="forwardingNumber"
+                type="tel"
+                defaultValue={adminBusiness?.forwardingNumber || ''}
+                placeholder="+1 555 000 0001"
+              />
+              <p className="text-xs text-muted-foreground">Optional. If blank, CallbackCloser uses your owner phone or a safe demo fallback.</p>
+            </div>
+            <div className="lg:col-span-3 flex flex-wrap items-center gap-3">
+              <Button type="submit">Create Demo Business</Button>
+              <p className="text-sm text-muted-foreground">
+                The created workspace always uses the fixed name <strong>CallbackCloser Demo</strong> and a demo-safe texting line placeholder so it stays
+                isolated from real businesses.
+              </p>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       <Card className="bg-card/90">
         <CardHeader>
