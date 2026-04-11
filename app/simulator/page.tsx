@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDateTime, getLeadStatusBadgeVariant, leadReadinessLabels, leadStatusLabels } from '@/lib/lead-presenters';
-import { getSimulatorBusiness, getSimulatorRun, isPublicSimulatorEnabled } from '@/lib/simulator';
+import { canSendRealSimulatorSms, getSimulatorBusiness, getSimulatorRun, isPlaceholderSimulatorNumber, isPublicSimulatorEnabled } from '@/lib/simulator';
 
 export const metadata: Metadata = {
   title: 'Missed-Call Simulator | CallbackCloser',
@@ -31,6 +31,8 @@ export default async function SimulatorPage({
 }) {
   const runPublicId = typeof searchParams?.run === 'string' ? searchParams.run : null;
   const error = typeof searchParams?.error === 'string' ? searchParams.error : null;
+  const notice = typeof searchParams?.notice === 'string' ? searchParams.notice : null;
+  const status = typeof searchParams?.status === 'string' ? searchParams.status : null;
   const enabled = isPublicSimulatorEnabled();
   const business = await getSimulatorBusiness();
   const run = runPublicId ? await getSimulatorRun(runPublicId) : null;
@@ -41,6 +43,8 @@ export default async function SimulatorPage({
   const inAppNotification = lead?.ownerNotifications.find((notification) => notification.channel === OwnerNotificationChannel.IN_APP) ?? null;
   const transcript = lead?.messages ?? [];
   const demoNumber = business?.twilioPrimaryPhoneNumber || business?.twilioPhoneNumber || null;
+  const realSmsEnabled = canSendRealSimulatorSms(business);
+  const usingPlaceholderTextingLine = isPlaceholderSimulatorNumber(demoNumber);
 
   const timeline = lead
     ? [
@@ -104,6 +108,16 @@ export default async function SimulatorPage({
             <p className="text-sm text-muted-foreground">
               Use your own phone number to start a private simulator run, or call the demo line if one is configured for this environment.
             </p>
+            <div className={`rounded-2xl border p-4 text-sm ${realSmsEnabled ? 'border-accent/40 bg-accent/20' : 'border-primary/20 bg-primary/5'}`}>
+              <p className="font-medium">{realSmsEnabled ? 'Real SMS mode is active' : 'Preview mode is active'}</p>
+              <p className="mt-2 text-muted-foreground">
+                {realSmsEnabled
+                  ? 'CallbackCloser will text the phone number you enter from the demo business texting line, then continue the rest of the flow in this page.'
+                  : usingPlaceholderTextingLine
+                    ? 'This demo workspace is still using the safe placeholder texting line, so CallbackCloser will show the recovery text and owner alerts on this page instead of sending a real SMS.'
+                    : 'ENABLE_PUBLIC_SIMULATOR_REAL_SMS is still off, so CallbackCloser will show the recovery text and owner alerts on this page instead of sending a real SMS.'}
+              </p>
+            </div>
           </div>
 
           <Card className="border-primary/20 bg-card/95">
@@ -125,6 +139,11 @@ export default async function SimulatorPage({
                   <Button type="submit">Trigger missed-call simulator</Button>
                 </form>
               )}
+              {notice ? (
+                <div className={`rounded-lg border p-4 text-sm ${status === 'sms-sent' ? 'border-accent/40 bg-accent/20' : 'border-primary/20 bg-primary/5'}`}>
+                  {notice}
+                </div>
+              ) : null}
               {error ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div> : null}
             </CardContent>
           </Card>

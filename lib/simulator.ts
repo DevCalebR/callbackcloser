@@ -4,6 +4,8 @@ import type { Business, Lead, Message, OwnerNotification, SimulatorRun } from '@
 
 import { db } from '@/lib/db';
 
+const SIMULATOR_PLACEHOLDER_NUMBERS = new Set(['+15005550006', '+15005550001']);
+
 function parseBooleanFlag(value: string | undefined) {
   if (!value) return false;
   const normalized = value.trim().toLowerCase();
@@ -16,6 +18,16 @@ export function isPublicSimulatorEnabled() {
 
 export function shouldSendRealSimulatorSms() {
   return parseBooleanFlag(process.env.ENABLE_PUBLIC_SIMULATOR_REAL_SMS);
+}
+
+export function isPlaceholderSimulatorNumber(phoneNumber: string | null | undefined) {
+  if (!phoneNumber) return true;
+  return SIMULATOR_PLACEHOLDER_NUMBERS.has(phoneNumber.trim());
+}
+
+export function canSendRealSimulatorSms(business: { twilioPrimaryPhoneNumber?: string | null; twilioPhoneNumber?: string | null } | null) {
+  const textingNumber = business?.twilioPrimaryPhoneNumber || business?.twilioPhoneNumber || null;
+  return shouldSendRealSimulatorSms() && !isPlaceholderSimulatorNumber(textingNumber);
 }
 
 export function getSimulatorBusinessId() {

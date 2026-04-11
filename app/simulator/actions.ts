@@ -6,12 +6,14 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { processLeadInboundReply, startMissedCallRecovery } from '@/lib/missed-call-flow';
-import { createSimulatorPublicId, getSimulatorBusiness, getSimulatorRun, isPublicSimulatorEnabled, shouldSendRealSimulatorSms } from '@/lib/simulator';
+import { canSendRealSimulatorSms, createSimulatorPublicId, getSimulatorBusiness, getSimulatorRun, isPublicSimulatorEnabled } from '@/lib/simulator';
 
-function getSimulatorRedirect(publicId?: string | null, error?: string) {
+function getSimulatorRedirect(publicId?: string | null, error?: string, status?: string, notice?: string) {
   const params = new URLSearchParams();
   if (publicId) params.set('run', publicId);
   if (error) params.set('error', error);
+  if (status) params.set('status', status);
+  if (notice) params.set('notice', notice);
   const query = params.toString();
   return query ? `/simulator?${query}` : '/simulator';
 }
@@ -31,6 +33,12 @@ export async function startSimulatorRunAction(formData: FormData) {
   if (!callerPhone) {
     redirect(getSimulatorRedirect(null, 'Enter a phone number to start the simulator.'));
   }
+
+  const realSmsEnabled = canSendRealSimulatorSms(business);
+  const transport = realSmsEnabled ? 'twilio' : 'simulated';
+  const notice = realSmsEnabled
+    ? 'Simulator started. CallbackCloser should text the number you entered from the demo business texting line.'
+    : 'Preview mode active. This simulator run updates the transcript and owner alerts on-page, but it does not text your phone until a real demo texting line is assigned and ENABLE_PUBLIC_SIMULATOR_REAL_SMS=true.';
 
   const call = await db.call.create({
     data: {
@@ -54,7 +62,7 @@ export async function startSimulatorRunAction(formData: FormData) {
     callerPhone,
     callId: call.id,
     isSimulator: true,
-    transport: shouldSendRealSimulatorSms() ? 'twilio' : 'simulated',
+    transport,
     forceAutomation: true,
   });
 
@@ -69,7 +77,7 @@ export async function startSimulatorRunAction(formData: FormData) {
     },
   });
 
-  redirect(getSimulatorRedirect(publicId));
+  redirect(getSimulatorRedirect(publicId, undefined, realSmsEnabled ? 'sms-sent' : 'preview-started', notice));
 }
 
 export async function replyToSimulatorRunAction(formData: FormData) {
@@ -101,5 +109,5 @@ export async function replyToSimulatorRunAction(formData: FormData) {
     transport: 'simulated',
   });
 
-  redirect(getSimulatorRedirect(publicId));
+  redirect(getSimulatorRedirect(publicId, undefined, 'reply-saved'));
 }

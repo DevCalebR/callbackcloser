@@ -17,7 +17,10 @@ test('public simulator is gated and isolated from real customer delivery', () =>
   assert.match(simulatorPage, /Missed-call simulator/);
   assert.match(simulatorActions, /ENABLE_PUBLIC_MISSED_CALL_SIMULATOR/);
   assert.match(simulatorLib, /SIMULATOR_BUSINESS_ID/);
+  assert.match(simulatorLib, /ENABLE_PUBLIC_SIMULATOR_REAL_SMS/);
+  assert.match(simulatorLib, /canSendRealSimulatorSms/);
   assert.match(simulatorActions, /isSimulator:\s*true/);
+  assert.match(simulatorActions, /Preview mode active\./);
   assert.match(ownerNotifications, /if \(lead\.isSimulator\)/);
   assert.match(schema, /isSimulator\s+Boolean\s+@default\(false\)/);
   assert.match(schema, /model SimulatorRun/);

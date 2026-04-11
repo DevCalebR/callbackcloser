@@ -22,5 +22,7 @@ test('simulator route is a distinct public page with its own metadata and disabl
   assert.match(simulatorPage, /Missed-call Simulator \| CallbackCloser/);
   assert.match(simulatorPage, /See the full CallbackCloser lead loop in minutes/);
   assert.match(simulatorPage, /The public simulator is not configured on this environment yet\./);
+  assert.match(simulatorPage, /Preview mode is active/);
+  assert.match(simulatorPage, /Real SMS mode is active/);
   assert.doesNotMatch(middleware, /\/simulator\(.\*\)/);
 });
