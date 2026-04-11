@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MessageDirection, OwnerNotificationChannel } from '@prisma/client';
 
@@ -11,6 +12,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDateTime, getLeadStatusBadgeVariant, leadReadinessLabels, leadStatusLabels } from '@/lib/lead-presenters';
 import { getSimulatorBusiness, getSimulatorRun, isPublicSimulatorEnabled } from '@/lib/simulator';
+
+export const metadata: Metadata = {
+  title: 'Missed-Call Simulator | CallbackCloser',
+  description: 'Run the public CallbackCloser missed-call simulator and see the full recovery loop from missed call to qualified owner alert.',
+};
+
+export const dynamic = 'force-dynamic';
 
 function timelineStep(label: string, complete: boolean, detail: string) {
   return { label, complete, detail };
