@@ -33,6 +33,7 @@ const requirements: EnvRequirement[] = [
   { name: 'STRIPE_PRICE_PRO', required: true, reason: 'Pro plan mapping' },
   { name: 'TWILIO_ACCOUNT_SID', required: true, reason: 'Twilio API access' },
   { name: 'TWILIO_AUTH_TOKEN', required: true, reason: 'Twilio API access / signature validation' },
+  { name: 'TWILIO_MESSAGING_SERVICE_SID', required: true, reason: 'Twilio outbound SMS delivery via Messaging Service' },
   {
     name: 'TWILIO_WEBHOOK_AUTH_TOKEN',
     required: true,

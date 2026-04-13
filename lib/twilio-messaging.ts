@@ -6,6 +6,33 @@ import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-loggi
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
 import { getTwilioClient } from '@/lib/twilio';
 
+type EnvMap = Readonly<Record<string, string | undefined>>;
+
+export function getRequiredTwilioMessagingServiceSid(env: EnvMap = process.env) {
+  const messagingServiceSid = env.TWILIO_MESSAGING_SERVICE_SID?.trim();
+  if (!messagingServiceSid) {
+    throw new Error(
+      'Missing TWILIO_MESSAGING_SERVICE_SID. Outbound SMS requires a Twilio Messaging Service SID configured in the environment.'
+    );
+  }
+
+  return messagingServiceSid;
+}
+
+export function buildOutboundTwilioMessagePayload(
+  params: {
+    to: string;
+    body: string;
+  },
+  env: EnvMap = process.env
+) {
+  return {
+    messagingServiceSid: getRequiredTwilioMessagingServiceSid(env),
+    to: params.to,
+    body: params.body,
+  };
+}
+
 export async function persistInboundMessage(params: {
   businessId: string;
   leadId?: string | null;
@@ -80,11 +107,7 @@ export async function sendAndPersistOutboundMessage(params: {
   }
 
   const client = getTwilioClient();
-  const sent = await client.messages.create({
-    from,
-    to,
-    body: params.body,
-  });
+  const sent = await client.messages.create(buildOutboundTwilioMessagePayload({ to, body: params.body }));
 
   const message = await persistOutboundMessageRecord({
     businessId: params.businessId,

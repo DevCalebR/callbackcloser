@@ -36,6 +36,7 @@ const ENV_SPECS: EnvSpec[] = [
 
   { name: 'TWILIO_ACCOUNT_SID', provider: 'Twilio', visibility: 'server', requiredInProduction: true },
   { name: 'TWILIO_AUTH_TOKEN', provider: 'Twilio', visibility: 'server', requiredInProduction: true },
+  { name: 'TWILIO_MESSAGING_SERVICE_SID', provider: 'Twilio', visibility: 'server', requiredInProduction: true },
   { name: 'TWILIO_WEBHOOK_AUTH_TOKEN', provider: 'Twilio', visibility: 'server', requiredInProduction: true },
 ];
 

@@ -26,6 +26,7 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `STRIPE_PRICE_PRO` | Server-only | Yes | Stripe / Vercel | Pro plan Price ID. Also used for conversation usage-limit tier mapping. |
 | `TWILIO_ACCOUNT_SID` | Server-only | Yes | Twilio / Vercel | Twilio account SID. |
 | `TWILIO_AUTH_TOKEN` | Server-only | Yes | Twilio / Vercel | Twilio auth token. |
+| `TWILIO_MESSAGING_SERVICE_SID` | Server-only | Yes | Twilio / Vercel | Twilio Messaging Service SID used for all outbound SMS sends. |
 | `TWILIO_WEBHOOK_AUTH_TOKEN` | Server-only | Yes | App-generated secret / Vercel | Shared secret used for local/dev token-mode checks and webhook URL tooling. In production, signature validation is enforced and token-only auth is rejected. |
 | `TWILIO_VALIDATE_SIGNATURE` | Server-only | Yes (production) | Vercel | Must be `true` in production. Twilio webhooks require valid `X-Twilio-Signature` verification using `TWILIO_AUTH_TOKEN`; production fails closed otherwise. |
 | `DEBUG_ENV_ENDPOINT_TOKEN` | Server-only | Optional | Vercel | Protects `/api/debug/env` in production. If unset, the endpoint returns `404` in production. |
@@ -51,6 +52,7 @@ The app now validates required server env vars at runtime in production via `lib
 - `DATABASE_URL` is checked for Neon compatibility (`sslmode=require`) when using a `neon.tech` host.
 - `DIRECT_DATABASE_URL` is used by Prisma for direct migration connections (`directUrl`) and should be set in Vercel for builds/deploy workflows that run Prisma commands.
 - `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` are required in production so the app can map active subscriptions to Starter/Pro usage limits.
+- `TWILIO_MESSAGING_SERVICE_SID` is required in production because all outbound SMS is sent through a Twilio Messaging Service rather than a direct `from` number.
 - Twilio webhook auth behavior:
   - Production: `TWILIO_VALIDATE_SIGNATURE=true` is required and token-only auth is rejected
   - Non-production: signature mode can fall back to shared-token auth for local/dev workflows
@@ -80,6 +82,9 @@ Use separate values for `Preview` and `Production` where appropriate.
 - Stripe / Twilio / Clerk keys
   - Prefer separate test/staging credentials for Preview
   - Use live credentials only in Production
+- Twilio Messaging Service
+  - Set `TWILIO_MESSAGING_SERVICE_SID` in each environment that should send outbound SMS
+  - Make sure the referenced Messaging Service already has at least one SMS-capable sender attached
 
 ### Important Twilio note
 

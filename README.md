@@ -71,7 +71,7 @@ Required categories:
 
 - Clerk keys
 - Stripe keys + price IDs + webhook secret
-- Twilio credentials + webhook auth token
+- Twilio credentials + outbound Messaging Service SID + webhook auth token
 - Optional owner email delivery (`RESEND_API_KEY`, `CALLBACKCLOSER_FROM_EMAIL`)
 - Optional public simulator config (`ENABLE_PUBLIC_MISSED_CALL_SIMULATOR`, `SIMULATOR_BUSINESS_ID`, `ENABLE_PUBLIC_SIMULATOR_REAL_SMS`)
 - Database URL
@@ -201,8 +201,25 @@ Set:
 
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
+- `TWILIO_MESSAGING_SERVICE_SID` (used for all outbound SMS sends)
 - `TWILIO_WEBHOOK_AUTH_TOKEN` (your shared secret used by this app)
 - `TWILIO_VALIDATE_SIGNATURE` (**required in production**, set to `true`)
+
+### Twilio Messaging Service for outbound SMS
+
+CallbackCloser now sends all outbound SMS through a Twilio Messaging Service instead of passing a direct `from` number in the API request.
+
+Manual Twilio setup required:
+
+1. Create or choose the Messaging Service you want CallbackCloser to use for outbound SMS.
+2. Add the SMS-capable CallbackCloser number(s) you want Twilio to use as senders inside that Messaging Service.
+3. Copy the Messaging Service SID into:
+   - `TWILIO_MESSAGING_SERVICE_SID`
+
+Notes:
+
+- Voice routing, webhook sync, and number provisioning still require real Twilio phone numbers.
+- The Messaging Service must already have at least one valid SMS-capable sender attached, or outbound SMS delivery will fail in Twilio even if the app is configured correctly.
 
 ### Twilio number provisioning (recommended)
 

@@ -22,6 +22,7 @@ function baseEnv(overrides: Record<string, string | undefined> = {}) {
     STRIPE_PRICE_PRO: 'price_pro_123',
     TWILIO_ACCOUNT_SID: 'AC11111111111111111111111111111111',
     TWILIO_AUTH_TOKEN: 'twilio_auth_123',
+    TWILIO_MESSAGING_SERVICE_SID: 'MG11111111111111111111111111111111',
     TWILIO_WEBHOOK_AUTH_TOKEN: 'token_abc123',
     NODE_ENV: 'development',
     ...overrides,
@@ -66,6 +67,17 @@ test('runTwilioPreflight fails when explicit configured URLs drift from NEXT_PUB
 
   assert.equal(check.status, 'FAIL');
   assert.ok(check.details.some((detail) => detail.includes('TWILIO_WEBHOOK_VOICE_URL does not match')));
+});
+
+test('runTwilioPreflight fails when outbound messaging service SID is missing', () => {
+  const check = runTwilioPreflight(
+    baseEnv({
+      TWILIO_MESSAGING_SERVICE_SID: '',
+    })
+  );
+
+  assert.equal(check.status, 'FAIL');
+  assert.ok(check.details.some((detail) => detail.includes('TWILIO_MESSAGING_SERVICE_SID is missing')));
 });
 
 test('runDatabasePreflight reports pass and fail outcomes', async () => {

@@ -213,7 +213,7 @@ export function runTwilioPreflight(env: EnvMap = process.env): ProviderPreflight
   const details: string[] = [];
   const fixes = [
     'Set NEXT_PUBLIC_APP_URL to the exact public origin used in Twilio webhook configuration.',
-    'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WEBHOOK_AUTH_TOKEN, and TWILIO_VALIDATE_SIGNATURE=true in production.',
+    'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_MESSAGING_SERVICE_SID, TWILIO_WEBHOOK_AUTH_TOKEN, and TWILIO_VALIDATE_SIGNATURE=true in production.',
     'Run npm run webhooks:print and compare those URLs against Twilio Console.',
   ];
 
@@ -228,6 +228,10 @@ export function runTwilioPreflight(env: EnvMap = process.env): ProviderPreflight
 
   if (!readEnv(env, 'TWILIO_AUTH_TOKEN')) {
     failures.push('TWILIO_AUTH_TOKEN is missing.');
+  }
+
+  if (!readEnv(env, 'TWILIO_MESSAGING_SERVICE_SID')) {
+    failures.push('TWILIO_MESSAGING_SERVICE_SID is missing.');
   }
 
   if (!webhookToken) {

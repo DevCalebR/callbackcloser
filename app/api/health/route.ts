@@ -33,7 +33,10 @@ function getEnvChecks() {
     directDatabaseUrl: hasValue(process.env.DIRECT_DATABASE_URL),
     clerk: hasRequiredValidClerkEnv(process.env),
     stripe: hasValue(process.env.STRIPE_SECRET_KEY) && hasValue(process.env.STRIPE_WEBHOOK_SECRET),
-    twilio: hasValue(process.env.TWILIO_ACCOUNT_SID) && hasValue(process.env.TWILIO_AUTH_TOKEN),
+    twilio:
+      hasValue(process.env.TWILIO_ACCOUNT_SID) &&
+      hasValue(process.env.TWILIO_AUTH_TOKEN) &&
+      hasValue(process.env.TWILIO_MESSAGING_SERVICE_SID),
   };
 }
 
