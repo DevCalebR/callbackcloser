@@ -14,13 +14,11 @@ export const metadata: Metadata = {
 };
 
 const messageTypes = ['Missed call follow-up', 'Callback coordination', 'Service-related questions', 'Customer care', 'Account notifications'];
-
-const expectations = [
-  'You enter your phone number and choose whether to receive text updates.',
-  'The consent checkbox starts unchecked and must be selected before the form can be submitted.',
-  'Message frequency varies based on the missed-call follow-up or service conversation.',
-  'Message and data rates may apply depending on your mobile plan.',
-  'Reply STOP at any time to opt out of future messages, or HELP for help.',
+const messageDetails = [
+  'Message frequency varies.',
+  'Message and data rates may apply.',
+  'Reply STOP to opt out.',
+  'Reply HELP for help.',
 ];
 
 export default function SmsConsentPage() {
@@ -29,29 +27,27 @@ export default function SmsConsentPage() {
       <PublicSiteNav />
 
       <main className="container py-12">
-        <article className="mx-auto max-w-5xl space-y-8">
-          <header className="max-w-3xl space-y-3">
+        <article className="mx-auto max-w-4xl space-y-8">
+          <header className="max-w-2xl space-y-3">
             <h1 className="text-4xl font-semibold tracking-tight">SMS Consent</h1>
             <p className="text-sm text-muted-foreground">Effective date: {EFFECTIVE_DATE}</p>
             <p className="text-base text-muted-foreground">
-              Use this page to understand how CallbackCloser collects consent for SMS updates tied to missed call follow-up, callback
-              coordination, service-related questions, customer care, and account notifications.
+              Enter your phone number to receive SMS updates related to missed call follow-up, callback coordination, service-related
+              questions, and account or service updates.
             </p>
           </header>
 
-          <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <section className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
+            <PublicSmsConsentForm />
+
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>What you&apos;re signing up for</CardTitle>
-                  <CardDescription>CallbackCloser uses text messages to keep missed-call recovery and service communication moving.</CardDescription>
+                  <CardTitle>What to expect</CardTitle>
+                  <CardDescription>CallbackCloser uses text messages to keep service conversations moving after a missed call.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <p>
-                    Customers who provide their phone number and agree to receive messages can get updates related to missed call
-                    follow-up, callback coordination, service questions, customer care, and account or service notifications.
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {messageTypes.map((type) => (
                       <div key={type} className="rounded-lg border bg-muted/30 px-4 py-3">
                         <p className="font-medium text-foreground">{type}</p>
@@ -63,11 +59,11 @@ export default function SmsConsentPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>What to expect</CardTitle>
-                  <CardDescription>These disclosures stay visible before someone agrees to receive SMS messages.</CardDescription>
+                  <CardTitle>Message details</CardTitle>
+                  <CardDescription>Consent requires an unchecked checkbox and a phone number before submission.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-muted-foreground">
-                  {expectations.map((item) => (
+                  {messageDetails.map((item) => (
                     <p key={item}>- {item}</p>
                   ))}
                 </CardContent>
@@ -75,19 +71,8 @@ export default function SmsConsentPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Your choices</CardTitle>
-                  <CardDescription>Consent is optional, and you can change your choice any time a text conversation is active.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <p>Reply STOP to opt out of future messages.</p>
-                  <p>Reply HELP for help or email support@callbackcloser.com.</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
                   <CardTitle>Related trust pages</CardTitle>
-                  <CardDescription>Review the public policies connected to CallbackCloser messaging and service use.</CardDescription>
+                  <CardDescription>Review the policies connected to CallbackCloser messaging and service use.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-3 text-sm">
                   <Link className="underline underline-offset-4" href="/privacy">
@@ -102,19 +87,14 @@ export default function SmsConsentPage() {
                 </CardContent>
               </Card>
 
-              <section className="space-y-2 rounded-2xl border bg-muted/20 p-5">
-                <h2 className="text-xl font-semibold">Need help?</h2>
-                <p className="text-sm text-muted-foreground">
-                  If you have questions about CallbackCloser messaging, support, or account updates, email{' '}
-                  <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
-                    support@callbackcloser.com
-                  </a>
-                  .
-                </p>
-              </section>
+              <p className="text-sm text-muted-foreground">
+                Need help? Email{' '}
+                <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
+                  support@callbackcloser.com
+                </a>
+                .
+              </p>
             </div>
-
-            <PublicSmsConsentForm />
           </section>
         </article>
       </main>

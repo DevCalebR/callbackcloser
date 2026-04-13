@@ -18,9 +18,9 @@ export function PublicSmsConsentForm() {
   return (
     <Card className="border-primary/20 bg-card/95">
       <CardHeader>
-        <CardTitle>Sign up for SMS updates</CardTitle>
+        <CardTitle>Get text updates</CardTitle>
         <CardDescription>
-          Enter your phone number to receive SMS messages related to missed call follow-ups and service updates.
+          Enter your phone number to receive SMS updates related to missed call follow-up, callback coordination, and service updates.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -75,19 +75,19 @@ export function PublicSmsConsentForm() {
               </span>
             </label>
             <p className="mt-3 text-xs text-muted-foreground">
-              The consent checkbox starts unchecked and must be selected before submission.
+              The checkbox starts unchecked, and consent is required before submission.
             </p>
           </div>
 
           <Button disabled={!canSubmit} type="submit">
-            Submit consent
+            Continue
           </Button>
         </form>
 
         <p aria-live="polite" className="text-sm text-muted-foreground">
           {submitted
-            ? 'Thanks. Your phone number and consent selection meet the form requirements for SMS opt-in.'
-            : 'Submit becomes available after you enter a phone number and check the consent box.'}
+            ? 'Thanks. Your consent selection is confirmed for this signup flow.'
+            : 'Continue becomes available after you enter a phone number and check the consent box.'}
         </p>
       </CardContent>
     </Card>

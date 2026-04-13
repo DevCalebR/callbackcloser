@@ -23,7 +23,7 @@ test('legal public pages exist with required headings', () => {
   assert.match(smsConsent, /SMS Consent/);
 });
 
-test('sms consent page includes Twilio review disclosures and trust links', () => {
+test('sms consent page includes required disclosures and trust links', () => {
   const smsConsent = read('app/sms-consent/page.tsx');
   const smsConsentForm = read('components/public-sms-consent-form.tsx');
   const privacy = read('app/privacy/page.tsx');
@@ -41,7 +41,7 @@ test('sms consent page includes Twilio review disclosures and trust links', () =
   assert.match(smsConsent, /href="\/terms"/);
   assert.match(smsConsent, /href="\/contact"/);
   assert.match(smsConsentForm, /By checking this box, you agree to receive SMS messages from CallbackCloser related to customer care and account notifications\./);
-  assert.match(smsConsentForm, /Submit consent/);
+  assert.match(smsConsentForm, /Continue/);
   assert.match(smsConsentForm, /disabled={!canSubmit}/);
   assert.match(privacy, /does not sell mobile numbers/i);
   assert.match(terms, /SMS Consent/);
