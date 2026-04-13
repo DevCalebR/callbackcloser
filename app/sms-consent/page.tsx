@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { PublicSmsConsentForm } from '@/components/public-sms-consent-form';
@@ -7,14 +8,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 const EFFECTIVE_DATE = 'April 5, 2026';
 
-const messageTypes = ['Missed call follow-up', 'Customer care', 'Service updates', 'Account notifications'];
+export const metadata: Metadata = {
+  title: 'SMS Consent | CallbackCloser',
+  description: 'Learn how CallbackCloser collects SMS consent for missed call follow-up, callback coordination, customer care, and account updates.',
+};
+
+const messageTypes = ['Missed call follow-up', 'Callback coordination', 'Service-related questions', 'Customer care', 'Account notifications'];
 
 const expectations = [
-  'This page describes a website-based SMS opt-in for CallbackCloser.',
-  'Message frequency varies based on the callback or service conversation.',
-  'Message and data rates may apply depending on the recipient mobile plan.',
-  'Reply STOP at any time to opt out of future messages.',
-  'Reply HELP for help or contact support@callbackcloser.com.',
+  'You enter your phone number and choose whether to receive text updates.',
+  'The consent checkbox starts unchecked and must be selected before the form can be submitted.',
+  'Message frequency varies based on the missed-call follow-up or service conversation.',
+  'Message and data rates may apply depending on your mobile plan.',
+  'Reply STOP at any time to opt out of future messages, or HELP for help.',
 ];
 
 export default function SmsConsentPage() {
@@ -28,8 +34,8 @@ export default function SmsConsentPage() {
             <h1 className="text-4xl font-semibold tracking-tight">SMS Consent</h1>
             <p className="text-sm text-muted-foreground">Effective date: {EFFECTIVE_DATE}</p>
             <p className="text-base text-muted-foreground">
-              CallbackCloser uses this page to explain the web-form opt-in language shown before someone submits a phone number for SMS
-              follow-up and service-related updates.
+              Use this page to understand how CallbackCloser collects consent for SMS updates tied to missed call follow-up, callback
+              coordination, service-related questions, customer care, and account notifications.
             </p>
           </header>
 
@@ -37,15 +43,15 @@ export default function SmsConsentPage() {
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>What users are opting into</CardTitle>
-                  <CardDescription>CallbackCloser uses SMS to keep missed-call follow-up and service communication moving.</CardDescription>
+                  <CardTitle>What you&apos;re signing up for</CardTitle>
+                  <CardDescription>CallbackCloser uses text messages to keep missed-call recovery and service communication moving.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <p>
-                    The web form below is intended for people who want SMS messages from CallbackCloser about missed call follow-up,
-                    customer care, service updates, and account notifications.
+                    Customers who provide their phone number and agree to receive messages can get updates related to missed call
+                    follow-up, callback coordination, service questions, customer care, and account or service notifications.
                   </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {messageTypes.map((type) => (
                       <div key={type} className="rounded-lg border bg-muted/30 px-4 py-3">
                         <p className="font-medium text-foreground">{type}</p>
@@ -58,7 +64,7 @@ export default function SmsConsentPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>What to expect</CardTitle>
-                  <CardDescription>These are the disclosures reviewers and customers should see in one place.</CardDescription>
+                  <CardDescription>These disclosures stay visible before someone agrees to receive SMS messages.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-muted-foreground">
                   {expectations.map((item) => (
@@ -69,8 +75,19 @@ export default function SmsConsentPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Related public pages</CardTitle>
-                  <CardDescription>Twilio reviewers and pilot customers should be able to reach the trust pages directly.</CardDescription>
+                  <CardTitle>Your choices</CardTitle>
+                  <CardDescription>Consent is optional, and you can change your choice any time a text conversation is active.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm text-muted-foreground">
+                  <p>Reply STOP to opt out of future messages.</p>
+                  <p>Reply HELP for help or email support@callbackcloser.com.</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Related trust pages</CardTitle>
+                  <CardDescription>Review the public policies connected to CallbackCloser messaging and service use.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-3 text-sm">
                   <Link className="underline underline-offset-4" href="/privacy">
@@ -85,12 +102,14 @@ export default function SmsConsentPage() {
                 </CardContent>
               </Card>
 
-              <section className="space-y-2">
-                <h2 className="text-xl font-semibold">Business responsibilities</h2>
+              <section className="space-y-2 rounded-2xl border bg-muted/20 p-5">
+                <h2 className="text-xl font-semibold">Need help?</h2>
                 <p className="text-sm text-muted-foreground">
-                  Businesses using CallbackCloser remain responsible for lawful use of text messaging, including the consent and
-                  contact practices required by their market, campaign type, and jurisdiction. CallbackCloser does not claim that this
-                  page replaces legal advice or account-specific compliance review.
+                  If you have questions about CallbackCloser messaging, support, or account updates, email{' '}
+                  <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
+                    support@callbackcloser.com
+                  </a>
+                  .
                 </p>
               </section>
             </div>

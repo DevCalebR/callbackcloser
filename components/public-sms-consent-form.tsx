@@ -18,7 +18,7 @@ export function PublicSmsConsentForm() {
   return (
     <Card className="border-primary/20 bg-card/95">
       <CardHeader>
-        <CardTitle>Web-form SMS opt-in</CardTitle>
+        <CardTitle>Sign up for SMS updates</CardTitle>
         <CardDescription>
           Enter your phone number to receive SMS messages related to missed call follow-ups and service updates.
         </CardDescription>
@@ -47,7 +47,7 @@ export function PublicSmsConsentForm() {
               value={phoneNumber}
               onChange={(event) => setPhoneNumber(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">A phone number is required before submission.</p>
+            <p className="text-xs text-muted-foreground">Enter a mobile number before continuing.</p>
           </div>
 
           <div className="rounded-lg border bg-muted/30 p-4">
@@ -75,7 +75,7 @@ export function PublicSmsConsentForm() {
               </span>
             </label>
             <p className="mt-3 text-xs text-muted-foreground">
-              The consent checkbox is unchecked by default and must be selected before submission.
+              The consent checkbox starts unchecked and must be selected before submission.
             </p>
           </div>
 
@@ -86,8 +86,8 @@ export function PublicSmsConsentForm() {
 
         <p aria-live="polite" className="text-sm text-muted-foreground">
           {submitted
-            ? 'Form requirements met. CallbackCloser uses this consent pattern so web-form opt-in stays clear before submission.'
-            : 'The submit button stays disabled until the phone field is filled and consent is checked.'}
+            ? 'Thanks. Your phone number and consent selection meet the form requirements for SMS opt-in.'
+            : 'Submit becomes available after you enter a phone number and check the consent box.'}
         </p>
       </CardContent>
     </Card>
