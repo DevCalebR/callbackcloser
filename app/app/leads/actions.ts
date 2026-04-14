@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { requireBusiness } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { updateLeadStatusForBusiness } from '@/lib/business-access';
 import { leadStatusSchema } from '@/lib/validators';
 
 function resolveSafeAppRedirect(value: FormDataEntryValue | null, fallback: string) {
@@ -25,18 +25,14 @@ export async function updateLeadStatusAction(formData: FormData) {
     redirect(`${redirectTo}${redirectTo.includes('?') ? '&' : '?'}error=Invalid%20status`);
   }
 
-  const lead = await db.lead.findFirst({ where: { id: parsed.data.leadId, businessId: business.id } });
+  const lead = await updateLeadStatusForBusiness({
+    businessId: business.id,
+    leadId: parsed.data.leadId,
+    status: parsed.data.status as LeadStatus,
+  });
   if (!lead) {
     redirect(`${redirectTo}${redirectTo.includes('?') ? '&' : '?'}error=Lead%20not%20found`);
   }
-
-  await db.lead.update({
-    where: { id: lead.id },
-    data: {
-      status: parsed.data.status as LeadStatus,
-      lastInteractionAt: new Date(),
-    },
-  });
 
   revalidatePath('/app/leads');
   revalidatePath('/app/conversations');

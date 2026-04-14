@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
-import { db } from '@/lib/db';
+import { getBusinessForOwnerClerkId } from '@/lib/business-access';
 import { getPortfolioDemoAuth, getPortfolioDemoBusiness, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
 export async function requireAuth() {
@@ -24,9 +24,7 @@ export async function getCurrentBusiness() {
   const { userId } = await auth();
   if (!userId) return null;
 
-  return db.business.findUnique({
-    where: { ownerClerkId: userId },
-  });
+  return getBusinessForOwnerClerkId(userId);
 }
 
 export async function requireBusiness() {
@@ -35,7 +33,7 @@ export async function requireBusiness() {
   }
 
   const { userId } = await requireAuth();
-  const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
+  const business = await getBusinessForOwnerClerkId(userId);
   if (!business) {
     redirect('/app/onboarding');
   }
