@@ -15,8 +15,9 @@ test('public simulator is gated and isolated from real customer delivery', () =>
   const schema = read('prisma/schema.prisma');
 
   assert.match(simulatorPage, /Missed-call simulator/);
-  assert.match(simulatorActions, /ENABLE_PUBLIC_MISSED_CALL_SIMULATOR/);
+  assert.match(simulatorActions, /isPublicSimulatorEnabled/);
   assert.match(simulatorLib, /SIMULATOR_BUSINESS_ID/);
+  assert.match(simulatorLib, /ENABLE_PUBLIC_MISSED_CALL_SIMULATOR/);
   assert.match(simulatorLib, /ENABLE_PUBLIC_SIMULATOR_REAL_SMS/);
   assert.match(simulatorLib, /canSendRealSimulatorSms/);
   assert.match(simulatorActions, /isSimulator:\s*true/);

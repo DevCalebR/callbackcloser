@@ -15,7 +15,8 @@ import {
 import { db } from '../lib/db.ts';
 
 function uniqueDigits(seed: string) {
-  return seed.replace(/\D/g, '').padEnd(10, '7').slice(0, 10);
+  const mapped = Array.from(seed, (character) => String(character.charCodeAt(0) % 10)).join('');
+  return mapped.padEnd(10, '7').slice(-10);
 }
 
 function makePhone(seed: string, suffix: string) {
@@ -23,7 +24,8 @@ function makePhone(seed: string, suffix: string) {
 }
 
 function makeSid(prefix: string, seed: string) {
-  return `${prefix}${seed.replace(/-/g, '').padEnd(32, '0').slice(0, 32)}`;
+  const mapped = Array.from(seed, (character) => character.charCodeAt(0).toString(16)).join('');
+  return `${prefix}${mapped.padEnd(32, '0').slice(-32)}`;
 }
 
 export async function seedTenantFixtures() {

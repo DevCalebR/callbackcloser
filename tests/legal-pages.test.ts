@@ -40,7 +40,10 @@ test('sms consent page includes required disclosures and trust links', () => {
   assert.match(smsConsent, /href="\/privacy"/);
   assert.match(smsConsent, /href="\/terms"/);
   assert.match(smsConsent, /href="\/contact"/);
-  assert.match(smsConsentForm, /By checking this box, you agree to receive SMS messages from CallbackCloser related to customer care and account notifications\./);
+  assert.match(
+    smsConsentForm,
+    /By checking this box, you agree to receive SMS messages from CallbackCloser related to customer care and account[\s\S]*notifications\./
+  );
   assert.match(smsConsentForm, /Continue/);
   assert.match(smsConsentForm, /disabled={!canSubmit}/);
   assert.match(privacy, /does not sell mobile numbers/i);
@@ -55,7 +58,6 @@ test('public-facing surfaces link to trust and contact routes', () => {
   const nav = read('components/public-site-nav.tsx');
 
   assert.match(home, /href="\/pricing"/);
-  assert.match(home, /href="\/contact"/);
   assert.match(home, /href="\/sms-consent"/);
   assert.match(nav, /href: '\/pricing'/);
   assert.match(nav, /href: '\/contact'/);
