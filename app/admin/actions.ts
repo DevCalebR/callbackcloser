@@ -12,8 +12,9 @@ import {
   updateBusinessProvisioningStatus,
 } from '@/lib/admin-provisioning';
 import { requireAdmin } from '@/lib/admin';
+import { logAuditEvent } from '@/lib/audit-log';
 import { db } from '@/lib/db';
-import { normalizePhoneNumber } from '@/lib/phone';
+import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import {
   adminBusinessDraftSchema,
   adminBusinessUpdateSchema,
@@ -51,6 +52,45 @@ function buildAdminBusinessRedirectPath(
 async function revalidateAdminPaths(businessId: string) {
   revalidatePath('/admin');
   revalidatePath(`/admin/${businessId}`);
+}
+
+function normalizeOptionalE164Phone(value: string | null | undefined, label: string) {
+  const trimmed = value?.trim() || '';
+  if (!trimmed) return null;
+
+  const normalized = normalizePhoneNumberToE164(trimmed);
+  if (!normalized) {
+    throw new Error(`${label} must be a valid phone number in E.164 or a standard US format.`);
+  }
+
+  return normalized;
+}
+
+function normalizeOptionalSid(value: string | null | undefined) {
+  const trimmed = value?.trim() || '';
+  return trimmed || null;
+}
+
+function maskSidForAudit(value: string | null | undefined) {
+  const trimmed = value?.trim() || '';
+  if (!trimmed) return null;
+  if (trimmed.length <= 8) return trimmed;
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+}
+
+function buildChangedFieldMetadata(changes: Array<{ key: string; label: string; before: string | null; after: string | null }>) {
+  return changes.map((change) => ({
+    key: change.key,
+    label: change.label,
+    before:
+      change.key === 'ownerPhone' || change.key === 'twilioPhoneNumber'
+        ? maskPhoneForAudit(change.before)
+        : maskSidForAudit(change.before) ?? change.before,
+    after:
+      change.key === 'ownerPhone' || change.key === 'twilioPhoneNumber'
+        ? maskPhoneForAudit(change.after)
+        : maskSidForAudit(change.after) ?? change.after,
+  }));
 }
 
 export async function createDemoBusinessAction(formData: FormData) {
@@ -173,6 +213,7 @@ export async function createAdminBusinessAction(formData: FormData) {
     },
   });
 
+  let redirectPath: string;
   try {
     const ownerResult = await connectOrInviteBusinessOwner({
       businessId: business.id,
@@ -181,13 +222,10 @@ export async function createAdminBusinessAction(formData: FormData) {
       inviteIfMissing: true,
     });
 
-    await revalidateAdminPaths(business.id);
-    redirect(
-      buildAdminBusinessRedirectPath(business.id, {
-        created: 1,
-        ownerState: ownerResult.state,
-      })
-    );
+    redirectPath = buildAdminBusinessRedirectPath(business.id, {
+      created: 1,
+      ownerState: ownerResult.state,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Business created, but owner setup failed.';
 
@@ -199,13 +237,15 @@ export async function createAdminBusinessAction(formData: FormData) {
       },
     });
 
-    await revalidateAdminPaths(business.id);
-    redirect(buildAdminBusinessRedirectPath(business.id, { created: 1, error: message }));
+    redirectPath = buildAdminBusinessRedirectPath(business.id, { created: 1, error: message });
   }
+
+  await revalidateAdminPaths(business.id);
+  redirect(redirectPath);
 }
 
 export async function saveAdminBusinessProfileAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const parsed = adminBusinessUpdateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
@@ -213,13 +253,82 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
   }
 
   const data = parsed.data;
+  const existingBusiness = await db.business.findUnique({
+    where: { id: data.businessId },
+    include: {
+      notificationSettings: true,
+    },
+  });
+
+  if (!existingBusiness) {
+    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+  }
+
+  const ownerPhone = normalizeOptionalE164Phone(data.ownerPhone || '', 'Owner alert phone');
+  const twilioPhoneNumber = normalizeOptionalE164Phone(data.twilioPhoneNumber || '', 'Twilio number');
+  const twilioPhoneNumberSid = normalizeOptionalSid(data.twilioPhoneNumberSid);
+  const twilioMessagingServiceSid = normalizeOptionalSid(data.twilioMessagingServiceSid);
+  const existingOwnerPhone = existingBusiness.notificationSettings?.ownerPhone || existingBusiness.notifyPhone || null;
+  const existingTwilioPhoneNumber = existingBusiness.twilioPrimaryPhoneNumber || existingBusiness.twilioPhoneNumber || null;
+  const existingTwilioPhoneNumberSid = existingBusiness.twilioPrimaryNumberSid || existingBusiness.twilioPhoneNumberSid || null;
+  const criticalFieldClears = [
+    existingOwnerPhone && !ownerPhone ? 'owner alert phone' : null,
+    existingTwilioPhoneNumber && !twilioPhoneNumber ? 'Twilio number' : null,
+    existingTwilioPhoneNumberSid && !twilioPhoneNumberSid ? 'Twilio number SID' : null,
+    existingBusiness.twilioMessagingServiceSid && !twilioMessagingServiceSid ? 'messaging service SID' : null,
+  ].filter(Boolean) as string[];
+
+  if (criticalFieldClears.length > 0 && !data.confirmCriticalFieldClears) {
+    redirect(
+      buildAdminBusinessRedirectPath(
+        data.businessId,
+        {
+          error: `Confirm clearing live fields before removing: ${criticalFieldClears.join(', ')}.`,
+        }
+      )
+    );
+  }
+
+  const twilioMappingChanged =
+    existingTwilioPhoneNumber !== twilioPhoneNumber ||
+    existingTwilioPhoneNumberSid !== twilioPhoneNumberSid ||
+    existingBusiness.twilioMessagingServiceSid !== twilioMessagingServiceSid;
+
+  const changedFields = [
+    existingOwnerPhone !== ownerPhone
+      ? { key: 'ownerPhone', label: 'owner alert phone', before: existingOwnerPhone, after: ownerPhone }
+      : null,
+    existingTwilioPhoneNumber !== twilioPhoneNumber
+      ? { key: 'twilioPhoneNumber', label: 'Twilio number', before: existingTwilioPhoneNumber, after: twilioPhoneNumber }
+      : null,
+    existingTwilioPhoneNumberSid !== twilioPhoneNumberSid
+      ? { key: 'twilioPhoneNumberSid', label: 'Twilio number SID', before: existingTwilioPhoneNumberSid, after: twilioPhoneNumberSid }
+      : null,
+    existingBusiness.twilioMessagingServiceSid !== twilioMessagingServiceSid
+      ? {
+          key: 'twilioMessagingServiceSid',
+          label: 'messaging service SID',
+          before: existingBusiness.twilioMessagingServiceSid,
+          after: twilioMessagingServiceSid,
+        }
+      : null,
+    existingBusiness.managedTwilioStatus !== data.managedTwilioStatus
+      ? {
+          key: 'managedTwilioStatus',
+          label: 'managed Twilio status',
+          before: existingBusiness.managedTwilioStatus,
+          after: data.managedTwilioStatus,
+        }
+      : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; before: string | null; after: string | null }>;
+
   await db.business.update({
     where: { id: data.businessId },
     data: {
       ownerName: data.ownerName || null,
       name: data.name,
       forwardingNumber: normalizePhoneNumber(data.forwardingNumber),
-      notifyPhone: normalizePhoneNumber(data.ownerPhone || '') || null,
+      notifyPhone: ownerPhone,
       missedCallSeconds: data.missedCallSeconds,
       serviceLabel1: data.serviceLabel1,
       serviceLabel2: data.serviceLabel2,
@@ -227,6 +336,13 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
       timezone: data.timezone,
       internalNotes: data.internalNotes || null,
       provisioningError: null,
+      managedTwilioStatus: data.managedTwilioStatus as ManagedTwilioStatus,
+      twilioPhoneNumber,
+      twilioPrimaryPhoneNumber: twilioPhoneNumber,
+      twilioPhoneNumberSid,
+      twilioPrimaryNumberSid: twilioPhoneNumberSid,
+      twilioMessagingServiceSid,
+      ...(twilioMappingChanged ? { twilioWebhookSyncedAt: null } : {}),
     },
   });
 
@@ -234,7 +350,7 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
     where: { businessId: data.businessId },
     create: {
       businessId: data.businessId,
-      ownerPhone: normalizePhoneNumber(data.ownerPhone || '') || null,
+      ownerPhone,
       ownerEmail: data.ownerEmail.trim().toLowerCase(),
       notifySms: data.notifySms,
       notifyEmail: data.notifyEmail,
@@ -242,7 +358,7 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
       urgentOnly: data.urgentOnly,
     },
     update: {
-      ownerPhone: normalizePhoneNumber(data.ownerPhone || '') || null,
+      ownerPhone,
       ownerEmail: data.ownerEmail.trim().toLowerCase(),
       notifySms: data.notifySms,
       notifyEmail: data.notifyEmail,
@@ -251,8 +367,31 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
     },
   });
 
+  if (changedFields.length > 0) {
+    logAuditEvent({
+      event: 'admin_business_editor_saved',
+      actorType: 'user',
+      actorId: admin.userId,
+      businessId: data.businessId,
+      targetType: 'business',
+      targetId: data.businessId,
+      metadata: {
+        actorEmail: admin.email,
+        changedFields: buildChangedFieldMetadata(changedFields),
+        source: 'admin_dashboard',
+      },
+    });
+  }
+
   await revalidateAdminPaths(data.businessId);
-  redirect(buildAdminBusinessRedirectPath(data.businessId, { saved: 1 }));
+  revalidatePath('/app/settings');
+  revalidatePath('/app/call-flow');
+  redirect(
+    buildAdminBusinessRedirectPath(data.businessId, {
+      saved: 1,
+      changed: changedFields.map((field) => field.key).join(','),
+    })
+  );
 }
 
 export async function connectBusinessOwnerAction(formData: FormData) {
@@ -263,6 +402,7 @@ export async function connectBusinessOwnerAction(formData: FormData) {
     redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid owner connection request.')}`);
   }
 
+  let redirectPath: string;
   try {
     const result = await connectOrInviteBusinessOwner({
       businessId: parsed.data.businessId,
@@ -272,8 +412,7 @@ export async function connectBusinessOwnerAction(formData: FormData) {
       inviteIfMissing: true,
     });
 
-    await revalidateAdminPaths(parsed.data.businessId);
-    redirect(buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerState: result.state }));
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerState: result.state });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Owner setup failed.';
     await db.business.update({
@@ -284,9 +423,11 @@ export async function connectBusinessOwnerAction(formData: FormData) {
       },
     });
 
-    await revalidateAdminPaths(parsed.data.businessId);
-    redirect(buildAdminBusinessRedirectPath(parsed.data.businessId, { error: message }));
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { error: message });
   }
+
+  await revalidateAdminPaths(parsed.data.businessId);
+  redirect(redirectPath);
 }
 
 export async function provisionBusinessAction(formData: FormData) {
@@ -297,6 +438,7 @@ export async function provisionBusinessAction(formData: FormData) {
     redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid provisioning request.')}`);
   }
 
+  let redirectPath: string;
   try {
     await runAdminProvisioning({
       businessId: parsed.data.businessId,
@@ -305,18 +447,17 @@ export async function provisionBusinessAction(formData: FormData) {
       existingNumberSid: parsed.data.existingNumberSidSelect || parsed.data.existingNumberSidManual || parsed.data.existingNumberSid || null,
     });
 
-    await revalidateAdminPaths(parsed.data.businessId);
-    redirect(
-      buildAdminBusinessRedirectPath(parsed.data.businessId, {
-        provisioned: 1,
-        mode: parsed.data.mode.toLowerCase(),
-      })
-    );
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, {
+      provisioned: 1,
+      mode: parsed.data.mode.toLowerCase(),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Provisioning failed.';
-    await revalidateAdminPaths(parsed.data.businessId);
-    redirect(buildAdminBusinessRedirectPath(parsed.data.businessId, { error: message }));
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { error: message });
   }
+
+  await revalidateAdminPaths(parsed.data.businessId);
+  redirect(redirectPath);
 }
 
 export async function resyncBusinessWebhooksAction(formData: FormData) {
@@ -348,6 +489,7 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
     redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
   }
 
+  let redirectPath: string;
   try {
     await syncBusinessTwilioWebhooks(business, options);
     await db.business.update({
@@ -356,8 +498,7 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
         provisioningError: null,
       },
     });
-    await revalidateAdminPaths(business.id);
-    redirect(buildAdminBusinessRedirectPath(business.id, { synced: parsed.data.target.toLowerCase() }));
+    redirectPath = buildAdminBusinessRedirectPath(business.id, { synced: parsed.data.target.toLowerCase() });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Webhook sync failed.';
     await db.business.update({
@@ -368,9 +509,11 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
       },
     });
 
-    await revalidateAdminPaths(business.id);
-    redirect(buildAdminBusinessRedirectPath(business.id, { error: message }));
+    redirectPath = buildAdminBusinessRedirectPath(business.id, { error: message });
   }
+
+  await revalidateAdminPaths(business.id);
+  redirect(redirectPath);
 }
 
 export async function setBusinessProvisioningStatusAction(formData: FormData) {

@@ -54,6 +54,22 @@ export const adminBusinessUpdateSchema = adminBusinessDraftSchema.extend({
   businessId: z.string().min(1),
   ownerClerkId: z.string().trim().optional().or(z.literal('')),
   internalNotes: z.string().trim().max(5_000).optional().or(z.literal('')),
+  twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
+  twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
+  twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  managedTwilioStatus: z
+    .enum([
+      'DRAFT',
+      'PROVISIONING',
+      'AWAITING_BUSINESS_VERIFICATION',
+      'BRAND_SUBMITTED',
+      'CAMPAIGN_SUBMITTED',
+      'COMPLIANT_LIVE',
+      'PAUSED_NONCOMPLIANT',
+      'FAILED_REVIEW',
+    ])
+    .default('DRAFT'),
+  confirmCriticalFieldClears: z.coerce.boolean().optional().default(false),
   notifySms: z.coerce.boolean().optional().default(false),
   notifyEmail: z.coerce.boolean().optional().default(false),
   notifyInApp: z.coerce.boolean().optional().default(false),
@@ -102,4 +118,12 @@ export const adminWebhookSyncSchema = z.object({
 export const adminProvisioningStatusSchema = z.object({
   businessId: z.string().min(1),
   status: z.enum(['DRAFT', 'ONBOARDING', 'NEEDS_ATTENTION', 'LIVE', 'PAUSED']),
+});
+
+export const businessTwilioAdminOverrideSchema = z.object({
+  twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
+  twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
+  twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  ownerPhone: z.string().trim().max(30).optional().or(z.literal('')),
+  confirmCriticalFieldClears: z.coerce.boolean().optional().default(false),
 });

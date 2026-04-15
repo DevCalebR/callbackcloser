@@ -13,6 +13,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { requireAdmin } from '@/lib/admin';
 import {
@@ -31,6 +32,14 @@ import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getAdminBusinessStatus, getCustomerSystemStatus } from '@/lib/system-status';
 
 export const dynamic = 'force-dynamic';
+
+const changedFieldLabels: Record<string, string> = {
+  ownerPhone: 'owner alert phone',
+  twilioPhoneNumber: 'Twilio number',
+  twilioPhoneNumberSid: 'Twilio number SID',
+  twilioMessagingServiceSid: 'messaging service SID',
+  managedTwilioStatus: 'managed Twilio status',
+};
 
 function getQueryValue(searchParams: Record<string, string | string[] | undefined> | undefined, key: string) {
   const value = searchParams?.[key];
@@ -142,6 +151,11 @@ export default async function AdminBusinessDetailPage({
   const synced = getQueryValue(searchParams, 'synced');
   const statusSaved = getQueryValue(searchParams, 'statusSaved');
   const error = getQueryValue(searchParams, 'error');
+  const changed = (getQueryValue(searchParams, 'changed') || '')
+    .split(',')
+    .map((field) => field.trim())
+    .filter(Boolean)
+    .map((field) => changedFieldLabels[field] || field);
 
   return (
     <div className="container space-y-6 py-8">
@@ -167,7 +181,11 @@ export default async function AdminBusinessDetailPage({
       </div>
 
       {created ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business workspace created and ready for provisioning.</div> : null}
-      {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business details saved.</div> : null}
+      {saved ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          Business details saved{changed.length > 0 ? `: ${changed.join(', ')}.` : '.'}
+        </div>
+      ) : null}
       {ownerStateMessage ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           {ownerStateMessage === 'connected'
@@ -205,7 +223,7 @@ export default async function AdminBusinessDetailPage({
         <Card className="bg-card/90">
           <CardHeader>
             <CardTitle>Business identity</CardTitle>
-            <CardDescription>Save the customer profile, routing defaults, owner alerts, and internal notes.</CardDescription>
+            <CardDescription>Save the customer profile, routing defaults, owner alerts, internal notes, and admin-only Twilio mapping fields.</CardDescription>
           </CardHeader>
           <CardContent>
             <form action={saveAdminBusinessProfileAction} className="grid gap-4 md:grid-cols-2">
@@ -303,6 +321,59 @@ export default async function AdminBusinessDetailPage({
                     Urgent leads only
                   </label>
                 </div>
+              </div>
+              <div className="md:col-span-2 space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <div>
+                  <p className="text-sm font-medium">Internal database editor</p>
+                  <p className="text-xs text-muted-foreground">
+                    Internal admin-only. Twilio numbers are normalized to E.164 on save, the primary and legacy lookup fields are updated together, and
+                    manual mapping changes clear the last webhook sync timestamp until the next resync confirms the assignment.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="twilioPhoneNumber">Twilio number</Label>
+                    <Input
+                      id="twilioPhoneNumber"
+                      name="twilioPhoneNumber"
+                      type="tel"
+                      defaultValue={business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || ''}
+                      placeholder="+18777480449"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="twilioPhoneNumberSid">Twilio number SID</Label>
+                    <Input
+                      id="twilioPhoneNumberSid"
+                      name="twilioPhoneNumberSid"
+                      defaultValue={business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || ''}
+                      placeholder="PN..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="twilioMessagingServiceSid">Messaging service SID</Label>
+                    <Input
+                      id="twilioMessagingServiceSid"
+                      name="twilioMessagingServiceSid"
+                      defaultValue={business.twilioMessagingServiceSid || ''}
+                      placeholder="MG..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="managedTwilioStatus">Managed Twilio status</Label>
+                    <Select id="managedTwilioStatus" name="managedTwilioStatus" defaultValue={business.managedTwilioStatus}>
+                      {Object.entries(managedTwilioStatusLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+                <label className="flex items-start gap-2 rounded-lg border bg-background/80 p-3 text-sm">
+                  <input className="mt-1" type="checkbox" name="confirmCriticalFieldClears" value="true" />
+                  <span>I understand this may clear a live Twilio mapping or owner alert destination and should only be used for internal corrections.</span>
+                </label>
               </div>
               <div className="md:col-span-2">
                 <Button type="submit">Save business details</Button>
