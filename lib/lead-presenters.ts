@@ -60,6 +60,26 @@ export function formatDateTime(value: Date | null | undefined) {
   }).format(value);
 }
 
+export function formatRelativeTime(value: Date | null | undefined, now: Date = new Date()) {
+  if (!value) return '-';
+
+  const diffMs = value.getTime() - now.getTime();
+  const diffMinutes = Math.round(diffMs / 60_000);
+  const diffHours = Math.round(diffMs / 3_600_000);
+  const diffDays = Math.round(diffMs / 86_400_000);
+  const formatter = new Intl.RelativeTimeFormat('en-US', { numeric: 'auto' });
+
+  if (Math.abs(diffMinutes) < 60) {
+    return formatter.format(diffMinutes, 'minute');
+  }
+
+  if (Math.abs(diffHours) < 24) {
+    return formatter.format(diffHours, 'hour');
+  }
+
+  return formatter.format(diffDays, 'day');
+}
+
 export function getLeadStatusBadgeVariant(status: LeadStatus) {
   if (status === LeadStatus.BOOKED) return 'success';
   if (status === LeadStatus.LOST) return 'destructive';
