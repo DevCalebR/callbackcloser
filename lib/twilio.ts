@@ -1,5 +1,10 @@
 import { getConfiguredAppBaseUrl, resolveConfiguredAppBaseUrl } from '@/lib/env.server';
 import { getTwilioClient, type TwilioClient } from '@/lib/twilio-client';
+import {
+  buildTwilioIncomingPhoneNumberWebhookUpdate,
+  type TwilioWebhookConfigLite,
+  type TwilioWebhookSyncOptions,
+} from '@/lib/twilio-webhook-update';
 
 export type TwilioWebhookConfig = {
   appBaseUrl: string;
@@ -55,18 +60,17 @@ export function getTwilioWebhookConfig(): TwilioWebhookConfig {
 
 export async function syncTwilioIncomingPhoneNumberWebhooks(
   phoneNumberSid: string,
-  client: TwilioClient = getTwilioClient()
+  client: TwilioClient = getTwilioClient(),
+  options: TwilioWebhookSyncOptions = {}
 ) {
   const webhookConfig = getTwilioWebhookConfig();
+  const update = buildTwilioIncomingPhoneNumberWebhookUpdate(webhookConfig as TwilioWebhookConfigLite, options);
 
-  const number = await client.incomingPhoneNumbers(phoneNumberSid).update({
-    voiceUrl: webhookConfig.voiceUrl,
-    voiceMethod: 'POST',
-    smsUrl: webhookConfig.smsUrl,
-    smsMethod: 'POST',
-    statusCallback: webhookConfig.statusUrl,
-    statusCallbackMethod: 'POST',
-  });
+  if (Object.keys(update).length === 0) {
+    throw new Error('At least one Twilio webhook target must be selected for sync.');
+  }
+
+  const number = await client.incomingPhoneNumbers(phoneNumberSid).update(update);
 
   console.info('Twilio webhook sync applied', {
     twilioAccountSid: client.accountSid,
@@ -77,3 +81,6 @@ export async function syncTwilioIncomingPhoneNumberWebhooks(
 
   return { number, webhookConfig };
 }
+
+export { buildTwilioIncomingPhoneNumberWebhookUpdate };
+export type { TwilioWebhookConfigLite, TwilioWebhookSyncOptions };

@@ -36,3 +36,70 @@ export const buyNumberSchema = z.object({
     .optional()
     .or(z.literal('')),
 });
+
+export const adminBusinessDraftSchema = z.object({
+  name: z.string().min(2).max(120),
+  ownerName: z.string().trim().max(120).optional().or(z.literal('')),
+  ownerEmail: z.string().trim().email(),
+  ownerPhone: z.string().max(30).optional().or(z.literal('')),
+  forwardingNumber: z.string().min(7).max(30),
+  timezone: z.string().min(2).max(100).default('America/New_York'),
+  missedCallSeconds: z.coerce.number().int().min(5).max(90).default(20),
+  serviceLabel1: z.string().min(1).max(40).default('Repair'),
+  serviceLabel2: z.string().min(1).max(40).default('Install'),
+  serviceLabel3: z.string().min(1).max(40).default('Maintenance'),
+});
+
+export const adminBusinessUpdateSchema = adminBusinessDraftSchema.extend({
+  businessId: z.string().min(1),
+  ownerClerkId: z.string().trim().optional().or(z.literal('')),
+  internalNotes: z.string().trim().max(5_000).optional().or(z.literal('')),
+  notifySms: z.coerce.boolean().optional().default(false),
+  notifyEmail: z.coerce.boolean().optional().default(false),
+  notifyInApp: z.coerce.boolean().optional().default(false),
+  urgentOnly: z.coerce.boolean().optional().default(false),
+});
+
+export const adminConnectOwnerSchema = z.object({
+  businessId: z.string().min(1),
+  ownerEmail: z.string().trim().email(),
+  ownerName: z.string().trim().max(120).optional().or(z.literal('')),
+  ownerClerkId: z.string().trim().optional().or(z.literal('')),
+});
+
+export const adminProvisionBusinessSchema = z
+  .object({
+    businessId: z.string().min(1),
+    mode: z.enum(['NEW_NUMBER', 'EXISTING_NUMBER']),
+    areaCode: z
+      .string()
+      .trim()
+      .regex(/^\d{3}$/)
+      .optional()
+      .or(z.literal('')),
+    existingNumberSid: z.string().trim().optional().or(z.literal('')),
+    existingNumberSidSelect: z.string().trim().optional().or(z.literal('')),
+    existingNumberSidManual: z.string().trim().optional().or(z.literal('')),
+  })
+  .superRefine((value, ctx) => {
+    const resolvedExistingNumberSid =
+      value.existingNumberSidSelect || value.existingNumberSidManual || value.existingNumberSid || '';
+
+    if (value.mode === 'EXISTING_NUMBER' && !resolvedExistingNumberSid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['existingNumberSidSelect'],
+        message: 'Choose an existing number before provisioning this business.',
+      });
+    }
+  });
+
+export const adminWebhookSyncSchema = z.object({
+  businessId: z.string().min(1),
+  target: z.enum(['VOICE', 'SMS', 'ALL']),
+});
+
+export const adminProvisioningStatusSchema = z.object({
+  businessId: z.string().min(1),
+  status: z.enum(['DRAFT', 'ONBOARDING', 'NEEDS_ATTENTION', 'LIVE', 'PAUSED']),
+});

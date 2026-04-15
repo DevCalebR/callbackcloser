@@ -12,8 +12,14 @@ model Business {
   id                          String             @id @default(cuid())
   ownerClerkId                String             @unique
   name                        String
+  ownerName                   String?
   forwardingNumber            String
   notifyPhone                 String?
+  provisioningStatus          BusinessProvisioningStatus @default(DRAFT)
+  provisioningLastRunAt       DateTime?
+  provisioningError           String?
+  ownerInviteSentAt           DateTime?
+  internalNotes               String?
   missedCallSeconds           Int                @default(20)
   serviceLabel1               String             @default("Repair")
   serviceLabel2               String             @default("Install")
@@ -304,4 +310,12 @@ enum ManagedTwilioStatus {
   COMPLIANT_LIVE
   PAUSED_NONCOMPLIANT
   FAILED_REVIEW
+}
+
+enum BusinessProvisioningStatus {
+  DRAFT
+  ONBOARDING
+  NEEDS_ATTENTION
+  LIVE
+  PAUSED
 }
