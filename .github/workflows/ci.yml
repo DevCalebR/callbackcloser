@@ -10,10 +10,24 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: callbackcloser
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d callbackcloser"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       NEXT_PUBLIC_APP_URL: https://example.com
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/callbackcloser?sslmode=require
-      DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/callbackcloser?sslmode=require
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/callbackcloser?sslmode=disable
+      DIRECT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/callbackcloser?sslmode=disable
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZXhhbXBsZS5jb20k
       CLERK_SECRET_KEY: sk_test_placeholder
       STRIPE_SECRET_KEY: sk_test_placeholder
@@ -34,6 +48,7 @@ jobs:
       - run: npm ci
       - run: npm run env:check
       - run: npm run db:validate
+      - run: npm run db:deploy
       - run: npm test
       - run: npm run lint
       - run: npm run typecheck
