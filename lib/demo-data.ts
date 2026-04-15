@@ -5,7 +5,7 @@ export type DemoInboxLead = {
   serviceType: string;
   urgency: string;
   location: string;
-  status: 'Qualified' | 'New' | 'Contacted';
+  status: 'Ready for callback' | 'New' | 'Contacted';
   readiness: 'Hot Lead' | 'Working' | 'Needs follow-up';
   createdLabel: string;
 };
@@ -22,21 +22,21 @@ export const demoInboxLeads: DemoInboxLead[] = [
   {
     id: 'lead-hvac-repair',
     customerName: 'Jamie Carter',
-    customerPhone: '+1 (512) 555-0189',
-    serviceType: 'AC repair',
+    customerPhone: '+1 (865) 555-0148',
+    serviceType: 'Repair',
     urgency: 'Today',
-    location: 'Austin, TX 78704',
-    status: 'Qualified',
+    location: 'Knoxville, TN 37923',
+    status: 'Ready for callback',
     readiness: 'Hot Lead',
     createdLabel: '2 minutes ago',
   },
   {
     id: 'lead-no-cool',
     customerName: 'Maya Brooks',
-    customerPhone: '+1 (512) 555-0114',
+    customerPhone: '+1 (865) 555-0194',
     serviceType: 'No-cool diagnosis',
     urgency: 'This afternoon',
-    location: 'Round Rock, TX 78664',
+    location: 'Farragut, TN 37934',
     status: 'Contacted',
     readiness: 'Working',
     createdLabel: '14 minutes ago',
@@ -44,10 +44,10 @@ export const demoInboxLeads: DemoInboxLead[] = [
   {
     id: 'lead-maintenance',
     customerName: 'Ryan Patel',
-    customerPhone: '+1 (512) 555-0172',
+    customerPhone: '+1 (865) 555-0112',
     serviceType: 'Spring tune-up',
     urgency: 'This week',
-    location: 'Cedar Park, TX 78613',
+    location: 'Powell, TN 37849',
     status: 'New',
     readiness: 'Needs follow-up',
     createdLabel: '31 minutes ago',
@@ -59,28 +59,28 @@ export const demoConversationMessages: DemoConversationMessage[] = [
     id: 'msg-1',
     sender: 'system',
     label: 'CallbackCloser',
-    body: 'Hey Jamie, sorry we missed your call. What is going on with your HVAC?',
+    body: 'Hey — sorry we missed your call. What’s going on with your HVAC?',
     timestamp: '2:14 PM',
   },
   {
     id: 'msg-2',
     sender: 'customer',
     label: 'Jamie Carter',
-    body: 'AC is not cooling at all.',
+    body: 'My AC isn’t cooling.',
     timestamp: '2:14 PM',
   },
   {
     id: 'msg-3',
     sender: 'system',
     label: 'CallbackCloser',
-    body: 'Got it. Is this a repair or a new install?',
+    body: 'Got it — is this a repair or a new install?',
     timestamp: '2:15 PM',
   },
   {
     id: 'msg-4',
     sender: 'customer',
     label: 'Jamie Carter',
-    body: 'Repair.',
+    body: 'Repair',
     timestamp: '2:15 PM',
   },
   {
@@ -97,50 +97,57 @@ export const demoConversationMessages: DemoConversationMessage[] = [
     body: 'Today if possible.',
     timestamp: '2:16 PM',
   },
+  {
+    id: 'msg-7',
+    sender: 'system',
+    label: 'CallbackCloser',
+    body: 'Perfect — someone will reach out shortly. If there’s anything else we should know, you can text it here.',
+    timestamp: '2:16 PM',
+  },
 ];
 
 export const demoHeroStats = [
   {
+    label: 'Missed call value',
+    value: '$300-$1,000 jobs',
+    detail: 'One missed HVAC call can turn into a repair job that goes to the next company.',
+  },
+  {
     label: 'Response speed',
-    value: '< 60 seconds',
-    detail: 'Missed callers hear back before they move on to the next HVAC company.',
+    value: 'Texts in seconds',
+    detail: 'The homeowner gets a reply before they start calling down the list.',
   },
   {
-    label: 'Lead quality',
-    value: 'Service + urgency captured',
-    detail: 'Your team sees the repair need and timing before making the callback.',
-  },
-  {
-    label: 'Owner handoff',
+    label: 'What you get back',
     value: 'Hot lead alert',
-    detail: 'Qualified jobs are handed off with the context needed to close fast.',
+    detail: 'You see the issue, service type, and urgency before you call them back.',
   },
 ];
 
 export const demoWorkflowSteps = [
   {
-    title: 'Customer calls',
-    detail: 'A homeowner tries to book service while your team is on jobs.',
+    title: 'Customer calls your business',
+    detail: 'A homeowner reaches out when they need HVAC help now.',
   },
   {
-    title: 'You miss it',
-    detail: 'Instead of going dark, CallbackCloser starts the follow-up immediately.',
+    title: 'You miss the call',
+    detail: 'Instead of silence, CallbackCloser starts the follow-up immediately.',
   },
   {
-    title: 'We text and qualify',
-    detail: 'You get the job type, urgency, and callback context without chasing the lead.',
+    title: 'CallbackCloser texts and sends the lead',
+    detail: 'You get the issue, service type, urgency, and callback context while they are still ready to book.',
   },
 ];
 
 export const demoLeadDetail = {
   customerName: 'Jamie Carter',
-  customerPhone: '+1 (512) 555-0189',
+  customerPhone: '+1 (865) 555-0148',
   serviceType: 'Repair',
-  issueSummary: 'AC is not cooling',
+  issueSummary: 'AC not cooling',
   urgency: 'Today',
-  location: 'Austin, TX 78704',
+  location: 'Knoxville, TN 37923',
   callbackWindow: 'Call back before 4 PM',
-  status: 'Qualified',
+  status: 'Ready for callback',
   readiness: 'Hot Lead',
   createdAt: 'Today · 2:14 PM',
   qualifiedAt: '2:16 PM',
@@ -150,14 +157,15 @@ export const demoOwnerAlert = {
   headline: 'New HVAC lead',
   service: 'Repair',
   urgency: 'Today',
+  issue: 'AC not cooling',
   customerName: 'Jamie Carter',
-  customerPhone: '+1 (512) 555-0189',
-  summary: 'AC is not cooling. Austin, TX 78704. Asked for service today and can answer before 4 PM.',
+  customerPhone: '+1 (865) 555-0148',
+  summary: 'Instead of losing the call, you get another shot at the job.',
   footer: 'View in dashboard',
 };
 
 export const demoTrustPoints = [
   'Public demo only. No login, no real customer data, no live Twilio traffic.',
-  'Built to look like the real CallbackCloser lead workspace your team would use.',
+  'Built to feel like the real CallbackCloser lead workspace your team would use.',
   'Safe to open during live sales calls when you need to show the value fast.',
 ];

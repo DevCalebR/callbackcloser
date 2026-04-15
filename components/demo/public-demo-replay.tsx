@@ -26,6 +26,7 @@ export function PublicDemoReplay({
     headline: string;
     service: string;
     urgency: string;
+    issue: string;
     customerName: string;
     customerPhone: string;
     summary: string;
@@ -61,13 +62,11 @@ export function PublicDemoReplay({
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle>Lead workspace</CardTitle>
-                <Badge variant="success">Qualified</Badge>
+                <CardTitle>Live customer conversation</CardTitle>
+                <Badge variant="success">Ready for callback</Badge>
                 <Badge variant="destructive">Hot Lead</Badge>
               </div>
-              <CardDescription>
-                This mirrors the real CallbackCloser lead detail flow: missed call, text follow-up, qualification, and owner handoff.
-              </CardDescription>
+              <CardDescription>Short, natural messages that get replies fast.</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -121,7 +120,7 @@ export function PublicDemoReplay({
                 <div className="rounded-xl border bg-muted/20 p-3">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">What got captured</p>
                   <p className="mt-2 font-medium">
-                    {replayStage === 'qualified' ? `${ownerAlert.service} • ${ownerAlert.urgency}` : 'Issue + service + urgency in progress'}
+                    {replayStage === 'qualified' ? `${ownerAlert.issue} • ${ownerAlert.service} • ${ownerAlert.urgency}` : 'Issue + service + urgency in progress'}
                   </p>
                 </div>
               </div>
@@ -130,11 +129,11 @@ export function PublicDemoReplay({
             <div className="rounded-2xl border bg-background/80 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-medium">Conversation history</p>
-                  <p className="text-sm text-muted-foreground">Watch the missed-call follow-up unfold step by step.</p>
+                  <p className="font-medium">Live customer conversation</p>
+                  <p className="text-sm text-muted-foreground">Short, natural messages that get replies fast.</p>
                 </div>
                 <Badge variant={ownerAlertReady ? 'success' : 'outline'}>
-                  {ownerAlertReady ? 'Qualified' : 'In progress'}
+                  {ownerAlertReady ? 'Ready for callback' : 'In progress'}
                 </Badge>
               </div>
               <div className="space-y-3">
@@ -166,14 +165,17 @@ export function PublicDemoReplay({
             <Card className={cn('border-primary/20 bg-primary/5 transition-all', ownerAlertReady && 'border-accent/40 bg-accent/20')}>
               <CardHeader>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <CardTitle>{ownerAlert.headline}</CardTitle>
+                  <CardTitle>This is what you get instantly</CardTitle>
                   <Badge variant={ownerAlertReady ? 'success' : 'outline'}>
                     {ownerAlertReady ? 'Owner alert sent' : 'Waiting on qualification'}
                   </Badge>
                 </div>
-                <CardDescription>The sales moment: what the owner sees after the lead is qualified.</CardDescription>
+                <CardDescription>Instead of losing the call, you get another shot at the job.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
+                <div className="rounded-xl border bg-background/85 p-4">
+                  <p className="text-lg font-semibold">{ownerAlert.headline}</p>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl border bg-background/85 p-3">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Service</p>
@@ -183,6 +185,10 @@ export function PublicDemoReplay({
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Urgency</p>
                     <p className="mt-2 font-medium">{ownerAlert.urgency}</p>
                   </div>
+                </div>
+                <div className="rounded-xl border bg-background/85 p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Issue</p>
+                  <p className="mt-2 font-medium">{ownerAlert.issue}</p>
                 </div>
                 <div className="rounded-xl border bg-background/85 p-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Call now</p>
@@ -199,11 +205,11 @@ export function PublicDemoReplay({
             </Card>
 
             <div className="rounded-2xl border bg-background/80 p-4 text-sm">
-              <p className="font-medium">Why this closes faster</p>
+              <p className="font-medium">Speed is the difference between a lost call and a booked job.</p>
               <div className="mt-3 space-y-2 text-muted-foreground">
                 <p>- The homeowner gets a fast reply while the problem still feels urgent.</p>
-                <p>- The owner sees repair intent and timing before making the callback.</p>
-                <p>- The conversation is captured in one place instead of lost across voicemail and manual texting.</p>
+                <p>- You see repair intent and timing before making the callback.</p>
+                <p>- The conversation stays in one place instead of getting lost in voicemail.</p>
               </div>
             </div>
           </div>
