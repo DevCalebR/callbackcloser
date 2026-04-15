@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
-import { normalizePhoneNumber } from '@/lib/phone';
+import { normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
@@ -76,8 +76,8 @@ export async function POST(request: Request) {
       return withCorrelation(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
     }
 
-    const to = normalizePhoneNumber(formField(formData, 'To'));
-    const from = normalizePhoneNumber(formField(formData, 'From'));
+    const to = normalizePhoneNumberToE164(formField(formData, 'To')) || normalizePhoneNumber(formField(formData, 'To'));
+    const from = normalizePhoneNumberToE164(formField(formData, 'From')) || normalizePhoneNumber(formField(formData, 'From'));
     callSid = formField(formData, 'CallSid') || null;
     const accountSid = formField(formData, 'AccountSid');
 

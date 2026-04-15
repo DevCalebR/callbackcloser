@@ -18,6 +18,7 @@ import {
   getAdminProvisioningStatusVariant,
   isPendingOwnerClerkId,
 } from '@/lib/admin-provisioning';
+import { searchBusinessesForAdmin } from '@/lib/business';
 import { db } from '@/lib/db';
 import { formatDateTime } from '@/lib/lead-presenters';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary, managedTwilioStatusLabels } from '@/lib/managed-twilio';
@@ -35,15 +36,18 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const createdDemo = getQueryValue(searchParams, 'createdDemo') === '1';
   const createdBusinessId = getQueryValue(searchParams, 'businessId');
   const error = getQueryValue(searchParams, 'error');
+  const query = getQueryValue(searchParams, 'q')?.trim() || '';
   const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
   const [businesses, leadCounts] = await Promise.all([
-    db.business.findMany({
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        notificationSettings: true,
-      },
-    }),
+    query
+      ? searchBusinessesForAdmin(query)
+      : db.business.findMany({
+          orderBy: { updatedAt: 'desc' },
+          include: {
+            notificationSettings: true,
+          },
+        }),
     db.lead.groupBy({
       by: ['businessId'],
       _count: { _all: true },
@@ -71,6 +75,43 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           workspace below.
         </div>
       ) : null}
+
+      <Card className="bg-card/90">
+        <CardHeader>
+          <CardTitle>Internal database lookup</CardTitle>
+          <CardDescription>
+            Search by business name, owner email, Twilio number, Twilio number SID, or business ID. This tool is internal-only and stays behind the admin
+            dashboard guard.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
+            <Input
+              aria-label="Search businesses"
+              defaultValue={query}
+              name="q"
+              placeholder="Search name, owner email, +18777480449, PN..., or business ID"
+            />
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+            {query ? (
+              <Link className={buttonVariants({ variant: 'ghost' })} href="/admin">
+                Clear
+              </Link>
+            ) : null}
+          </form>
+          <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+            {query ? (
+              <>
+                Showing {businesses.length} result{businesses.length === 1 ? '' : 's'} for <span className="font-medium text-foreground">{query}</span>.
+              </>
+            ) : (
+              <>Search is empty, so the full business list is shown below.</>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="border-primary/20 bg-primary/5">
@@ -178,27 +219,32 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
       <Card className="bg-card/90">
         <CardHeader>
-          <CardTitle>All businesses</CardTitle>
+          <CardTitle>{query ? 'Search results' : 'All businesses'}</CardTitle>
           <CardDescription>Operational view of owner state, provisioning progress, Twilio setup, and live readiness.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="px-3 py-3 font-medium">Business</th>
-                <th className="px-3 py-3 font-medium">Owner</th>
-                <th className="px-3 py-3 font-medium">Business status</th>
-                <th className="px-3 py-3 font-medium">Provisioning</th>
-                <th className="px-3 py-3 font-medium">Twilio</th>
-                <th className="px-3 py-3 font-medium">Phone + webhooks</th>
-                <th className="px-3 py-3 font-medium">Messaging</th>
-                <th className="px-3 py-3 font-medium">Live</th>
-                <th className="px-3 py-3 font-medium">Updated</th>
-                <th className="px-3 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {businesses.map((business) => {
+          {businesses.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+              No businesses matched this lookup. Try the exact business ID, owner email, or normalized Twilio number.
+            </div>
+          ) : (
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="px-3 py-3 font-medium">Business</th>
+                  <th className="px-3 py-3 font-medium">Owner</th>
+                  <th className="px-3 py-3 font-medium">Business status</th>
+                  <th className="px-3 py-3 font-medium">Provisioning</th>
+                  <th className="px-3 py-3 font-medium">Twilio</th>
+                  <th className="px-3 py-3 font-medium">Phone + webhooks</th>
+                  <th className="px-3 py-3 font-medium">Messaging</th>
+                  <th className="px-3 py-3 font-medium">Live</th>
+                  <th className="px-3 py-3 font-medium">Updated</th>
+                  <th className="px-3 py-3 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {businesses.map((business) => {
                 const managedSummary = getManagedTwilioStatusSummary(business);
                 const ownerEmail = business.notificationSettings?.ownerEmail || 'Owner email missing';
                 const leadCount = leadCountMap.get(business.id) ?? 0;
@@ -281,9 +327,10 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                     </td>
                   </tr>
                 );
-              })}
-            </tbody>
-          </table>
+                })}
+              </tbody>
+            </table>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -6,6 +6,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { getAdminSession } from '@/lib/admin';
 import { requireBusiness } from '@/lib/auth';
 import { getBusinessNotificationSettingsForBusiness } from '@/lib/business-access';
 import { db } from '@/lib/db';
@@ -15,16 +16,36 @@ import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
 
-import { buyTwilioNumberAction, resyncTwilioWebhooksAction, saveBusinessSettingsAction } from './actions';
+import {
+  buyTwilioNumberAction,
+  resyncTwilioWebhooksAction,
+  saveBusinessSettingsAction,
+  saveBusinessTwilioAdminOverridesAction,
+} from './actions';
+
+const adminChangedFieldLabels: Record<string, string> = {
+  ownerPhone: 'owner alert phone',
+  twilioPhoneNumber: 'Twilio number',
+  twilioPhoneNumberSid: 'Twilio number SID',
+  twilioMessagingServiceSid: 'messaging service SID',
+};
 
 export default async function SettingsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
   const demoMode = isPortfolioDemoMode();
+  const adminSession = demoMode ? null : await getAdminSession();
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const saved = searchParams?.saved === '1';
   const numberBought = searchParams?.numberBought === '1';
   const twilioConnected = searchParams?.twilioConnected === '1';
   const twilioSynced = searchParams?.twilioSynced === '1';
+  const adminTwilioSaved = searchParams?.adminTwilioSaved === '1';
+  const adminChangedRaw = typeof searchParams?.adminChanged === 'string' ? searchParams.adminChanged : '';
+  const adminChanged = adminChangedRaw
+    .split(',')
+    .map((field) => field.trim())
+    .filter(Boolean)
+    .map((field) => adminChangedFieldLabels[field] || field);
   const billingAccess = getBusinessBillingAccessState(business);
   const subscriptionReady = billingAccess.billingActive;
   const ownerNotifyPhoneOptedOut =
@@ -147,6 +168,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was provisioned and connected.</div> : null}
       {twilioConnected ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was connected and setup was refreshed.</div> : null}
       {twilioSynced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Managed texting setup refreshed.</div> : null}
+      {adminTwilioSaved ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          Internal Twilio mapping saved{adminChanged.length > 0 ? `: ${adminChanged.join(', ')}.` : '.'}
+        </div>
+      ) : null}
 
       <SetupChecklist
         title="Setup checklist"
@@ -489,7 +515,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                 </form>
 
                 <form action={resyncTwilioWebhooksAction} className="space-y-2">
-                  <Button disabled={!business.twilioPhoneNumberSid} type="submit" variant="outline">
+                  <Button disabled={!(business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid)} type="submit" variant="outline">
                     Refresh Managed Setup
                   </Button>
                   <p className="text-xs text-muted-foreground">
@@ -511,6 +537,69 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                     </div>
                   </div>
                 </div>
+
+                {adminSession?.isAdmin ? (
+                  <div className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Internal admin-only Twilio mapping editor</p>
+                      <p className="text-xs text-muted-foreground">
+                        Correct the stored Twilio number, SID, messaging service SID, and owner alert phone without leaving the business workspace. Saved
+                        Twilio numbers are normalized to E.164 and update the voice/SMS lookup fields directly.
+                      </p>
+                    </div>
+
+                    <form action={saveBusinessTwilioAdminOverridesAction} className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="adminTwilioPhoneNumber">Twilio number</Label>
+                        <Input
+                          id="adminTwilioPhoneNumber"
+                          name="twilioPhoneNumber"
+                          type="tel"
+                          defaultValue={business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || ''}
+                          placeholder="+18777480449"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="adminTwilioPhoneNumberSid">Twilio number SID</Label>
+                        <Input
+                          id="adminTwilioPhoneNumberSid"
+                          name="twilioPhoneNumberSid"
+                          defaultValue={business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || ''}
+                          placeholder="PN..."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="adminTwilioMessagingServiceSid">Messaging service SID</Label>
+                        <Input
+                          id="adminTwilioMessagingServiceSid"
+                          name="twilioMessagingServiceSid"
+                          defaultValue={business.twilioMessagingServiceSid || ''}
+                          placeholder="MG..."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="adminOwnerPhone">Owner alert phone</Label>
+                        <Input
+                          id="adminOwnerPhone"
+                          name="ownerPhone"
+                          type="tel"
+                          defaultValue={notificationSettings?.ownerPhone || business.notifyPhone || ''}
+                          placeholder="+15551234567"
+                        />
+                      </div>
+                      <label className="md:col-span-2 flex items-start gap-2 rounded-lg border bg-background/80 p-3 text-sm">
+                        <input className="mt-1" type="checkbox" name="confirmCriticalFieldClears" value="true" />
+                        <span>I understand this may clear live Twilio mappings or owner alert routing and should only be used for internal corrections.</span>
+                      </label>
+                      <div className="md:col-span-2 flex flex-wrap gap-3">
+                        <Button type="submit">Save Internal Mapping</Button>
+                        <p className="text-xs text-muted-foreground">
+                          Manual mapping changes clear the last webhook-sync timestamp so the next refresh can verify the updated number assignment.
+                        </p>
+                      </div>
+                    </form>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </div>

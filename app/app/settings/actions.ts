@@ -4,14 +4,16 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+import { requireAdmin } from '@/lib/admin';
+import { logAuditEvent } from '@/lib/audit-log';
 import { getBusinessForOwnerClerkId } from '@/lib/business-access';
 import { db } from '@/lib/db';
-import { normalizePhoneNumber } from '@/lib/phone';
+import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import { getTwilioBusinessClient } from '@/lib/twilio-client';
 import { logTwilioError } from '@/lib/twilio-logging';
 import { provisionPhoneNumber } from '@/lib/twilio-provision';
 import { syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
-import { businessSettingsSchema, buyNumberSchema } from '@/lib/validators';
+import { businessSettingsSchema, businessTwilioAdminOverrideSchema, buyNumberSchema } from '@/lib/validators';
 
 async function getBusinessForOwner() {
   const { userId } = await auth();
@@ -33,6 +35,30 @@ async function saveBusinessTwilioNumber(businessId: string, params: { phoneNumbe
       twilioWebhookSyncedAt: params.syncedAt,
     },
   });
+}
+
+function normalizeOptionalE164Phone(value: string | null | undefined, label: string) {
+  const trimmed = value?.trim() || '';
+  if (!trimmed) return null;
+
+  const normalized = normalizePhoneNumberToE164(trimmed);
+  if (!normalized) {
+    throw new Error(`${label} must be a valid phone number in E.164 or a standard US format.`);
+  }
+
+  return normalized;
+}
+
+function normalizeOptionalSid(value: string | null | undefined) {
+  const trimmed = value?.trim() || '';
+  return trimmed || null;
+}
+
+function maskSidForAudit(value: string | null | undefined) {
+  const trimmed = value?.trim() || '';
+  if (!trimmed) return null;
+  if (trimmed.length <= 8) return trimmed;
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
 }
 
 export async function saveBusinessSettingsAction(formData: FormData) {
@@ -90,6 +116,108 @@ export async function saveBusinessSettingsAction(formData: FormData) {
   redirect('/app/settings?saved=1');
 }
 
+export async function saveBusinessTwilioAdminOverridesAction(formData: FormData) {
+  const business = await getBusinessForOwner();
+  const admin = await requireAdmin();
+  const parsed = businessTwilioAdminOverrideSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/app/settings?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid Twilio admin update')}`);
+  }
+
+  const twilioPhoneNumber = normalizeOptionalE164Phone(parsed.data.twilioPhoneNumber || '', 'Twilio number');
+  const twilioPhoneNumberSid = normalizeOptionalSid(parsed.data.twilioPhoneNumberSid);
+  const twilioMessagingServiceSid = normalizeOptionalSid(parsed.data.twilioMessagingServiceSid);
+  const ownerPhone = normalizeOptionalE164Phone(parsed.data.ownerPhone || '', 'Owner alert phone');
+  const notificationSettings = await db.businessNotificationSettings.findUnique({
+    where: { businessId: business.id },
+  });
+  const existingOwnerPhone = notificationSettings?.ownerPhone || business.notifyPhone || null;
+  const existingTwilioPhoneNumber = business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || null;
+  const existingTwilioPhoneNumberSid = business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || null;
+  const criticalFieldClears = [
+    existingOwnerPhone && !ownerPhone ? 'owner alert phone' : null,
+    existingTwilioPhoneNumber && !twilioPhoneNumber ? 'Twilio number' : null,
+    existingTwilioPhoneNumberSid && !twilioPhoneNumberSid ? 'Twilio number SID' : null,
+    business.twilioMessagingServiceSid && !twilioMessagingServiceSid ? 'messaging service SID' : null,
+  ].filter(Boolean) as string[];
+
+  if (criticalFieldClears.length > 0 && !parsed.data.confirmCriticalFieldClears) {
+    redirect(`/app/settings?error=${encodeURIComponent(`Confirm clearing live fields before removing: ${criticalFieldClears.join(', ')}.`)}`);
+  }
+
+  const twilioMappingChanged =
+    existingTwilioPhoneNumber !== twilioPhoneNumber ||
+    existingTwilioPhoneNumberSid !== twilioPhoneNumberSid ||
+    business.twilioMessagingServiceSid !== twilioMessagingServiceSid;
+
+  const changedFields = [
+    existingOwnerPhone !== ownerPhone ? { key: 'ownerPhone', before: existingOwnerPhone, after: ownerPhone } : null,
+    existingTwilioPhoneNumber !== twilioPhoneNumber
+      ? { key: 'twilioPhoneNumber', before: existingTwilioPhoneNumber, after: twilioPhoneNumber }
+      : null,
+    existingTwilioPhoneNumberSid !== twilioPhoneNumberSid
+      ? { key: 'twilioPhoneNumberSid', before: existingTwilioPhoneNumberSid, after: twilioPhoneNumberSid }
+      : null,
+    business.twilioMessagingServiceSid !== twilioMessagingServiceSid
+      ? { key: 'twilioMessagingServiceSid', before: business.twilioMessagingServiceSid, after: twilioMessagingServiceSid }
+      : null,
+  ].filter(Boolean) as Array<{ key: string; before: string | null; after: string | null }>;
+
+  await db.business.update({
+    where: { id: business.id },
+    data: {
+      notifyPhone: ownerPhone,
+      twilioPhoneNumber,
+      twilioPrimaryPhoneNumber: twilioPhoneNumber,
+      twilioPhoneNumberSid,
+      twilioPrimaryNumberSid: twilioPhoneNumberSid,
+      twilioMessagingServiceSid,
+      ...(twilioMappingChanged ? { twilioWebhookSyncedAt: null } : {}),
+    },
+  });
+
+  await db.businessNotificationSettings.upsert({
+    where: { businessId: business.id },
+    create: {
+      businessId: business.id,
+      ownerPhone,
+    },
+    update: {
+      ownerPhone,
+    },
+  });
+
+  if (changedFields.length > 0) {
+    logAuditEvent({
+      event: 'business_settings_twilio_admin_saved',
+      actorType: 'user',
+      actorId: admin.userId,
+      businessId: business.id,
+      targetType: 'business',
+      targetId: business.id,
+      metadata: {
+        actorEmail: admin.email,
+        source: 'business_settings',
+        changedFields: changedFields.map((change) => ({
+          key: change.key,
+          before:
+            change.key === 'ownerPhone' || change.key === 'twilioPhoneNumber'
+              ? maskPhoneForAudit(change.before)
+              : maskSidForAudit(change.before) ?? change.before,
+          after:
+            change.key === 'ownerPhone' || change.key === 'twilioPhoneNumber'
+              ? maskPhoneForAudit(change.after)
+              : maskSidForAudit(change.after) ?? change.after,
+        })),
+      },
+    });
+  }
+
+  revalidatePath('/app/settings');
+  revalidatePath('/app/call-flow');
+  redirect(`/app/settings?adminTwilioSaved=1&adminChanged=${encodeURIComponent(changedFields.map((field) => field.key).join(','))}`);
+}
+
 export async function buyTwilioNumberAction(formData: FormData) {
   const business = await getBusinessForOwner();
   const parsed = buyNumberSchema.safeParse(Object.fromEntries(formData));
@@ -141,13 +269,14 @@ export async function connectExistingTwilioNumberAction(formData: FormData) {
 
 export async function resyncTwilioWebhooksAction() {
   const business = await getBusinessForOwner();
-  if (!business.twilioPhoneNumberSid) {
+  const phoneNumberSid = business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid;
+  if (!phoneNumberSid) {
     redirect('/app/settings?error=No%20business%20texting%20line%20is%20assigned%20to%20this%20business');
   }
 
   try {
     const client = getTwilioBusinessClient(business.twilioSubaccountSid);
-    const { number } = await syncTwilioIncomingPhoneNumberWebhooks(business.twilioPhoneNumberSid, client);
+    const { number } = await syncTwilioIncomingPhoneNumberWebhooks(phoneNumberSid, client);
     const syncedAt = new Date();
 
     await saveBusinessTwilioNumber(business.id, {
