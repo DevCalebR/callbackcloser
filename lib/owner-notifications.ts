@@ -27,11 +27,12 @@ function buildOwnerSmsBody(lead: NotificationLeadRecord) {
   const serviceType = getLeadServiceType(lead) || 'Service request';
   const readinessLabel =
     lead.readiness === LeadReadiness.URGENT ? 'Urgent' : lead.readiness === LeadReadiness.QUALIFIED ? 'Qualified' : 'Pending';
+  const leadUrl = buildLeadUrl(lead.id);
 
   return compactSummary(
     `CallbackCloser lead for ${lead.business.name}: ${serviceType}. ${lead.urgency ? `Urgency: ${lead.urgency}. ` : ''}${
       lead.location || lead.zipCode ? `Location: ${lead.location || lead.zipCode}. ` : ''
-    }${lead.callbackRequested === false ? 'Callback not requested. ' : ''}Readiness: ${readinessLabel}. ${buildLeadUrl(lead.id)}`
+    }${lead.callbackRequested === false ? 'Callback not requested. ' : ''}Readiness: ${readinessLabel}. Open lead: ${leadUrl}`
   );
 }
 
@@ -260,11 +261,12 @@ export async function createOwnerInAppNotification(leadId: string) {
   if (!lead) throw new Error('Lead not found for in-app owner notification');
 
   const settings = await getEffectiveBusinessNotificationSettings(lead.business);
+  const leadUrl = buildLeadUrl(lead.id);
   await createNotificationRecord({
     businessId: lead.businessId,
     leadId,
     channel: OwnerNotificationChannel.IN_APP,
-    body: buildLeadSummary(lead),
+    body: `${buildLeadSummary(lead)}\n\nOpen lead: ${leadUrl}`,
     subject: `Lead ready for ${lead.business.name}`,
   });
 
