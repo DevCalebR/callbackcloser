@@ -12,6 +12,8 @@ test('owner notification service claims a lead once and dedupes per channel', ()
   const schema = read('prisma/schema.prisma');
 
   assert.match(ownerNotifications, /leadId_channel/);
+  assert.match(ownerNotifications, /absoluteUrl\(`\/app\/leads\/\$\{leadId\}`\)/);
+  assert.match(ownerNotifications, /Open lead:/);
   assert.match(ownerNotifications, /updateMany\(\{\s*where:\s*\{\s*id:\s*leadId,\s*notifiedAt:\s*null/s);
   assert.match(ownerNotifications, /status:\s*LeadStatus\.NOTIFIED/);
   assert.match(schema, /@@unique\(\[leadId, channel\]\)/);

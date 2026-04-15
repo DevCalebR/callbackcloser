@@ -124,8 +124,8 @@ export default async function ConversationsPage({ searchParams }: { searchParams
                   <Badge variant={selectedLead.readiness === 'URGENT' ? 'destructive' : selectedLead.readiness === 'QUALIFIED' ? 'secondary' : 'outline'}>
                     {leadReadinessLabels[selectedLead.readiness]}
                   </Badge>
-                  <Link className="text-sm underline underline-offset-4" href={`/app/leads?leadId=${selectedLead.id}`}>
-                    Open in leads view
+                  <Link className="text-sm underline underline-offset-4" href={`/app/leads/${selectedLead.id}?from=%2Fapp%2Fconversations`}>
+                    Open lead workspace
                   </Link>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-4 text-sm">
