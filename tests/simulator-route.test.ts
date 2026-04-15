@@ -7,12 +7,12 @@ function read(relativePath: string) {
   return readFileSync(path.join(process.cwd(), relativePath), 'utf8');
 }
 
-test('homepage and nav both point See Demo directly to /simulator', () => {
+test('homepage and nav both point See Demo directly to /demo', () => {
   const home = read('app/page.tsx');
   const nav = read('components/public-site-nav.tsx');
 
-  assert.match(home, /href="\/simulator"/);
-  assert.match(nav, /href: '\/simulator'/);
+  assert.match(home, /href="\/demo"/);
+  assert.match(nav, /href: '\/demo'/);
 });
 
 test('simulator route is a distinct public page with its own metadata and disabled-state copy', () => {

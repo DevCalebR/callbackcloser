@@ -7,7 +7,7 @@ const primaryLinks = [
   { href: '/pricing', label: 'Pricing' },
   { href: '/#how-it-works', label: 'How it works' },
   { href: '/#proof', label: 'Results' },
-  { href: '/simulator', label: 'See demo' },
+  { href: '/demo', label: 'See demo' },
   { href: '/contact', label: 'Contact' },
   { href: '/sms-consent', label: 'SMS Consent' },
 ];
