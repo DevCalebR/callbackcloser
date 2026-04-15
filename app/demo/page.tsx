@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 };
 
 function getLeadRowBadgeVariant(status: string) {
-  if (status === 'Qualified') return 'success';
+  if (status === 'Ready for callback') return 'success';
   if (status === 'Contacted') return 'secondary';
   return 'outline';
 }
@@ -42,24 +42,25 @@ export default function DemoPage() {
                 <Badge variant="outline">Public HVAC demo</Badge>
                 <div className="space-y-4">
                   <h1 className="max-w-4xl text-4xl font-semibold tracking-tight sm:text-5xl">
-                    Turn missed HVAC calls into paying jobs while the lead is still hot
+                    Stop losing jobs when you miss the call
                   </h1>
                   <p className="max-w-2xl text-lg text-muted-foreground">
-                    This is a safe public walkthrough of the real CallbackCloser flow: missed call, instant text, lead qualification, and the owner alert
-                    that tells your team who to call first.
+                    When someone calls and you can&apos;t answer, CallbackCloser texts them instantly, qualifies the job, and sends you a hot lead to call
+                    back.
+                  </p>
+                  <p className="max-w-2xl text-base font-medium text-foreground/90">
+                    Every missed call could be a $300-$1,000 job. CallbackCloser helps make sure it doesn&apos;t go to the next company.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Link className={buttonVariants({ size: 'lg' })} href="/contact">
-                    See this on your business
+                    Want this running on your number?
                   </Link>
                   <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="#demo-workspace">
-                    Watch the demo
-                  </Link>
-                  <Link className={buttonVariants({ size: 'lg', variant: 'ghost' })} href="/sign-up">
-                    Get set up in 10 minutes
+                    See it in action
                   </Link>
                 </div>
+                <p className="text-sm text-muted-foreground">I can set this up for your business in 10 minutes.</p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -75,8 +76,8 @@ export default function DemoPage() {
 
             <Card className="overflow-hidden border-primary/20 bg-card/95 shadow-lg">
               <CardHeader className="border-b bg-gradient-to-r from-primary/10 via-background to-secondary/40">
-                <CardTitle>What you are looking at</CardTitle>
-                <CardDescription>A realistic public demo page built for live sales calls. No login, no real customer data, no live Twilio traffic.</CardDescription>
+                <CardTitle>This is exactly what your customer sees after you miss their call.</CardTitle>
+                <CardDescription>They call. You miss it. We text them right away, ask what they need, and send you the lead while they&apos;re still ready to book.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 p-6 text-sm">
                 {demoTrustPoints.map((point) => (
@@ -85,11 +86,13 @@ export default function DemoPage() {
                   </div>
                 ))}
                 <div className="rounded-2xl border border-accent/40 bg-accent/20 p-4">
-                  <p className="font-medium">30-second sales story</p>
-                  <p className="mt-2 text-muted-foreground">
-                    A homeowner calls, the business misses it, CallbackCloser texts instantly, the lead replies, and the owner gets a ready-to-call HVAC job
-                    instead of a dead voicemail.
-                  </p>
+                  <p className="font-medium">What usually happens without this</p>
+                  <p className="mt-2 text-muted-foreground">Customer calls -&gt; no answer -&gt; calls the next company</p>
+                </div>
+                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+                  <p className="font-medium">What happens with CallbackCloser</p>
+                  <p className="mt-2 text-muted-foreground">Customer calls -&gt; gets a text right away -&gt; replies -&gt; you get the lead</p>
+                  <p className="mt-3 text-sm font-medium text-foreground/90">Speed is the difference between a lost call and a booked job.</p>
                 </div>
               </CardContent>
             </Card>
@@ -99,18 +102,17 @@ export default function DemoPage() {
         <section className="container space-y-8 py-12" id="demo-workspace">
           <div className="max-w-2xl space-y-3">
             <Badge variant="outline">Live-looking product view</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight">See the recovered lead before your prospect zones out</h2>
+            <h2 className="text-3xl font-semibold tracking-tight">Here&apos;s what happens after a missed HVAC call</h2>
             <p className="text-muted-foreground">
-              The inbox on the left looks like the real app. The selected lead opens into the same kind of conversation and owner handoff your team would
-              use after setup.
+              They call. You miss it. We text them right away, ask what they need, and send you the lead while they&apos;re still ready to book.
             </p>
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
             <Card className="bg-card/90">
               <CardHeader>
-                <CardTitle>Recovered leads</CardTitle>
-                <CardDescription>What the owner sees when CallbackCloser has already done the first part of the follow-up.</CardDescription>
+                <CardTitle>Recent leads recovered from missed calls</CardTitle>
+                <CardDescription>These are calls that likely would have gone cold without a fast follow-up.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {demoInboxLeads.map((lead, index) => (
@@ -152,24 +154,29 @@ export default function DemoPage() {
           <div className="container grid gap-6 py-14 lg:grid-cols-[1fr_1fr]">
             <Card className="bg-card/90">
               <CardHeader>
-                <CardTitle>Lead detail at a glance</CardTitle>
-                <CardDescription>This is the context your prospect needs to understand immediately on a sales call.</CardDescription>
+                <CardTitle>New HVAC lead</CardTitle>
+                <CardDescription>Hot lead details ready for callback.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-xl border bg-background/85 p-4 text-sm">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Customer</p>
-                  <p className="mt-2 font-medium">{demoLeadDetail.customerName}</p>
-                  <p className="mt-1 text-muted-foreground">{demoLeadDetail.customerPhone}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
+                  <p className="mt-2 font-medium">{demoLeadDetail.readiness}</p>
+                  <p className="mt-1 text-muted-foreground">{demoLeadDetail.status}</p>
                 </div>
                 <div className="rounded-xl border bg-background/85 p-4 text-sm">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Issue</p>
-                  <p className="mt-2 font-medium">{demoLeadDetail.issueSummary}</p>
-                  <p className="mt-1 text-muted-foreground">{demoLeadDetail.serviceType}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Service</p>
+                  <p className="mt-2 font-medium">{demoLeadDetail.serviceType}</p>
+                  <p className="mt-1 text-muted-foreground">{demoLeadDetail.issueSummary}</p>
                 </div>
                 <div className="rounded-xl border bg-background/85 p-4 text-sm">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Urgency</p>
                   <p className="mt-2 font-medium">{demoLeadDetail.urgency}</p>
                   <p className="mt-1 text-muted-foreground">{demoLeadDetail.callbackWindow}</p>
+                </div>
+                <div className="rounded-xl border bg-background/85 p-4 text-sm">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Customer</p>
+                  <p className="mt-2 font-medium">{demoLeadDetail.customerName}</p>
+                  <p className="mt-1 text-muted-foreground">{demoLeadDetail.customerPhone}</p>
                 </div>
                 <div className="rounded-xl border bg-background/85 p-4 text-sm">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Timing</p>
@@ -181,18 +188,16 @@ export default function DemoPage() {
 
             <Card className="border-accent/40 bg-accent/20">
               <CardHeader>
-                <CardTitle>The owner alert is the sales moment</CardTitle>
-                <CardDescription>
-                  This is where a missed call stops feeling like lost revenue and starts looking like a job the owner can actually close.
-                </CardDescription>
+                <CardTitle>This is what you get instantly</CardTitle>
+                <CardDescription>Instead of losing the call, you get another shot at the job.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-2xl border bg-background/90 p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-lg font-semibold">{demoOwnerAlert.headline}</p>
-                    <Badge variant="success">Ready to call</Badge>
+                    <Badge variant="success">Ready for callback</Badge>
                   </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-xl border bg-muted/20 p-3 text-sm">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Service</p>
                       <p className="mt-2 font-medium">{demoOwnerAlert.service}</p>
@@ -200,6 +205,10 @@ export default function DemoPage() {
                     <div className="rounded-xl border bg-muted/20 p-3 text-sm">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Urgency</p>
                       <p className="mt-2 font-medium">{demoOwnerAlert.urgency}</p>
+                    </div>
+                    <div className="rounded-xl border bg-muted/20 p-3 text-sm">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Issue</p>
+                      <p className="mt-2 font-medium">{demoOwnerAlert.issue}</p>
                     </div>
                     <div className="rounded-xl border bg-muted/20 p-3 text-sm">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Call now</p>
@@ -213,7 +222,7 @@ export default function DemoPage() {
                     Want this on your business?
                   </Link>
                   <Link className={buttonVariants({ variant: 'outline' })} href="/sign-up">
-                    Try CallbackCloser on your number
+                    See it on your number
                   </Link>
                 </div>
               </CardContent>
@@ -224,7 +233,8 @@ export default function DemoPage() {
         <section className="container space-y-6 py-14" id="how-it-works">
           <div className="max-w-2xl space-y-3">
             <Badge variant="outline">How it works</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight">Three steps. One clearer handoff.</h2>
+            <h2 className="text-3xl font-semibold tracking-tight">How it works</h2>
+            <p className="text-muted-foreground">Most callers move on fast. This gives you a chance to win the job before they call someone else.</p>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {demoWorkflowSteps.map((step, index) => (
@@ -247,16 +257,15 @@ export default function DemoPage() {
             <div className="space-y-3">
               <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Want this on your business?</h2>
               <p className="mx-auto max-w-2xl text-muted-foreground">
-                CallbackCloser is built to help HVAC teams recover missed jobs fast. If this looks like the kind of handoff your team needs, the next step is
-                getting it on your number and running one live test.
+                I can set it up on your number and have you live fast.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <Link className={buttonVariants({ size: 'lg' })} href="/contact">
-                Book a setup call
+              <Link className={buttonVariants({ size: 'lg' })} href="/sign-up">
+                See it on your number
               </Link>
-              <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/sign-up">
-                Start free pilot
+              <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/contact">
+                Book a quick setup call
               </Link>
             </div>
           </div>

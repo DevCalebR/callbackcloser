@@ -14,11 +14,13 @@ test('public demo route is auth-free and built from isolated demo data', () => {
 
   assert.match(demoPage, /Live Product Demo \| CallbackCloser/);
   assert.match(demoPage, /PublicDemoReplay/);
-  assert.match(demoPage, /safe public walkthrough/i);
-  assert.match(demoPage, /No login, no real customer data, no live Twilio traffic/i);
+  assert.match(demoPage, /Stop losing jobs when you miss the call/i);
+  assert.match(demoPage, /This is exactly what your customer sees after you miss their call/i);
+  assert.match(demoData, /No login, no real customer data, no live Twilio traffic/i);
   assert.match(demoPage, /from ['"]@\/lib\/demo-data['"]/);
   assert.doesNotMatch(demoPage, /requireBusiness|getBusinessForOwnerClerkId|db\./);
   assert.doesNotMatch(middleware, /\/demo\(.\*\)/);
   assert.match(demoData, /Jamie Carter/);
   assert.match(demoData, /New HVAC lead/);
+  assert.match(demoData, /Ready for callback/);
 });
