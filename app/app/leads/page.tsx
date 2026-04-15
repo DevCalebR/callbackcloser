@@ -81,7 +81,6 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
         db.lead.count({ where: { businessId: business.id, billingRequired: true } }),
         getConversationUsageForBusiness(business),
       ]);
-
   const hasLeads = allLeads.length > 0;
   const automationBlockReason = resolveAutomationBlockReason({
     blockedCount,
