@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { requireBusiness } from '@/lib/auth';
+import { getBusinessNotificationSettingsForBusiness } from '@/lib/business-access';
 import { db } from '@/lib/db';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { formatPhoneForDisplay } from '@/lib/phone';
@@ -40,7 +41,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       });
   const notificationSettings = demoMode
     ? null
-    : await db.businessNotificationSettings.findUnique({ where: { businessId: business.id } });
+    : await getBusinessNotificationSettingsForBusiness(business.id);
   const managedTextingNumber = getManagedTextingNumber(business);
   const managedTwilioSummary = getManagedTwilioStatusSummary(business);
   const lastManagedSetupRefresh = business.twilioWebhookSyncedAt ? new Date(business.twilioWebhookSyncedAt).toLocaleString() : 'Never';

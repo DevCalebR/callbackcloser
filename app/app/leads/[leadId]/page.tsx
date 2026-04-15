@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { getLeadDetailForBusiness } from '@/lib/business-access';
 import {
   formatDateTime,
   getLeadCallbackState,
@@ -25,18 +25,7 @@ export default async function LeadDetailPage({ params, searchParams }: { params:
   const demoMode = isPortfolioDemoMode();
   const lead = demoMode
     ? getPortfolioDemoLeadDetail(params.leadId)
-    : await db.lead.findFirst({
-        where: { id: params.leadId, businessId: business.id },
-        include: {
-          call: true,
-          ownerNotifications: {
-            orderBy: { createdAt: 'desc' },
-          },
-          messages: {
-            orderBy: { createdAt: 'asc' },
-          },
-        },
-      });
+    : await getLeadDetailForBusiness(business.id, params.leadId);
 
   if (!lead) notFound();
 

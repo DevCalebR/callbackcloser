@@ -83,7 +83,7 @@ function getZonedDateTimeParts(date: Date, timeZone: string): ZonedDateTimeParts
     year: mapped.year ?? 0,
     month: mapped.month ?? 0,
     day: mapped.day ?? 0,
-    hour: mapped.hour ?? 0,
+    hour: mapped.hour === 24 ? 0 : (mapped.hour ?? 0),
     minute: mapped.minute ?? 0,
     second: mapped.second ?? 0,
   };

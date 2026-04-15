@@ -55,11 +55,11 @@ test('founder billing bypass maps the founder-owned smoke-test business to start
   );
 });
 
-test('billing and settings pages disclose the founder-only billing bypass', () => {
+test('billing and settings pages keep founder-only bypass copy out of the customer UI', () => {
   const billingPage = read('app/app/billing/page.tsx');
   const settingsPage = read('app/app/settings/page.tsx');
 
-  assert.match(billingPage, /Founder-only billing bypass is active/i);
-  assert.match(settingsPage, /Founder-only billing bypass is active/i);
-  assert.match(billingPage, /Normal customer accounts still require real active billing/i);
+  assert.doesNotMatch(billingPage, /Founder-only billing bypass is active/i);
+  assert.doesNotMatch(settingsPage, /Founder-only billing bypass is active/i);
+  assert.doesNotMatch(billingPage, /Normal customer accounts still require real active billing/i);
 });

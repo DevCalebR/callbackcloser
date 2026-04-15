@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
-import { db } from '@/lib/db';
+import { getLeadRecordingForOwnerClerkId } from '@/lib/business-access';
 import { getTwilioRecordingMediaUrl, resolveRecordingAccessReason } from '@/lib/recording-access';
 import { absoluteUrl } from '@/lib/url';
 
@@ -14,21 +14,9 @@ export async function GET(_request: Request, { params }: { params: { leadId: str
     return NextResponse.redirect(absoluteUrl('/sign-in'), { status: 303 });
   }
 
-  const lead = await db.lead.findUnique({
-    where: { id: params.leadId },
-    select: {
-      id: true,
-      business: {
-        select: {
-          ownerClerkId: true,
-        },
-      },
-      call: {
-        select: {
-          recordingUrl: true,
-        },
-      },
-    },
+  const lead = await getLeadRecordingForOwnerClerkId({
+    leadId: params.leadId,
+    ownerClerkId: userId,
   });
 
   if (!lead) {

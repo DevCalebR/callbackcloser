@@ -4,6 +4,7 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+import { getBusinessForOwnerClerkId } from '@/lib/business-access';
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { getTwilioBusinessClient } from '@/lib/twilio-client';
@@ -15,7 +16,7 @@ import { businessSettingsSchema, buyNumberSchema } from '@/lib/validators';
 async function getBusinessForOwner() {
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
-  const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
+  const business = await getBusinessForOwnerClerkId(userId);
   if (!business) redirect('/app/onboarding');
   return business;
 }

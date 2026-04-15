@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { getConversationDetailForBusiness, listConversationsForBusiness } from '@/lib/business-access';
 import {
   formatDateTime,
   getLeadCallbackState,
@@ -22,33 +22,13 @@ export default async function ConversationsPage({ searchParams }: { searchParams
   const demoMode = isPortfolioDemoMode();
   const leads = demoMode
     ? getPortfolioDemoLeads(null).filter((lead) => lead.lastInboundAt || lead.lastOutboundAt)
-    : await db.lead.findMany({
-        where: {
-          businessId: business.id,
-          OR: [{ lastInboundAt: { not: null } }, { lastOutboundAt: { not: null } }],
-        },
-        include: {
-          messages: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
-        },
-        orderBy: [{ lastInteractionAt: 'desc' }, { createdAt: 'desc' }],
-      });
+    : await listConversationsForBusiness(business.id);
 
   const selectedLeadId = typeof searchParams?.leadId === 'string' ? searchParams.leadId : leads[0]?.id;
   const selectedLead = selectedLeadId
     ? demoMode
       ? getPortfolioDemoLeadDetail(selectedLeadId)
-      : await db.lead.findFirst({
-          where: { businessId: business.id, id: selectedLeadId },
-          include: {
-            call: true,
-            messages: {
-              orderBy: { createdAt: 'asc' },
-            },
-          },
-        })
+      : await getConversationDetailForBusiness(business.id, selectedLeadId)
     : null;
 
   return (

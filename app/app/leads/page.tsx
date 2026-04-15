@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
+import { getLeadDetailForBusiness, listAllDashboardLeadsForBusiness, listDashboardLeadsForBusiness } from '@/lib/business-access';
 import { db } from '@/lib/db';
 import {
   formatDateTime,
@@ -64,31 +65,8 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
         null,
       ]
     : await Promise.all([
-        db.lead.findMany({
-          where: {
-            businessId: business.id,
-            ...(statusFilter ? { status: statusFilter } : {}),
-          },
-          include: {
-            call: true,
-            messages: {
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-            },
-          },
-          orderBy: [{ lastInteractionAt: 'desc' }, { createdAt: 'desc' }],
-        }),
-        db.lead.findMany({
-          where: { businessId: business.id },
-          include: {
-            call: true,
-            messages: {
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-            },
-          },
-          orderBy: [{ lastInteractionAt: 'desc' }, { createdAt: 'desc' }],
-        }),
+        listDashboardLeadsForBusiness(business.id, statusFilter),
+        listAllDashboardLeadsForBusiness(business.id),
         db.lead.count({ where: { businessId: business.id, billingRequired: true } }),
         getConversationUsageForBusiness(business),
       ]);
@@ -98,18 +76,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
       ? null
       : demoMode
         ? getPortfolioDemoLeadDetail(selectedLeadId ?? filteredLeads[0]?.id ?? '')
-        : await db.lead.findFirst({
-            where: {
-              businessId: business.id,
-              id: selectedLeadId ?? filteredLeads[0]?.id,
-            },
-            include: {
-              call: true,
-              messages: {
-                orderBy: { createdAt: 'asc' },
-              },
-            },
-          });
+        : await getLeadDetailForBusiness(business.id, selectedLeadId ?? filteredLeads[0]?.id ?? '');
 
   const usageTierLabel = formatUsageTierLabel(resolveUsageTierFromSubscription(business));
   const usageSummary = usage ? formatUsageSummary(usage) : `Unavailable in ${demoModeLabel}.`;

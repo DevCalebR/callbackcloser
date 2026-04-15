@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
+import { getBillingUsageSnapshotForBusiness } from '@/lib/business-access';
 import { db } from '@/lib/db';
 import { getManagedTextingNumber } from '@/lib/managed-twilio';
 import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
@@ -122,36 +123,31 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const demoModeLabel = 'portfolio demo mode';
   const currentMonth = getCurrentMonthWindowUtc();
 
-  const [blockedCount, usage, cycleSmsSent, cycleMissedCalls, cycleOwnerAlerts, stripeSnapshot] = demoMode
-    ? [getPortfolioDemoBlockedCount(), null, 8, 3, 2, null]
+  const [blockedCount, usage, billingSnapshot, stripeSnapshot] = demoMode
+    ? [
+        getPortfolioDemoBlockedCount(),
+        null,
+        {
+          cycleSmsSent: 8,
+          cycleMissedCalls: 3,
+          cycleOwnerAlerts: 2,
+        },
+        null,
+      ]
     : await Promise.all([
         db.lead.count({ where: { businessId: business.id, billingRequired: true } }),
         getConversationUsageForBusiness(business),
-        db.message.count({
-          where: {
-            businessId: business.id,
-            direction: 'OUTBOUND',
-            createdAt: { gte: currentMonth.start, lt: currentMonth.end },
-          },
-        }),
-        db.call.count({
-          where: {
-            businessId: business.id,
-            missed: true,
-            createdAt: { gte: currentMonth.start, lt: currentMonth.end },
-          },
-        }),
-        db.lead.count({
-          where: {
-            businessId: business.id,
-            OR: [
-              { ownerNotifiedAt: { gte: currentMonth.start, lt: currentMonth.end } },
-              { notifiedAt: { gte: currentMonth.start, lt: currentMonth.end } },
-            ],
-          },
+        getBillingUsageSnapshotForBusiness({
+          businessId: business.id,
+          start: currentMonth.start,
+          end: currentMonth.end,
         }),
         getStripeBillingSnapshot(business),
       ]);
+
+  const cycleSmsSent = billingSnapshot.cycleSmsSent;
+  const cycleMissedCalls = billingSnapshot.cycleMissedCalls;
+  const cycleOwnerAlerts = billingSnapshot.cycleOwnerAlerts;
 
   const usageTierLabel = formatUsageTierLabel(resolveUsageTierFromSubscription(business));
   const usageSummary = usage ? formatUsageSummary(usage) : `Unavailable in ${demoModeLabel}.`;
