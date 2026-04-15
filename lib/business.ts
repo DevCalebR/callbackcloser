@@ -1,10 +1,11 @@
-import { ManagedTwilioStatus, type Prisma, SubscriptionStatus } from '@prisma/client';
+import { BusinessProvisioningStatus, ManagedTwilioStatus, type Prisma, SubscriptionStatus } from '@prisma/client';
 
 import { db } from '@/lib/db';
 import { normalizePhoneNumber } from '@/lib/phone';
 
 export async function upsertBusinessForOwner(ownerClerkId: string, input: {
   name: string;
+  ownerName?: string | null;
   forwardingNumber: string;
   notifyPhone?: string | null;
   ownerEmail?: string | null;
@@ -17,8 +18,10 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
   const data: Prisma.BusinessUncheckedCreateInput = {
     ownerClerkId,
     name: input.name,
+    ownerName: input.ownerName?.trim() || null,
     forwardingNumber: normalizePhoneNumber(input.forwardingNumber),
     notifyPhone: normalizePhoneNumber(input.notifyPhone || '' ) || null,
+    provisioningStatus: BusinessProvisioningStatus.DRAFT,
     missedCallSeconds: input.missedCallSeconds,
     serviceLabel1: input.serviceLabel1,
     serviceLabel2: input.serviceLabel2,
@@ -34,6 +37,7 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
     create: data,
     update: {
       name: data.name,
+      ownerName: data.ownerName,
       forwardingNumber: data.forwardingNumber,
       notifyPhone: data.notifyPhone,
       missedCallSeconds: data.missedCallSeconds,
