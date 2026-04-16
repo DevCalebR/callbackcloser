@@ -19,6 +19,7 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `CLERK_SECRET_KEY` | Server-only | Yes | Clerk / Vercel | Clerk backend secret. |
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | Public (`NEXT_PUBLIC_`) | Optional (recommended) | Vercel | Usually `/sign-in`. Keeps Clerk routes explicit. |
 | `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | Public (`NEXT_PUBLIC_`) | Optional (recommended) | Vercel | Usually `/sign-up`. Keeps Clerk routes explicit. |
+| `ADMIN_EMAIL_ALLOWLIST` | Server-only | Optional | Vercel | Comma-separated admin email allowlist for `/admin` access. Keep this tightly scoped in production. |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Public (`NEXT_PUBLIC_`) | Optional (future client-side Stripe usage) | Stripe / Vercel | Included in template for completeness. |
 | `STRIPE_SECRET_KEY` | Server-only | Yes | Stripe / Vercel | Server Stripe API key. |
 | `STRIPE_WEBHOOK_SECRET` | Server-only | Yes | Stripe / Vercel | Endpoint signing secret for `/api/stripe/webhook`. |
@@ -33,6 +34,9 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `DEBUG_ENV_ENDPOINT_TOKEN` | Server-only | Optional | Vercel | Protects `/api/debug/env` in production. If unset, the endpoint returns `404` in production. |
 | `PORTFOLIO_DEMO_MODE` | Server-only | Optional | Local / Vercel | Enables demo data/auth bypass mode for portfolio/demo screenshots. Keep disabled in production unless intentionally using demo mode. |
 | `ALLOW_PRODUCTION_DEMO_MODE` | Server-only | Optional (break-glass only) | Vercel | Required only when intentionally running demo mode in production. If unset while `PORTFOLIO_DEMO_MODE` is enabled in production, startup is blocked. |
+| `ENABLE_PUBLIC_MISSED_CALL_SIMULATOR` | Server-only | Optional | Vercel | Enables the public `/simulator` route. Keep disabled unless the simulator business is intentionally configured. |
+| `SIMULATOR_BUSINESS_ID` | Server-only | Optional | Vercel | Business record used by the public simulator. Must point to an isolated demo workspace, never a real customer business. |
+| `ENABLE_PUBLIC_SIMULATOR_REAL_SMS` | Server-only | Optional | Vercel | Allows the simulator to send real caller-side SMS from the simulator business number when a non-placeholder texting line exists. Keep off by default. |
 | `RATE_LIMIT_WINDOW_MS` | Server-only | Optional | Vercel | Shared rate-limit window in milliseconds. Default `60000`. |
 | `RATE_LIMIT_TWILIO_AUTH_MAX` | Server-only | Optional | Vercel | Max Twilio webhook requests per window for valid/authorized traffic. Default `240`. |
 | `RATE_LIMIT_TWILIO_UNAUTH_MAX` | Server-only | Optional | Vercel | Max Twilio webhook requests per window for unauthorized traffic. Default `40`. |
@@ -62,6 +66,9 @@ The app now validates required server env vars at runtime in production via `lib
 - Rate limiting defaults are tuned to avoid blocking normal Twilio/Stripe provider traffic while still throttling abusive bursts. Tune limits only if you observe false positives in logs.
 - Error reporting emits structured `app.error` logs and, when configured, dispatches alert payloads to `ALERT_WEBHOOK_URL`.
 - `NEXT_PUBLIC_APP_URL` is the canonical value and should be set explicitly. If it is missing/invalid, the app can temporarily fall back to Vercel system env vars (`VERCEL_URL` / `VERCEL_PROJECT_PRODUCTION_URL`) to avoid auth-page crashes, but webhook/redirect behavior should still use an explicit `NEXT_PUBLIC_APP_URL`.
+- `/admin` access depends on either `FOUNDER_CLERK_USER_ID` or `ADMIN_EMAIL_ALLOWLIST`; do not leave admin authorization implicit.
+- Owner email alerts are optional, but if you intend to advertise email delivery you must set both `RESEND_API_KEY` and `CALLBACKCLOSER_FROM_EMAIL`.
+- The public simulator is optional and should only point at a dedicated demo workspace via `SIMULATOR_BUSINESS_ID`.
 
 ## Vercel: Preview vs Production
 
