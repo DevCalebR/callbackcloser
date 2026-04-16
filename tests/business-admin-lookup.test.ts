@@ -5,8 +5,27 @@ import test from 'node:test';
 import { findBusinessByTwilioNumber, searchBusinessesForAdmin } from '../lib/business.ts';
 import { db } from '../lib/db.ts';
 
+function uniqueDigits(seed: string) {
+  const digits = seed.replace(/\D/g, '').padEnd(10, '7');
+  return digits.slice(-10);
+}
+
+function makeTwilioPhone(seed: string) {
+  const digits = uniqueDigits(seed);
+  return {
+    e164: `+1${digits}`,
+    formatted: `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`,
+  };
+}
+
+function makeSid(prefix: string, seed: string) {
+  const normalized = seed.replace(/-/g, '').padEnd(32, '0');
+  return `${prefix}${normalized.slice(0, 32)}`;
+}
+
 test('findBusinessByTwilioNumber matches legacy formatted database values by normalized number', async () => {
   const seed = randomUUID();
+  const twilioPhone = makeTwilioPhone(seed);
   const business = await db.business.create({
     data: {
       ownerClerkId: `lookup-owner-${seed}`,
@@ -17,16 +36,16 @@ test('findBusinessByTwilioNumber matches legacy formatted database values by nor
       serviceLabel1: 'Repair',
       serviceLabel2: 'Install',
       serviceLabel3: 'Maintenance',
-      twilioPhoneNumber: '(877) 748-0449',
-      twilioPrimaryPhoneNumber: '(877) 748-0449',
-      twilioPhoneNumberSid: `PN${seed.replace(/-/g, '').slice(0, 32)}`,
-      twilioPrimaryNumberSid: `PX${seed.replace(/-/g, '').slice(0, 32)}`,
+      twilioPhoneNumber: twilioPhone.formatted,
+      twilioPrimaryPhoneNumber: twilioPhone.formatted,
+      twilioPhoneNumberSid: makeSid('PN', `${seed}phone`),
+      twilioPrimaryNumberSid: makeSid('PX', `${seed}primary`),
     },
   });
 
   try {
-    const byE164 = await findBusinessByTwilioNumber('+18777480449');
-    const byFormatted = await findBusinessByTwilioNumber('(877) 748-0449');
+    const byE164 = await findBusinessByTwilioNumber(twilioPhone.e164);
+    const byFormatted = await findBusinessByTwilioNumber(twilioPhone.formatted);
 
     assert.equal(byE164?.id, business.id);
     assert.equal(byFormatted?.id, business.id);
@@ -37,6 +56,7 @@ test('findBusinessByTwilioNumber matches legacy formatted database values by nor
 
 test('searchBusinessesForAdmin finds businesses by owner email, business id, Twilio phone number, and number sid', async () => {
   const seed = randomUUID();
+  const twilioPhone = makeTwilioPhone(seed);
   const business = await db.business.create({
     data: {
       ownerClerkId: `search-owner-${seed}`,
@@ -48,11 +68,11 @@ test('searchBusinessesForAdmin finds businesses by owner email, business id, Twi
       serviceLabel1: 'Repair',
       serviceLabel2: 'Install',
       serviceLabel3: 'Maintenance',
-      twilioPhoneNumber: '+18777480449',
-      twilioPrimaryPhoneNumber: '+18777480449',
-      twilioPhoneNumberSid: `PN${seed.replace(/-/g, '').slice(0, 32)}`,
-      twilioPrimaryNumberSid: `PY${seed.replace(/-/g, '').slice(0, 32)}`,
-      twilioMessagingServiceSid: `MG${seed.replace(/-/g, '').slice(0, 32)}`,
+      twilioPhoneNumber: twilioPhone.e164,
+      twilioPrimaryPhoneNumber: twilioPhone.e164,
+      twilioPhoneNumberSid: makeSid('PN', `${seed}phone`),
+      twilioPrimaryNumberSid: makeSid('PY', `${seed}primary`),
+      twilioMessagingServiceSid: makeSid('MG', `${seed}service`),
       notificationSettings: {
         create: {
           ownerEmail: `owner-${seed.slice(0, 8)}@example.com`,
@@ -68,7 +88,7 @@ test('searchBusinessesForAdmin finds businesses by owner email, business id, Twi
   try {
     const byEmail = await searchBusinessesForAdmin(business.notificationSettings!.ownerEmail!);
     const byId = await searchBusinessesForAdmin(business.id);
-    const byPhone = await searchBusinessesForAdmin('(877) 748-0449');
+    const byPhone = await searchBusinessesForAdmin(twilioPhone.formatted);
     const bySid = await searchBusinessesForAdmin(business.twilioPhoneNumberSid!);
 
     assert.equal(byEmail.some((item) => item.id === business.id), true);
