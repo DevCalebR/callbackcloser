@@ -1,13 +1,17 @@
 import { ManagedTwilioStatus, type Business, type SubscriptionStatus } from '@prisma/client';
 
-import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
+import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 
 type StatusBusiness = Pick<
   Business,
   | 'managedTwilioStatus'
+  | 'twilioSubaccountSid'
   | 'twilioPrimaryPhoneNumber'
   | 'twilioPhoneNumber'
+  | 'twilioPrimaryNumberSid'
+  | 'twilioPhoneNumberSid'
   | 'twilioMessagingServiceSid'
+  | 'twilioWebhookSyncedAt'
   | 'a2pFailureReason'
   | 'a2pApprovedAt'
   | 'a2pCampaignSid'
@@ -25,16 +29,16 @@ export function getCustomerSystemStatus(business: StatusBusiness, successfulLead
   const managedSummary = getManagedTwilioStatusSummary(business);
   const hasSuccessfulTestLead = successfulLeadCount > 0;
 
-  if (managedSummary.messagingServiceReady && managedSummary.complianceReady && hasSuccessfulTestLead) {
+  if (managedSummary.messagingReady && hasSuccessfulTestLead) {
     return {
       key: 'live' as const,
       label: 'Live',
       badgeVariant: 'success' as const,
-      description: 'Missed-call recovery is live and ready for another test call.',
+      description: 'Missed-call recovery is compliant, synced, and ready for another test call.',
     };
   }
 
-  if (managedSummary.messagingServiceReady || managedSummary.complianceStarted || hasSuccessfulTestLead) {
+  if (managedSummary.onboardingReady || managedSummary.complianceStarted || hasSuccessfulTestLead) {
     return {
       key: 'activating' as const,
       label: 'Activating',

@@ -262,7 +262,7 @@ export async function connectExistingTwilioNumberAction(formData: FormData) {
   redirect(
     '/app/settings?error=' +
       encodeURIComponent(
-        'Existing numbers are connected manually during white-glove launches so shared platform inventory stays off the self-serve settings page.'
+        'Keeping an existing number is still an admin-assisted launch step. CallbackCloser can attach it after the Twilio account context and A2P path are reviewed.'
       )
   );
 }

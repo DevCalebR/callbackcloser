@@ -14,6 +14,8 @@ import {
   createMessagingServiceForBusiness,
   createSubaccountForBusiness,
   provisionManagedTwilioForBusiness,
+  resolveManagedTwilioStatus,
+  syncManagedTwilioNumberWebhooks,
   updateManagedTwilioStatus,
 } from '@/lib/managed-twilio';
 import { normalizePhoneNumber } from '@/lib/phone';
@@ -351,14 +353,16 @@ export async function attachExistingNumberToBusiness(params: {
     correlationId
   );
 
-  await syncBusinessTwilioWebhooks(
+  const syncedNumber = await syncManagedTwilioNumberWebhooks(
     {
-      id: params.business.id,
+      ...params.business,
       twilioSubaccountSid: subaccountSid,
       twilioPhoneNumberSid: existingNumber.sid,
       twilioPrimaryNumberSid: existingNumber.sid,
+      twilioPrimaryPhoneNumber: normalizedPhoneNumber,
+      twilioPhoneNumber: normalizedPhoneNumber,
     },
-    { voice: true, sms: true, status: true }
+    correlationId
   );
 
   await attachNumberToMessagingService(
@@ -371,15 +375,31 @@ export async function attachExistingNumberToBusiness(params: {
     correlationId
   );
 
-  await updateManagedTwilioStatus(params.business.id, ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION, {
+  const nextStatus = resolveManagedTwilioStatus({
+    ...params.business,
+    managedTwilioStatus: ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION,
     twilioSubaccountSid: subaccountSid,
     twilioMessagingServiceSid: messagingServiceSid,
-    twilioPrimaryNumberSid: existingNumber.sid,
-    twilioPrimaryPhoneNumber: normalizedPhoneNumber,
-    twilioPhoneNumberSid: existingNumber.sid,
-    twilioPhoneNumber: normalizedPhoneNumber,
+    twilioPrimaryNumberSid: syncedNumber.phoneNumberSid,
+    twilioPhoneNumberSid: syncedNumber.phoneNumberSid,
+    twilioPrimaryPhoneNumber: syncedNumber.phoneNumber,
+    twilioPhoneNumber: syncedNumber.phoneNumber,
+    a2pCustomerProfileSid: null,
+    a2pBrandSid: null,
+    a2pCampaignSid: null,
+    a2pFailureReason: null,
+    a2pApprovedAt: null,
+  });
+
+  await updateManagedTwilioStatus(params.business.id, nextStatus, {
+    twilioSubaccountSid: subaccountSid,
+    twilioMessagingServiceSid: messagingServiceSid,
+    twilioPrimaryNumberSid: syncedNumber.phoneNumberSid,
+    twilioPrimaryPhoneNumber: syncedNumber.phoneNumber,
+    twilioPhoneNumberSid: syncedNumber.phoneNumberSid,
+    twilioPhoneNumber: syncedNumber.phoneNumber,
     twilioProvisionedAt: new Date(),
-    twilioWebhookSyncedAt: new Date(),
+    twilioWebhookSyncedAt: syncedNumber.syncedAt,
   });
 
   return db.business.findUniqueOrThrow({ where: { id: params.business.id } });

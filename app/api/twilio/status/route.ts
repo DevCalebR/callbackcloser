@@ -379,6 +379,10 @@ export async function POST(request: Request) {
                 `CallbackCloser: Monthly conversation limit reached (${usage.used}/${usage.limit}). ` +
                 'Missed call was recorded, but automated SMS follow-up was not sent.',
               participant: 'OWNER',
+              twilioSubaccountSid: business.twilioSubaccountSid,
+              messagingServiceSid: business.twilioMessagingServiceSid,
+              managedTwilioStatus: business.managedTwilioStatus,
+              a2pFailureReason: business.a2pFailureReason,
             });
             if (notifyResult.suppressed) {
               logTwilioWarn('status', 'usage_limit_owner_notify_suppressed', {
@@ -449,7 +453,7 @@ export async function POST(request: Request) {
           eventType: 'dial_status_callback',
           businessId: business.id,
           leadId: lead.id,
-          decision: 'skip_opted_out_recipient',
+          decision: recovery.reason ?? 'skip_unknown',
         });
         return withCorrelation(xmlOk());
       }

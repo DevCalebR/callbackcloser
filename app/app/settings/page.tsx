@@ -68,8 +68,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
   const lastManagedSetupRefresh = business.twilioWebhookSyncedAt ? new Date(business.twilioWebhookSyncedAt).toLocaleString() : 'Never';
   const activationReady =
     Boolean(business.forwardingNumber) &&
-    Boolean(managedTextingNumber) &&
-    managedTwilioSummary.messagingServiceReady &&
+    managedTwilioSummary.messagingReady &&
     Boolean(business.notifyPhone) &&
     !ownerNotifyPhoneOptedOut &&
     subscriptionReady;
@@ -99,15 +98,15 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
     },
     {
       key: 'sms-template',
-      label: 'Messaging service active',
-      detail: managedTwilioSummary.messagingServiceReady
-        ? 'Managed messaging is connected to your texting line.'
-        : 'Messaging setup is still in progress.',
-      complete: managedTwilioSummary.messagingServiceReady,
+      label: 'Messaging infrastructure ready',
+      detail: managedTwilioSummary.onboardingReady
+        ? 'Managed messaging, number assignment, and webhook sync are in place.'
+        : managedTwilioSummary.nextStep,
+      complete: managedTwilioSummary.onboardingReady,
     },
     {
       key: 'compliance',
-      label: managedTwilioSummary.complianceReady ? 'Compliance approved' : 'Compliance review in progress',
+      label: managedTwilioSummary.complianceReady ? 'A2P approved' : 'A2P approval still pending',
       detail: managedTwilioSummary.description,
       complete: managedTwilioSummary.complianceReady,
     },
@@ -165,8 +164,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business settings saved.</div> : null}
-      {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was provisioned and connected.</div> : null}
-      {twilioConnected ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was connected and setup was refreshed.</div> : null}
+      {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was provisioned, attached to managed messaging, and queued for the remaining A2P approval steps.</div> : null}
+      {twilioConnected ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Your business texting line was connected and the managed setup was refreshed. A2P approval may still be pending.</div> : null}
       {twilioSynced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Managed texting setup refreshed.</div> : null}
       {adminTwilioSaved ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
@@ -187,12 +186,12 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         </CardHeader>
         <CardContent className="grid gap-3 lg:grid-cols-3">
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
-            <p className="font-medium">Run your first test</p>
-            <p className="mt-2 text-muted-foreground">
-              {activationReady
-                ? 'Routing, billing, and managed setup look ready. Place a missed call and confirm the owner alert arrives.'
+              <p className="font-medium">Run your first test</p>
+              <p className="mt-2 text-muted-foreground">
+                {activationReady
+                ? 'Routing, billing, webhook sync, and A2P approval look ready. Place a missed call and confirm the owner alert arrives.'
                 : 'Finish the incomplete checklist items, then place the missed call and watch Recovered Leads for the handoff.'}
-            </p>
+              </p>
           </div>
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
             <p className="font-medium">Confirm your SMS template</p>
@@ -484,7 +483,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <Card className="bg-card/90">
               <CardHeader>
                 <CardTitle>Managed texting setup</CardTitle>
-                <CardDescription>CallbackCloser handles the business texting line and messaging setup for you.</CardDescription>
+                <CardDescription>
+                  CallbackCloser handles the business texting line and messaging setup for you, but US A2P approval still has to clear before live customer texting is truly ready.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-xl border bg-muted/20 p-4 text-sm">
@@ -495,6 +496,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                   <p className="mt-1 text-xs text-muted-foreground">Status: {managedTwilioSummary.label}</p>
                   <p className="mt-1 text-xs text-muted-foreground">Last setup refresh: {lastManagedSetupRefresh}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{managedTwilioSummary.description}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">Next step: {managedTwilioSummary.nextStep}</p>
                 </div>
 
                 <form action={buyTwilioNumberAction} className="space-y-3">
@@ -527,13 +529,17 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                   <p className="text-sm font-medium">Messaging setup</p>
                   <div className="space-y-2 text-sm text-muted-foreground">
                     <div className="rounded-md bg-muted/40 p-3">
-                      Messaging service: {managedTwilioSummary.messagingServiceReady ? 'Active' : 'Still being set up'}
+                      Messaging infrastructure: {managedTwilioSummary.onboardingReady ? 'Number, service, and webhooks are ready' : 'Still being set up'}
                     </div>
                     <div className="rounded-md bg-muted/40 p-3">
-                      Compliance review: {managedTwilioSummary.complianceReady ? 'Approved and live' : managedTwilioSummary.label}
+                      Webhook sync: {managedTwilioSummary.webhooksSynced ? 'Current app URL confirmed' : 'Refresh still needed'}
                     </div>
                     <div className="rounded-md bg-muted/40 p-3">
-                      Demo-safe note: internal platform IDs stay server-side so this workspace stays business-facing.
+                      A2P readiness: {managedTwilioSummary.complianceReady ? 'Approved for live messaging' : managedTwilioSummary.label}
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-3">
+                      Keep an existing number? That is still an admin-assisted path. Self-serve existing-number attach is not available on this page yet, and
+                      internal platform IDs stay server-side.
                     </div>
                   </div>
                 </div>

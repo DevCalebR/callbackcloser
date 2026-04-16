@@ -21,7 +21,7 @@ import {
 import { searchBusinessesForAdmin } from '@/lib/business';
 import { db } from '@/lib/db';
 import { formatDateTime } from '@/lib/lead-presenters';
-import { getManagedTextingNumber, getManagedTwilioStatusSummary, managedTwilioStatusLabels } from '@/lib/managed-twilio';
+import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { formatPhoneForDisplay } from '@/lib/phone';
 
 export const dynamic = 'force-dynamic';
@@ -273,7 +273,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       </Badge>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="font-medium">{managedTwilioStatusLabels[business.managedTwilioStatus]}</div>
+                      <div className="font-medium">{managedSummary.label}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{managedSummary.nextStep}</div>
                       {business.provisioningError ? <div className="mt-1 text-xs text-destructive">{business.provisioningError}</div> : null}
                     </td>
                     <td className="px-3 py-3">
@@ -288,8 +289,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <Badge variant={managedSummary.messagingServiceReady ? 'success' : 'outline'}>
-                        {managedSummary.messagingServiceReady ? 'Messaging ready' : 'Messaging pending'}
+                      <Badge variant={managedSummary.messagingReady ? 'success' : managedSummary.onboardingReady ? 'secondary' : 'outline'}>
+                        {managedSummary.messagingReady ? 'Approved' : managedSummary.onboardingReady ? 'A2P pending' : 'Setup pending'}
                       </Badge>
                     </td>
                     <td className="px-3 py-3">

@@ -28,6 +28,7 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - Clerk sign-in/sign-up and protected `/app` area
 - Business onboarding (creates `Business` associated to `ownerClerkId`)
 - Business Settings with call/SMS config + Twilio number purchase button
+- Managed Twilio provisioning that creates or reuses a business subaccount, Messaging Service, number assignment, and webhook sync
 - Twilio voice webhook (`/api/twilio/voice`) and dial status callback (`/api/twilio/status`)
 - Missed-call lead creation + idempotent callback handling
 - Persisted SMS state machine per lead (`smsState` in DB)
@@ -208,8 +209,15 @@ Set:
 
 1. Complete Business Settings in the app.
 2. Open `/app/settings`.
-3. Click **Buy Twilio number**.
-4. The app purchases a US local number and sets the Twilio Voice + Messaging webhook URLs automatically.
+3. Click **Provision Business Texting Line**.
+4. CallbackCloser creates or reuses the business Twilio subaccount, creates or reuses the Messaging Service, buys a US local number, attaches it to the Messaging Service, and syncs the Twilio Voice + Messaging webhook URLs.
+5. The business remains in an A2P-pending state until the brand/campaign path is approved. Do not treat this step alone as “live for customer messaging.”
+
+### Existing-number path
+
+- Existing-number onboarding is still **admin-assisted**.
+- The number must already be in the target Twilio account context before it is attached through the admin provisioning screen.
+- Porting or cross-account number moves are not self-serve in the business workspace today.
 
 ### Manual Twilio number webhook settings (if using Twilio Console)
 
@@ -236,6 +244,7 @@ Notes:
 - Production rejects token-only webhook auth and validates subaccount webhooks with the correct Twilio account auth token.
 - Shared-secret checks (header/query) are kept only for explicit non-production/local token-mode workflows.
 - `/api/twilio/status` is called automatically by the TwiML generated from `/api/twilio/voice`.
+- For US long-code messaging, A2P brand/campaign approval is still required before live customer SMS should be considered ready.
 
 ## Twilio Webhook Flow
 

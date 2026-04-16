@@ -38,6 +38,10 @@ const changedFieldLabels: Record<string, string> = {
   twilioPhoneNumber: 'Twilio number',
   twilioPhoneNumberSid: 'Twilio number SID',
   twilioMessagingServiceSid: 'messaging service SID',
+  a2pCustomerProfileSid: 'A2P customer profile SID',
+  a2pBrandSid: 'A2P brand SID',
+  a2pCampaignSid: 'A2P campaign SID',
+  a2pFailureReason: 'A2P failure reason',
   managedTwilioStatus: 'managed Twilio status',
 };
 
@@ -360,6 +364,18 @@ export default async function AdminBusinessDetailPage({
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="a2pCustomerProfileSid">A2P customer profile SID</Label>
+                    <Input id="a2pCustomerProfileSid" name="a2pCustomerProfileSid" defaultValue={business.a2pCustomerProfileSid || ''} placeholder="BU..." />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="a2pBrandSid">A2P brand SID</Label>
+                    <Input id="a2pBrandSid" name="a2pBrandSid" defaultValue={business.a2pBrandSid || ''} placeholder="BN..." />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="a2pCampaignSid">A2P campaign SID</Label>
+                    <Input id="a2pCampaignSid" name="a2pCampaignSid" defaultValue={business.a2pCampaignSid || ''} placeholder="QE..." />
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="managedTwilioStatus">Managed Twilio status</Label>
                     <Select id="managedTwilioStatus" name="managedTwilioStatus" defaultValue={business.managedTwilioStatus}>
                       {Object.entries(managedTwilioStatusLabels).map(([value, label]) => (
@@ -369,6 +385,16 @@ export default async function AdminBusinessDetailPage({
                       ))}
                     </Select>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="a2pFailureReason">A2P failure or attention note</Label>
+                  <Textarea
+                    id="a2pFailureReason"
+                    name="a2pFailureReason"
+                    defaultValue={business.a2pFailureReason || ''}
+                    placeholder="Use this for rejection reasons, carrier requests, or the exact next operator action needed."
+                    rows={3}
+                  />
                 </div>
                 <label className="flex items-start gap-2 rounded-lg border bg-background/80 p-3 text-sm">
                   <input className="mt-1" type="checkbox" name="confirmCriticalFieldClears" value="true" />
@@ -439,8 +465,8 @@ export default async function AdminBusinessDetailPage({
                     <Badge variant={getAdminProvisioningStatusVariant(business.provisioningStatus)}>
                       {adminProvisioningStatusLabels[business.provisioningStatus]}
                     </Badge>
-                    <Badge variant={managedSummary.messagingServiceReady ? 'success' : 'outline'}>
-                      {managedSummary.messagingServiceReady ? 'Messaging ready' : 'Messaging pending'}
+                    <Badge variant={managedSummary.messagingReady ? 'success' : managedSummary.onboardingReady ? 'secondary' : 'outline'}>
+                      {managedSummary.messagingReady ? 'Approved' : managedSummary.onboardingReady ? 'A2P pending' : 'Setup pending'}
                     </Badge>
                   </div>
                   <p className="mt-3 text-muted-foreground">Last run: {formatDateTime(business.provisioningLastRunAt)}</p>
@@ -488,12 +514,13 @@ export default async function AdminBusinessDetailPage({
               <div className="rounded-xl border bg-background/80 p-4">
                 <p className="font-medium text-foreground">Provisioning path</p>
                 <p className="mt-2 text-muted-foreground">
-                  {business.twilioPrimaryNumberSid ? 'Business number attached' : 'Choose new number or existing number path below.'}
+                  {business.twilioPrimaryNumberSid ? 'Business number attached' : 'Choose the managed new-number path or use the admin-assisted existing-number path below.'}
                 </p>
               </div>
               <div className="rounded-xl border bg-background/80 p-4">
                 <p className="font-medium text-foreground">Managed status</p>
-                <p className="mt-2 text-muted-foreground">{managedTwilioStatusLabels[business.managedTwilioStatus]}</p>
+                <p className="mt-2 text-muted-foreground">{managedSummary.label}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{managedSummary.description}</p>
               </div>
               <div className="rounded-xl border bg-background/80 p-4">
                 <p className="font-medium text-foreground">Billing</p>
@@ -514,6 +541,11 @@ export default async function AdminBusinessDetailPage({
               <div className="rounded-xl border bg-background/80 p-4">
                 <p className="font-medium text-foreground">Primary number SID</p>
                 <p className="mt-2 break-all text-muted-foreground">{business.twilioPrimaryNumberSid || 'Not assigned yet'}</p>
+              </div>
+              <div className="rounded-xl border bg-background/80 p-4">
+                <p className="font-medium text-foreground">A2P registration</p>
+                <p className="mt-2 text-muted-foreground">{managedSummary.complianceReady ? 'Approved' : managedSummary.label}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{managedSummary.nextStep}</p>
               </div>
               <div className="rounded-xl border bg-background/80 p-4">
                 <p className="font-medium text-foreground">Voice webhook</p>
@@ -554,6 +586,31 @@ export default async function AdminBusinessDetailPage({
                   CallbackCloser will verify webhook drift after a number is attached and Twilio credentials are available.
                 </p>
               )}
+            </div>
+
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium text-foreground">A2P and messaging readiness</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Current state</p>
+                  <p className="mt-1">{managedSummary.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{managedSummary.description}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Next operator step</p>
+                  <p className="mt-1">{managedSummary.nextStep}</p>
+                  {business.a2pApprovedAt ? <p className="mt-1 text-xs text-muted-foreground">Approved {formatDateTime(business.a2pApprovedAt)}</p> : null}
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Brand / campaign IDs</p>
+                  <p className="mt-1 break-all text-muted-foreground">{business.a2pBrandSid || 'Brand not recorded yet'}</p>
+                  <p className="mt-1 break-all text-muted-foreground">{business.a2pCampaignSid || 'Campaign not recorded yet'}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Attention note</p>
+                  <p className="mt-1 text-muted-foreground">{business.a2pFailureReason || 'No current compliance blocker recorded.'}</p>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-xl border bg-background/80 p-4">
@@ -607,8 +664,8 @@ export default async function AdminBusinessDetailPage({
                   <Label htmlFor="existingNumberSidManual">Existing number SID</Label>
                   <Input id="existingNumberSidManual" name="existingNumberSidManual" placeholder="PN..." />
                   <p className="text-xs text-muted-foreground">
-                    The existing-number path expects a number already available in the current Twilio account context. If the number still lives elsewhere,
-                    move it into the target account before running this step.
+                    This is an admin-assisted path only. The number must already exist in the target Twilio account context before you attach it here. If
+                    the customer is keeping a number from another account or carrier, handle that migration outside the self-serve product flow first.
                   </p>
                 </div>
                 {availableNumbers.numbers.length > 0 ? (

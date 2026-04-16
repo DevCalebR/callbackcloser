@@ -11,7 +11,19 @@ import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import { absoluteUrl } from '@/lib/url';
 
 type NotificationLeadRecord = Lead & {
-  business: Pick<Business, 'id' | 'name' | 'ownerClerkId' | 'notifyPhone' | 'twilioPrimaryPhoneNumber' | 'twilioPhoneNumber'>;
+  business: Pick<
+    Business,
+    | 'id'
+    | 'name'
+    | 'ownerClerkId'
+    | 'notifyPhone'
+    | 'twilioSubaccountSid'
+    | 'twilioMessagingServiceSid'
+    | 'twilioPrimaryPhoneNumber'
+    | 'twilioPhoneNumber'
+    | 'managedTwilioStatus'
+    | 'a2pFailureReason'
+  >;
 };
 
 function compactSummary(value: string, maxLength = 280) {
@@ -119,8 +131,12 @@ async function getLeadForOwnerNotifications(leadId: string) {
           name: true,
           ownerClerkId: true,
           notifyPhone: true,
+          twilioSubaccountSid: true,
+          twilioMessagingServiceSid: true,
           twilioPrimaryPhoneNumber: true,
           twilioPhoneNumber: true,
+          managedTwilioStatus: true,
+          a2pFailureReason: true,
         },
       },
     },
@@ -174,6 +190,10 @@ export async function sendOwnerLeadSms(leadId: string) {
       toPhone: destination,
       body,
       participant: 'OWNER',
+      twilioSubaccountSid: lead.business.twilioSubaccountSid,
+      messagingServiceSid: lead.business.twilioMessagingServiceSid,
+      managedTwilioStatus: lead.business.managedTwilioStatus,
+      a2pFailureReason: lead.business.a2pFailureReason,
     });
 
     if (result.suppressed) {

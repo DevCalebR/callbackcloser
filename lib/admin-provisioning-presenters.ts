@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { BusinessProvisioningStatus, type Business, type BusinessNotificationSettings } from '@prisma/client';
 
+import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { normalizePhoneNumber } from '@/lib/phone';
 
 export const PENDING_OWNER_PREFIX = 'pending_owner_';
@@ -16,15 +17,16 @@ type AdminBusinessSummary = Pick<
   | 'twilioSubaccountSid'
   | 'twilioPhoneNumber'
   | 'twilioPhoneNumberSid'
-  | 'twilioPrimaryPhoneNumber'
-  | 'twilioPrimaryNumberSid'
-  | 'twilioMessagingServiceSid'
-  | 'twilioWebhookSyncedAt'
-  | 'a2pCustomerProfileSid'
-  | 'a2pBrandSid'
-  | 'a2pCampaignSid'
-  | 'a2pFailureReason'
-  | 'a2pApprovedAt'
+    | 'twilioPrimaryPhoneNumber'
+    | 'twilioPrimaryNumberSid'
+    | 'twilioMessagingServiceSid'
+    | 'twilioWebhookSyncedAt'
+    | 'managedTwilioStatus'
+    | 'a2pCustomerProfileSid'
+    | 'a2pBrandSid'
+    | 'a2pCampaignSid'
+    | 'a2pFailureReason'
+    | 'a2pApprovedAt'
 >;
 
 type NotificationSettingsSummary = Pick<
@@ -41,7 +43,8 @@ export type AdminProvisioningChecklistItem = {
     | 'texting_number'
     | 'messaging_service'
     | 'voice_webhook'
-    | 'sms_webhook';
+    | 'sms_webhook'
+    | 'a2p_registration';
   label: string;
   complete: boolean;
   detail: string;
@@ -108,6 +111,7 @@ export function buildAdminProvisioningChecklist({
   const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
   const ownerPhone = normalizePhoneNumber(notificationSettings?.ownerPhone || business.notifyPhone || '') || null;
   const messagingServiceReady = Boolean(business.twilioMessagingServiceSid);
+  const managedSummary = getManagedTwilioStatusSummary(business);
 
   return [
     {
@@ -153,6 +157,12 @@ export function buildAdminProvisioningChecklist({
       detail: messagingServiceReady
         ? 'Messaging Service SID is attached to the business.'
         : 'Create or attach the Twilio Messaging Service.',
+    },
+    {
+      key: 'a2p_registration',
+      label: 'A2P registration ready',
+      complete: managedSummary.complianceReady,
+      detail: managedSummary.complianceReady ? managedSummary.description : managedSummary.nextStep,
     },
     {
       key: 'voice_webhook',

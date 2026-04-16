@@ -5,6 +5,7 @@ import { provisionManagedTwilioForBusiness } from '@/lib/managed-twilio';
 import { isPortfolioDemoModeEnabled } from '@/lib/portfolio-demo-guardrail';
 import { getTwilioClient, hasTwilioClientEnv } from '@/lib/twilio-client';
 import { logTwilioInfo } from '@/lib/twilio-logging';
+import { buildManagedProvisioningBusinessInput } from '@/lib/twilio-provisioning-input';
 
 type EnvMap = Readonly<Record<string, string | undefined>>;
 
@@ -112,16 +113,27 @@ export async function ensureTwilioSubaccount(
 }
 
 export async function provisionPhoneNumber(options: ProvisionPhoneNumberOptions): Promise<ProvisionPhoneNumberResult> {
+  const business = await db.business.findUnique({
+    where: { id: options.businessId },
+    select: {
+      id: true,
+      name: true,
+      twilioSubaccountSid: true,
+      twilioMessagingServiceSid: true,
+      twilioPrimaryNumberSid: true,
+      twilioPrimaryPhoneNumber: true,
+      twilioPhoneNumberSid: true,
+      twilioPhoneNumber: true,
+    },
+  });
+
+  if (!business) {
+    throw new Error('Business not found');
+  }
+
   const correlationId = options.correlationId ?? 'n/a';
   const managedBusiness = await provisionManagedTwilioForBusiness(
-    {
-      id: options.businessId,
-      name: options.businessName,
-      twilioSubaccountSid: null,
-      twilioMessagingServiceSid: null,
-      twilioPrimaryNumberSid: null,
-      twilioPrimaryPhoneNumber: null,
-    },
+    buildManagedProvisioningBusinessInput(business, options.businessName),
     {
       areaCode: parseAreaCode(options.areaCode),
       correlationId,

@@ -85,10 +85,14 @@ function buildChangedFieldMetadata(changes: Array<{ key: string; label: string; 
     before:
       change.key === 'ownerPhone' || change.key === 'twilioPhoneNumber'
         ? maskPhoneForAudit(change.before)
+        : change.key === 'a2pFailureReason'
+          ? change.before
         : maskSidForAudit(change.before) ?? change.before,
     after:
       change.key === 'ownerPhone' || change.key === 'twilioPhoneNumber'
         ? maskPhoneForAudit(change.after)
+        : change.key === 'a2pFailureReason'
+          ? change.after
         : maskSidForAudit(change.after) ?? change.after,
   }));
 }
@@ -268,6 +272,10 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
   const twilioPhoneNumber = normalizeOptionalE164Phone(data.twilioPhoneNumber || '', 'Twilio number');
   const twilioPhoneNumberSid = normalizeOptionalSid(data.twilioPhoneNumberSid);
   const twilioMessagingServiceSid = normalizeOptionalSid(data.twilioMessagingServiceSid);
+  const a2pCustomerProfileSid = normalizeOptionalSid(data.a2pCustomerProfileSid);
+  const a2pBrandSid = normalizeOptionalSid(data.a2pBrandSid);
+  const a2pCampaignSid = normalizeOptionalSid(data.a2pCampaignSid);
+  const a2pFailureReason = data.a2pFailureReason?.trim() || null;
   const existingOwnerPhone = existingBusiness.notificationSettings?.ownerPhone || existingBusiness.notifyPhone || null;
   const existingTwilioPhoneNumber = existingBusiness.twilioPrimaryPhoneNumber || existingBusiness.twilioPhoneNumber || null;
   const existingTwilioPhoneNumberSid = existingBusiness.twilioPrimaryNumberSid || existingBusiness.twilioPhoneNumberSid || null;
@@ -293,6 +301,12 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
     existingTwilioPhoneNumber !== twilioPhoneNumber ||
     existingTwilioPhoneNumberSid !== twilioPhoneNumberSid ||
     existingBusiness.twilioMessagingServiceSid !== twilioMessagingServiceSid;
+  const managedTwilioStatusChanged = existingBusiness.managedTwilioStatus !== data.managedTwilioStatus;
+  const a2pMetadataChanged =
+    existingBusiness.a2pCustomerProfileSid !== a2pCustomerProfileSid ||
+    existingBusiness.a2pBrandSid !== a2pBrandSid ||
+    existingBusiness.a2pCampaignSid !== a2pCampaignSid ||
+    existingBusiness.a2pFailureReason !== a2pFailureReason;
 
   const changedFields = [
     existingOwnerPhone !== ownerPhone
@@ -312,7 +326,39 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
           after: twilioMessagingServiceSid,
         }
       : null,
-    existingBusiness.managedTwilioStatus !== data.managedTwilioStatus
+    existingBusiness.a2pCustomerProfileSid !== a2pCustomerProfileSid
+      ? {
+          key: 'a2pCustomerProfileSid',
+          label: 'A2P customer profile SID',
+          before: existingBusiness.a2pCustomerProfileSid,
+          after: a2pCustomerProfileSid,
+        }
+      : null,
+    existingBusiness.a2pBrandSid !== a2pBrandSid
+      ? {
+          key: 'a2pBrandSid',
+          label: 'A2P brand SID',
+          before: existingBusiness.a2pBrandSid,
+          after: a2pBrandSid,
+        }
+      : null,
+    existingBusiness.a2pCampaignSid !== a2pCampaignSid
+      ? {
+          key: 'a2pCampaignSid',
+          label: 'A2P campaign SID',
+          before: existingBusiness.a2pCampaignSid,
+          after: a2pCampaignSid,
+        }
+      : null,
+    existingBusiness.a2pFailureReason !== a2pFailureReason
+      ? {
+          key: 'a2pFailureReason',
+          label: 'A2P failure reason',
+          before: existingBusiness.a2pFailureReason,
+          after: a2pFailureReason,
+        }
+      : null,
+    managedTwilioStatusChanged
       ? {
           key: 'managedTwilioStatus',
           label: 'managed Twilio status',
@@ -337,11 +383,28 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
       internalNotes: data.internalNotes || null,
       provisioningError: null,
       managedTwilioStatus: data.managedTwilioStatus as ManagedTwilioStatus,
+      managedTwilioStatusUpdatedAt: managedTwilioStatusChanged ? new Date() : existingBusiness.managedTwilioStatusUpdatedAt,
       twilioPhoneNumber,
       twilioPrimaryPhoneNumber: twilioPhoneNumber,
       twilioPhoneNumberSid,
       twilioPrimaryNumberSid: twilioPhoneNumberSid,
       twilioMessagingServiceSid,
+      a2pCustomerProfileSid,
+      a2pBrandSid,
+      a2pCampaignSid,
+      a2pFailureReason,
+      a2pSubmittedAt:
+        managedTwilioStatusChanged &&
+        ['AWAITING_BUSINESS_VERIFICATION', 'BRAND_SUBMITTED', 'CAMPAIGN_SUBMITTED'].includes(data.managedTwilioStatus)
+          ? existingBusiness.a2pSubmittedAt || new Date()
+          : existingBusiness.a2pSubmittedAt,
+      a2pApprovedAt:
+        data.managedTwilioStatus === ManagedTwilioStatus.COMPLIANT_LIVE
+          ? existingBusiness.a2pApprovedAt || new Date()
+          : managedTwilioStatusChanged
+            ? null
+            : existingBusiness.a2pApprovedAt,
+      ...(a2pMetadataChanged || managedTwilioStatusChanged ? { provisioningLastRunAt: new Date() } : {}),
       ...(twilioMappingChanged ? { twilioWebhookSyncedAt: null } : {}),
     },
   });

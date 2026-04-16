@@ -26,7 +26,7 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `STRIPE_PRICE_STARTER` | Server-only | Yes | Stripe / Vercel | Starter plan Price ID. Also used for conversation usage-limit tier mapping. |
 | `STRIPE_PRICE_PRO` | Server-only | Yes | Stripe / Vercel | Pro plan Price ID. Also used for conversation usage-limit tier mapping. |
 | `TWILIO_ACCOUNT_SID` | Server-only | Yes | Twilio / Vercel | Twilio account SID. |
-| `TWILIO_AUTH_TOKEN` | Server-only | Yes | Twilio / Vercel | Twilio auth token. |
+| `TWILIO_AUTH_TOKEN` | Server-only | Yes | Twilio / Vercel | Parent-account auth token used for managed subaccount provisioning, Messaging Service setup, and parent/subaccount webhook signature validation. |
 | `TWILIO_WEBHOOK_AUTH_TOKEN` | Server-only | Optional | App-generated secret / Vercel | Shared secret used only for local/dev token-mode checks and webhook URL tooling when signature validation is disabled. Production does not rely on it for Twilio webhook auth. |
 | `TWILIO_VALIDATE_SIGNATURE` | Server-only | Yes (production) | Vercel | Must be `true` in production. Twilio webhooks require valid `X-Twilio-Signature` verification using the correct Twilio account auth token for the request; production fails closed otherwise. |
 | `RESEND_API_KEY` | Server-only | Optional | Resend / Vercel | Enables owner email delivery for qualified leads. Without it, email notifications are skipped while SMS and in-app alerts can still operate. |
@@ -94,12 +94,24 @@ Use separate values for `Preview` and `Production` where appropriate.
 
 Twilio webhook syncing uses `NEXT_PUBLIC_APP_URL`. If you run webhook sync actions in Preview, they will point Twilio to the Preview URL. In most teams, Twilio webhook sync should be done only from a controlled environment (local with tunnel or Production) to avoid accidental webhook target changes.
 
+CallbackCloser’s managed Twilio flow now assumes this sequence for customer onboarding:
+
+1. Create or reuse the business Twilio subaccount.
+2. Create or reuse the business Messaging Service.
+3. Assign the business number.
+4. Attach the number to the Messaging Service.
+5. Sync voice, SMS, and status webhooks.
+6. Track A2P readiness separately until approval is complete.
+
+The product should not be treated as “live for customer messaging” until the business is both webhook-synced and A2P approved.
+
 ### Required Twilio webhook auth configuration (Production)
 
 1. Set `TWILIO_VALIDATE_SIGNATURE=true` (required).
 2. Keep `TWILIO_AUTH_TOKEN` synced with the parent Twilio account auth token so the app can validate parent-account webhooks and resolve managed subaccount auth tokens.
 3. Treat `TWILIO_WEBHOOK_AUTH_TOKEN` as optional local/dev tooling only; do not depend on it for production webhook auth.
 4. Ensure Twilio points to the exact production URL (`NEXT_PUBLIC_APP_URL`) so signature validation uses the same URL Twilio signed.
+5. For US long-code messaging, track brand/campaign approval operationally. CallbackCloser now distinguishes infrastructure-ready from A2P-approved so pending registrations do not read as live.
 
 ## After updating env vars on Vercel
 

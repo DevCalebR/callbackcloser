@@ -1,10 +1,11 @@
-import { Prisma, MessageParticipant } from '@prisma/client';
+import { ManagedTwilioStatus, Prisma, MessageParticipant } from '@prisma/client';
 
 import { db } from '@/lib/db';
+import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
-import { getTwilioClient } from '@/lib/twilio';
+import { getTwilioBusinessClient } from '@/lib/twilio';
 
 export async function persistInboundMessage(params: {
   businessId: string;
@@ -60,6 +61,11 @@ export async function sendAndPersistOutboundMessage(params: {
   toPhone: string;
   body: string;
   participant?: MessageParticipant;
+  twilioSubaccountSid?: string | null;
+  messagingServiceSid?: string | null;
+  managedTwilioStatus?: ManagedTwilioStatus | null;
+  a2pFailureReason?: string | null;
+  allowUnapproved?: boolean;
 }) {
   const from = normalizePhoneNumber(params.fromPhone) || params.fromPhone;
   const to = normalizePhoneNumber(params.toPhone) || params.toPhone;
@@ -79,12 +85,61 @@ export async function sendAndPersistOutboundMessage(params: {
     };
   }
 
-  const client = getTwilioClient();
-  const sent = await client.messages.create({
-    from,
-    to,
-    body: params.body,
-  });
+  if (
+    !params.allowUnapproved &&
+    typeof params.managedTwilioStatus === 'string' &&
+    params.managedTwilioStatus !== ManagedTwilioStatus.COMPLIANT_LIVE
+  ) {
+    const managedSummary = getManagedTwilioStatusSummary({
+      managedTwilioStatus: params.managedTwilioStatus,
+      twilioSubaccountSid: params.twilioSubaccountSid ?? null,
+      twilioPrimaryPhoneNumber: from,
+      twilioPhoneNumber: from,
+      twilioPrimaryNumberSid: null,
+      twilioPhoneNumberSid: null,
+      twilioMessagingServiceSid: params.messagingServiceSid ?? null,
+      twilioWebhookSyncedAt: null,
+      a2pFailureReason: params.a2pFailureReason ?? null,
+      a2pApprovedAt: null,
+      a2pCampaignSid: null,
+      a2pBrandSid: null,
+      a2pCustomerProfileSid: null,
+    });
+
+    const reason =
+      params.managedTwilioStatus === ManagedTwilioStatus.FAILED_REVIEW ||
+      params.managedTwilioStatus === ManagedTwilioStatus.PAUSED_NONCOMPLIANT
+        ? 'managed_twilio_compliance_blocked'
+        : 'managed_twilio_compliance_pending';
+
+    logTwilioWarn('messaging', 'outbound_suppressed_managed_twilio_not_ready', {
+      decision: reason,
+      businessId: params.businessId,
+      leadId: params.leadId ?? null,
+      participant,
+      nextStep: managedSummary.nextStep,
+    });
+
+    return {
+      suppressed: true as const,
+      reason,
+    };
+  }
+
+  const client = getTwilioBusinessClient(params.twilioSubaccountSid);
+  const sent = await client.messages.create(
+    params.messagingServiceSid
+      ? {
+          messagingServiceSid: params.messagingServiceSid,
+          to,
+          body: params.body,
+        }
+      : {
+          from,
+          to,
+          body: params.body,
+        }
+  );
 
   const message = await persistOutboundMessageRecord({
     businessId: params.businessId,
