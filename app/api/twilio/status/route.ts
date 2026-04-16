@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     const clientIp = getClientIpAddress(request);
     const accountSid = formField(formData, 'AccountSid');
 
-    const authorized = hasValidTwilioWebhookRequest(request, payload);
+    const authorized = await hasValidTwilioWebhookRequest(request, payload);
     if (!authorized) {
       const rateLimit = consumeRateLimit({
         key: `twilio:status:unauth:${clientIp}`,

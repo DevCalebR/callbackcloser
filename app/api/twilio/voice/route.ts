@@ -8,7 +8,7 @@ import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WI
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { buildDialRecordingOptions } from '@/lib/twilio-recording';
-import { hasValidTwilioWebhookRequest } from '@/lib/twilio-webhook';
+import { hasValidTwilioWebhookRequest, isTwilioSignatureValidationEnabled } from '@/lib/twilio-webhook';
 import { voiceTwiML } from '@/lib/twiml';
 import { absoluteUrl } from '@/lib/url';
 
@@ -21,6 +21,10 @@ function formField(formData: FormData, key: string) {
 }
 
 function withWebhookToken(url: string) {
+  if (isTwilioSignatureValidationEnabled()) {
+    return url;
+  }
+
   const token = process.env.TWILIO_WEBHOOK_AUTH_TOKEN?.trim();
   if (!token) return url;
   const next = new URL(url);
@@ -51,7 +55,7 @@ export async function POST(request: Request) {
     const payload = Object.fromEntries(formData.entries()) as Record<string, string>;
     const clientIp = getClientIpAddress(request);
 
-    const authorized = hasValidTwilioWebhookRequest(request, payload);
+    const authorized = await hasValidTwilioWebhookRequest(request, payload);
     if (!authorized) {
       const rateLimit = consumeRateLimit({
         key: `twilio:voice:unauth:${clientIp}`,

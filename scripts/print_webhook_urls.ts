@@ -27,7 +27,9 @@ function normalizeBaseUrl(rawValue: string) {
 
 function buildWebhookUrl(baseUrl: string, path: string, webhookToken: string) {
   const url = new URL(path, `${baseUrl}/`);
-  url.searchParams.set('webhook_token', webhookToken);
+  if (webhookToken) {
+    url.searchParams.set('webhook_token', webhookToken);
+  }
   return url.toString();
 }
 
@@ -43,21 +45,28 @@ function main() {
   const loadedFiles = loadLocalEnvFiles();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
   const webhookToken = process.env.TWILIO_WEBHOOK_AUTH_TOKEN?.trim();
+  const signatureValidationEnabled = ['1', 'true', 'yes', 'on'].includes(
+    process.env.TWILIO_VALIDATE_SIGNATURE?.trim().toLowerCase() ?? ''
+  );
+  const usesSharedWebhookToken = !signatureValidationEnabled;
 
   if (!appUrl) fail('NEXT_PUBLIC_APP_URL is missing.');
-  if (!webhookToken) fail('TWILIO_WEBHOOK_AUTH_TOKEN is missing.');
+  if (usesSharedWebhookToken && !webhookToken) {
+    fail('TWILIO_WEBHOOK_AUTH_TOKEN is missing while TWILIO_VALIDATE_SIGNATURE is disabled.');
+  }
 
   const baseUrl = normalizeBaseUrl(appUrl);
   const urls = {
-    voice: buildWebhookUrl(baseUrl, '/api/twilio/voice', webhookToken),
-    sms: buildWebhookUrl(baseUrl, '/api/twilio/sms', webhookToken),
-    status: buildWebhookUrl(baseUrl, '/api/twilio/status', webhookToken),
+    voice: buildWebhookUrl(baseUrl, '/api/twilio/voice', usesSharedWebhookToken ? webhookToken ?? '' : ''),
+    sms: buildWebhookUrl(baseUrl, '/api/twilio/sms', usesSharedWebhookToken ? webhookToken ?? '' : ''),
+    status: buildWebhookUrl(baseUrl, '/api/twilio/status', usesSharedWebhookToken ? webhookToken ?? '' : ''),
   };
 
   console.log('CallbackCloser Twilio webhook URLs');
   console.log(`- Loaded env files: ${loadedFiles.join(', ') || '(none)'}`);
   console.log(`- Base URL: ${baseUrl}`);
-  console.log(`- Token mode: ${showToken ? 'visible (--show-token)' : 'redacted (default)'}`);
+  console.log(`- Auth mode: ${signatureValidationEnabled ? 'signature validation' : 'shared token fallback'}`);
+  console.log(`- Token display: ${showToken ? 'visible (--show-token)' : 'redacted (default)'}`);
   console.log('');
   console.log(`Voice (A CALL COMES IN, POST): ${showToken ? urls.voice : redactWebhookToken(urls.voice)}`);
   console.log(`Messaging (A MESSAGE COMES IN, POST): ${showToken ? urls.sms : redactWebhookToken(urls.sms)}`);

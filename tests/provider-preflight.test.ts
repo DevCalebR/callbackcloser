@@ -58,14 +58,47 @@ test('runStripePreflight fails when webhook secret is missing', () => {
 test('runTwilioPreflight fails when explicit configured URLs drift from NEXT_PUBLIC_APP_URL', () => {
   const check = runTwilioPreflight(
     baseEnv({
-      TWILIO_WEBHOOK_VOICE_URL: 'https://mismatch.example.com/api/twilio/voice?webhook_token=token_abc123',
-      TWILIO_WEBHOOK_SMS_URL: 'https://mismatch.example.com/api/twilio/sms?webhook_token=token_abc123',
-      TWILIO_WEBHOOK_STATUS_URL: 'https://mismatch.example.com/api/twilio/status?webhook_token=token_abc123',
+      NODE_ENV: 'production',
+      TWILIO_VALIDATE_SIGNATURE: 'true',
+      TWILIO_WEBHOOK_AUTH_TOKEN: undefined,
+      TWILIO_WEBHOOK_VOICE_URL: 'https://mismatch.example.com/api/twilio/voice',
+      TWILIO_WEBHOOK_SMS_URL: 'https://mismatch.example.com/api/twilio/sms',
+      TWILIO_WEBHOOK_STATUS_URL: 'https://mismatch.example.com/api/twilio/status',
     })
   );
 
   assert.equal(check.status, 'FAIL');
   assert.ok(check.details.some((detail) => detail.includes('TWILIO_WEBHOOK_VOICE_URL does not match')));
+});
+
+test('runTwilioPreflight passes in production signature mode without a shared webhook token', () => {
+  const check = runTwilioPreflight(
+    baseEnv({
+      NODE_ENV: 'production',
+      TWILIO_VALIDATE_SIGNATURE: 'true',
+      TWILIO_WEBHOOK_AUTH_TOKEN: undefined,
+      TWILIO_WEBHOOK_VOICE_URL: 'https://callbackcloser.example.com/api/twilio/voice',
+      TWILIO_WEBHOOK_SMS_URL: 'https://callbackcloser.example.com/api/twilio/sms',
+      TWILIO_WEBHOOK_STATUS_URL: 'https://callbackcloser.example.com/api/twilio/status',
+    })
+  );
+
+  assert.equal(check.status, 'PASS');
+  assert.ok(check.details.some((detail) => detail.includes('Webhook auth mode: X-Twilio-Signature validation')));
+});
+
+test('runTwilioPreflight expects tokenized URLs only in explicit token mode', () => {
+  const check = runTwilioPreflight(
+    baseEnv({
+      TWILIO_VALIDATE_SIGNATURE: 'false',
+      TWILIO_WEBHOOK_VOICE_URL: 'https://callbackcloser.example.com/api/twilio/voice?webhook_token=token_abc123',
+      TWILIO_WEBHOOK_SMS_URL: 'https://callbackcloser.example.com/api/twilio/sms?webhook_token=token_abc123',
+      TWILIO_WEBHOOK_STATUS_URL: 'https://callbackcloser.example.com/api/twilio/status?webhook_token=token_abc123',
+    })
+  );
+
+  assert.equal(check.status, 'PASS');
+  assert.ok(check.details.some((detail) => detail.includes('shared token fallback')));
 });
 
 test('runDatabasePreflight reports pass and fail outcomes', async () => {

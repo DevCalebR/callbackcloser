@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 
+import { getTwilioClient } from './twilio-client.ts';
 import { logTwilioError, logTwilioWarn } from './twilio-logging.ts';
 
 const DEFAULT_HEADER_NAMES = [
@@ -13,7 +14,18 @@ let missingTokenWarningLogged = false;
 let missingSignatureConfigWarningLogged = false;
 let missingSignatureHeaderWarningLogged = false;
 let productionSignatureModeWarningLogged = false;
-let subaccountTokenFallbackWarningLogged = false;
+const missingSubaccountAuthTokenLogged = new Set<string>();
+
+type TwilioWebhookValidationOptions = {
+  env?: Record<string, string | undefined>;
+  resolveSubaccountAuthToken?: (
+    accountSid: string,
+    env: Record<string, string | undefined>
+  ) => Promise<string | null>;
+};
+
+const ACCOUNT_SID_PATTERN = /^AC[0-9a-fA-F]{32}$/;
+const twilioAuthTokenCache = new Map<string, string>();
 
 function parseBooleanFlag(value: string | undefined) {
   if (!value) return false;
@@ -72,16 +84,15 @@ export function hasValidTwilioWebhookToken(
 export function hasValidTwilioWebhookSignature(
   request: Request,
   params: Record<string, string>,
-  env: Record<string, string | undefined> = process.env
+  authToken: string
 ) {
-  const authToken = env.TWILIO_AUTH_TOKEN?.trim();
   if (!authToken) {
     if (!missingSignatureConfigWarningLogged) {
       missingSignatureConfigWarningLogged = true;
       logTwilioError('webhook-auth', 'missing_twilio_auth_token_for_signature_validation', {
         decision: 'reject',
-        nodeEnv: env.NODE_ENV ?? null,
-        vercelEnv: env.VERCEL_ENV ?? null,
+        nodeEnv: process.env.NODE_ENV ?? null,
+        vercelEnv: process.env.VERCEL_ENV ?? null,
       });
     }
     return false;
@@ -104,11 +115,74 @@ export function hasValidTwilioWebhookSignature(
   }
 }
 
-export function hasValidTwilioWebhookRequest(
+async function resolveTwilioSubaccountAuthToken(
+  accountSid: string,
+  env: Record<string, string | undefined>
+) {
+  const normalizedAccountSid = accountSid.trim();
+  if (!ACCOUNT_SID_PATTERN.test(normalizedAccountSid)) {
+    return null;
+  }
+
+  const cachedAuthToken = twilioAuthTokenCache.get(normalizedAccountSid);
+  if (cachedAuthToken) {
+    return cachedAuthToken;
+  }
+
+  try {
+    const account = await getTwilioClient(env).api.v2010.accounts(normalizedAccountSid).fetch();
+    const authToken = account.authToken?.trim() || null;
+
+    if (!authToken) {
+      if (!missingSubaccountAuthTokenLogged.has(normalizedAccountSid)) {
+        missingSubaccountAuthTokenLogged.add(normalizedAccountSid);
+        logTwilioError('webhook-auth', 'missing_subaccount_auth_token_for_signature_validation', {
+          decision: 'reject',
+          accountSid: normalizedAccountSid,
+        });
+      }
+      return null;
+    }
+
+    twilioAuthTokenCache.set(normalizedAccountSid, authToken);
+    return authToken;
+  } catch (error) {
+    logTwilioError(
+      'webhook-auth',
+      'subaccount_auth_token_lookup_failed',
+      { decision: 'reject', accountSid: normalizedAccountSid },
+      error
+    );
+    return null;
+  }
+}
+
+async function resolveTwilioRequestAuthToken(
+  params: Record<string, string>,
+  env: Record<string, string | undefined>,
+  resolveSubaccountAuthToken?: TwilioWebhookValidationOptions['resolveSubaccountAuthToken']
+) {
+  const requestAccountSid = params.AccountSid?.trim();
+  const parentAccountSid = env.TWILIO_ACCOUNT_SID?.trim();
+  const parentAuthToken = env.TWILIO_AUTH_TOKEN?.trim() || null;
+
+  if (!requestAccountSid || !parentAccountSid || requestAccountSid === parentAccountSid) {
+    return parentAuthToken;
+  }
+
+  if (resolveSubaccountAuthToken) {
+    return resolveSubaccountAuthToken(requestAccountSid, env);
+  }
+
+  return resolveTwilioSubaccountAuthToken(requestAccountSid, env);
+}
+
+export async function hasValidTwilioWebhookRequest(
   request: Request,
   params: Record<string, string>,
-  env: Record<string, string | undefined> = process.env
+  options: TwilioWebhookValidationOptions = {}
 ) {
+  const env = options.env ?? process.env;
   const signatureValidationEnabled = isTwilioSignatureValidationEnabled(env);
 
   if (env.NODE_ENV === 'production' && !signatureValidationEnabled) {
@@ -127,26 +201,12 @@ export function hasValidTwilioWebhookRequest(
     return hasValidTwilioWebhookToken(request, { env, allowQueryParam: true });
   }
 
-  const signatureValid = hasValidTwilioWebhookSignature(request, params, env);
+  const authToken = await resolveTwilioRequestAuthToken(params, env, options.resolveSubaccountAuthToken);
+  const signatureValid = authToken ? hasValidTwilioWebhookSignature(request, params, authToken) : false;
   if (signatureValid) return true;
 
-  const sharedTokenValid = hasValidTwilioWebhookToken(request, { env, allowQueryParam: true });
   if (env.NODE_ENV !== 'production') {
-    return sharedTokenValid;
-  }
-
-  const parentAccountSid = env.TWILIO_ACCOUNT_SID?.trim();
-  const requestAccountSid = params.AccountSid?.trim();
-  const isSubaccountRequest = Boolean(requestAccountSid && parentAccountSid && requestAccountSid !== parentAccountSid);
-  if (sharedTokenValid && isSubaccountRequest) {
-    if (!subaccountTokenFallbackWarningLogged) {
-      subaccountTokenFallbackWarningLogged = true;
-      logTwilioWarn('webhook-auth', 'subaccount_signature_validation_fallback_token', {
-        decision: 'allow',
-        accountSid: requestAccountSid,
-      });
-    }
-    return true;
+    return hasValidTwilioWebhookToken(request, { env, allowQueryParam: true });
   }
 
   return false;
