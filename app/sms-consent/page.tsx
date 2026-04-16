@@ -10,10 +10,11 @@ const EFFECTIVE_DATE = 'April 5, 2026';
 
 export const metadata: Metadata = {
   title: 'SMS Consent | CallbackCloser',
-  description: 'Learn how CallbackCloser collects SMS consent for missed call follow-up, callback coordination, customer care, and account updates.',
+  description:
+    'Review the SMS consent disclosure language CallbackCloser uses for missed call follow-up, callback coordination, customer care, and account updates.',
 };
 
-const messageTypes = ['Missed call follow-up', 'Callback coordination', 'Service-related questions', 'Customer care', 'Account notifications'];
+const messageTypes = ['Missed call follow-up', 'Callback coordination', 'Service updates', 'Customer care', 'Account notifications'];
 const messageDetails = [
   'Message frequency varies.',
   'Message and data rates may apply.',
@@ -32,8 +33,8 @@ export default function SmsConsentPage() {
             <h1 className="text-4xl font-semibold tracking-tight">SMS Consent</h1>
             <p className="text-sm text-muted-foreground">Effective date: {EFFECTIVE_DATE}</p>
             <p className="text-base text-muted-foreground">
-              Enter your phone number to receive SMS updates related to missed call follow-up, callback coordination, service-related
-              questions, and account or service updates.
+              Review the disclosure language CallbackCloser uses in live SMS opt-in flows for missed call follow-up, callback
+              coordination, service updates, customer care, and account notifications.
             </p>
           </header>
 
@@ -60,7 +61,7 @@ export default function SmsConsentPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Message details</CardTitle>
-                  <CardDescription>Consent requires an unchecked checkbox and a phone number before submission.</CardDescription>
+                  <CardDescription>Live opt-in flows must show these terms before consent is captured.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-muted-foreground">
                   {messageDetails.map((item) => (
@@ -86,6 +87,11 @@ export default function SmsConsentPage() {
                   </Link>
                 </CardContent>
               </Card>
+
+              <p className="text-sm text-muted-foreground">
+                This page is a public compliance reference. CallbackCloser records consent inside the actual signup, intake, or customer
+                messaging flow, not on this page.
+              </p>
 
               <p className="text-sm text-muted-foreground">
                 Need help? Email{' '}
