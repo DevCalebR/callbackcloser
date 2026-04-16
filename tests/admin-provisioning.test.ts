@@ -80,16 +80,21 @@ test('admin provisioning checklist surfaces incomplete rollout steps clearly', (
   const ownerStep = checklist.find((item) => item.key === 'owner_account');
   const numberStep = checklist.find((item) => item.key === 'texting_number');
   const voiceStep = checklist.find((item) => item.key === 'voice_webhook');
+  const a2pStep = checklist.find((item) => item.key === 'a2p_registration');
 
   assert.equal(ownerStep?.complete, false);
   assert.match(ownerStep?.detail || '', /Connect the Clerk user|Add an owner email/);
   assert.equal(numberStep?.complete, false);
   assert.equal(voiceStep?.complete, false);
+  assert.equal(a2pStep?.complete, false);
 });
 
 test('admin provisioning checklist shows completed rollout when owner, messaging, and webhooks are ready', () => {
   const checklist = buildAdminProvisioningChecklist({
-    business: createBusiness(),
+    business: createBusiness({
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-15T00:00:00.000Z'),
+    }),
     notificationSettings: {
       ownerPhone: '+15551234567',
       ownerEmail: 'owner@example.com',

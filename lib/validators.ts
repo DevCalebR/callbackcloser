@@ -57,6 +57,10 @@ export const adminBusinessUpdateSchema = adminBusinessDraftSchema.extend({
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
   twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pCustomerProfileSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pBrandSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pCampaignSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pFailureReason: z.string().trim().max(500).optional().or(z.literal('')),
   managedTwilioStatus: z
     .enum([
       'DRAFT',

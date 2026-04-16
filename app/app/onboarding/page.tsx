@@ -70,7 +70,7 @@ export default async function OnboardingPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Create your business workspace</h1>
           <p className="text-sm text-muted-foreground">
-            Start with the business details now. Next, you will land in Business Settings where CallbackCloser helps set up your texting line, routing, owner alerts, billing, and first missed-call test.
+            Start with the business details now. Next, you will land in Business Settings where CallbackCloser helps set up your texting line, routing, owner alerts, billing, and the A2P approval path needed before live customer texting is truly ready.
           </p>
         </div>
       </div>
@@ -88,7 +88,7 @@ export default async function OnboardingPage({
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
           <div className="rounded-xl border bg-background/80 p-4">1. Business Settings opens so you can confirm routing and we can provision your business texting line.</div>
-          <div className="rounded-xl border bg-background/80 p-4">2. Billing is activated so live missed calls can trigger automated SMS follow-up.</div>
+          <div className="rounded-xl border bg-background/80 p-4">2. Billing and A2P readiness are confirmed so live missed calls can trigger compliant automated SMS follow-up.</div>
           <div className="rounded-xl border bg-background/80 p-4">3. You run the missed-call test and confirm the owner alert arrives with a ready-to-call summary.</div>
         </CardContent>
       </Card>

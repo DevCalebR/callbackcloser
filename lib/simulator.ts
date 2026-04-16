@@ -45,8 +45,12 @@ export async function getSimulatorBusiness() {
       name: true,
       ownerClerkId: true,
       notifyPhone: true,
+      twilioSubaccountSid: true,
+      twilioMessagingServiceSid: true,
       twilioPhoneNumber: true,
       twilioPrimaryPhoneNumber: true,
+      managedTwilioStatus: true,
+      a2pFailureReason: true,
       subscriptionStatus: true,
       serviceLabel1: true,
       serviceLabel2: true,
@@ -74,8 +78,12 @@ export async function getSimulatorRun(publicId: string) {
         select: {
           id: true,
           name: true,
+          twilioSubaccountSid: true,
+          twilioMessagingServiceSid: true,
           twilioPhoneNumber: true,
           twilioPrimaryPhoneNumber: true,
+          managedTwilioStatus: true,
+          a2pFailureReason: true,
           serviceLabel1: true,
           serviceLabel2: true,
           serviceLabel3: true,
@@ -87,5 +95,18 @@ export async function getSimulatorRun(publicId: string) {
 
 export type SimulatorRunRecord = SimulatorRun & {
   lead: Lead & { messages: Message[]; ownerNotifications: OwnerNotification[]; call: { createdAt: Date } | null };
-  business: Pick<Business, 'id' | 'name' | 'twilioPhoneNumber' | 'twilioPrimaryPhoneNumber' | 'serviceLabel1' | 'serviceLabel2' | 'serviceLabel3'>;
+  business: Pick<
+    Business,
+    | 'id'
+    | 'name'
+    | 'twilioSubaccountSid'
+    | 'twilioMessagingServiceSid'
+    | 'twilioPhoneNumber'
+    | 'twilioPrimaryPhoneNumber'
+    | 'managedTwilioStatus'
+    | 'a2pFailureReason'
+    | 'serviceLabel1'
+    | 'serviceLabel2'
+    | 'serviceLabel3'
+  >;
 };

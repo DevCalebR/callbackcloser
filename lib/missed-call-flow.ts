@@ -14,8 +14,12 @@ type LeadFlowBusiness = Pick<
   | 'name'
   | 'ownerClerkId'
   | 'notifyPhone'
+  | 'twilioSubaccountSid'
+  | 'twilioMessagingServiceSid'
   | 'twilioPhoneNumber'
   | 'twilioPrimaryPhoneNumber'
+  | 'managedTwilioStatus'
+  | 'a2pFailureReason'
   | 'subscriptionStatus'
   | 'serviceLabel1'
   | 'serviceLabel2'
@@ -55,6 +59,10 @@ async function deliverLeadMessage(params: {
   body: string;
   transport: 'twilio' | 'simulated';
   isSimulator?: boolean;
+  twilioSubaccountSid?: string | null;
+  twilioMessagingServiceSid?: string | null;
+  managedTwilioStatus?: Business['managedTwilioStatus'];
+  a2pFailureReason?: string | null;
 }) {
   if (params.transport === 'simulated' || params.isSimulator) {
     const message = await persistOutboundMessageRecord({
@@ -75,6 +83,10 @@ async function deliverLeadMessage(params: {
     fromPhone: params.fromPhone,
     toPhone: params.toPhone,
     body: params.body,
+    twilioSubaccountSid: params.twilioSubaccountSid,
+    messagingServiceSid: params.twilioMessagingServiceSid,
+    managedTwilioStatus: params.managedTwilioStatus,
+    a2pFailureReason: params.a2pFailureReason,
   });
 }
 
@@ -137,7 +149,15 @@ export async function startMissedCallRecovery(params: StartRecoveryParams) {
 
   const fromPhone = getBusinessTextingNumber(params.business);
   if (!fromPhone || lead.smsStartedAt || (!params.forceAutomation && lead.billingRequired)) {
-    return { lead, started: false as const };
+    return {
+      lead,
+      started: false as const,
+      reason: !fromPhone
+        ? ('missing_twilio_number' as const)
+        : lead.smsStartedAt
+          ? ('already_started' as const)
+          : ('billing_required' as const),
+    };
   }
 
   const prompt = getServicePrompt(params.business);
@@ -149,6 +169,10 @@ export async function startMissedCallRecovery(params: StartRecoveryParams) {
     body: prompt,
     transport: params.transport ?? (params.isSimulator ? 'simulated' : 'twilio'),
     isSimulator: params.isSimulator,
+    twilioSubaccountSid: params.business.twilioSubaccountSid,
+    twilioMessagingServiceSid: params.business.twilioMessagingServiceSid,
+    managedTwilioStatus: params.business.managedTwilioStatus,
+    a2pFailureReason: params.business.a2pFailureReason,
   });
 
   if (!sendResult.suppressed) {
@@ -163,7 +187,11 @@ export async function startMissedCallRecovery(params: StartRecoveryParams) {
     });
   }
 
-  return { lead, started: !sendResult.suppressed };
+  return {
+    lead,
+    started: !sendResult.suppressed,
+    reason: sendResult.suppressed ? sendResult.reason : ('started' as const),
+  };
 }
 
 export async function processLeadInboundReply(params: ProcessReplyParams) {
@@ -239,6 +267,10 @@ export async function processLeadInboundReply(params: ProcessReplyParams) {
     body: transition.responseText,
     transport: params.transport ?? (lead.isSimulator ? 'simulated' : 'twilio'),
     isSimulator: lead.isSimulator,
+    twilioSubaccountSid: params.business.twilioSubaccountSid,
+    twilioMessagingServiceSid: params.business.twilioMessagingServiceSid,
+    managedTwilioStatus: params.business.managedTwilioStatus,
+    a2pFailureReason: params.business.a2pFailureReason,
   });
 
   if (!sendResult.suppressed) {

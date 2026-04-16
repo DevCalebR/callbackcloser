@@ -34,19 +34,18 @@ export default async function CallFlowPage() {
   const readiness = {
     ready:
       Boolean(business.forwardingNumber) &&
-      Boolean(managedTextingNumber) &&
-      managedTwilioSummary.messagingServiceReady &&
+      managedTwilioSummary.messagingReady &&
       Boolean(business.notifyPhone) &&
       !ownerNotifyPhoneOptedOut &&
       billingAccess.billingActive,
     blockers: [
       !managedTextingNumber ? { key: 'texting_line', label: 'Texting line', detail: 'CallbackCloser still needs to provision your business texting line.' } : null,
       !business.forwardingNumber ? { key: 'routing', label: 'Routing setup', detail: 'Add the business line that should still ring when new calls come in.' } : null,
-      !managedTwilioSummary.messagingServiceReady
-        ? { key: 'messaging', label: 'Messaging service', detail: 'Managed messaging is still being configured for this workspace.' }
+      !managedTwilioSummary.onboardingReady
+        ? { key: 'messaging', label: 'Messaging infrastructure', detail: managedTwilioSummary.nextStep }
         : null,
       !managedTwilioSummary.complianceReady
-        ? { key: 'compliance', label: 'Compliance review', detail: managedTwilioSummary.description }
+        ? { key: 'compliance', label: 'A2P approval', detail: managedTwilioSummary.description }
         : null,
       !business.notifyPhone || ownerNotifyPhoneOptedOut
         ? {
@@ -82,15 +81,15 @@ export default async function CallFlowPage() {
     },
     {
       key: 'messaging',
-      label: 'Messaging service active',
-      detail: managedTwilioSummary.messagingServiceReady
-        ? 'Managed messaging is connected to the business texting line.'
-        : 'Managed messaging is still being configured.',
-      complete: managedTwilioSummary.messagingServiceReady,
+      label: 'Messaging infrastructure ready',
+      detail: managedTwilioSummary.onboardingReady
+        ? 'Managed messaging, number assignment, and webhook sync are ready.'
+        : managedTwilioSummary.nextStep,
+      complete: managedTwilioSummary.onboardingReady,
     },
     {
       key: 'compliance',
-      label: managedTwilioSummary.complianceReady ? 'Compliance approved' : 'Compliance review in progress',
+      label: managedTwilioSummary.complianceReady ? 'A2P approved' : 'A2P approval in progress',
       detail: managedTwilioSummary.description,
       complete: managedTwilioSummary.complianceReady,
     },
@@ -117,20 +116,22 @@ export default async function CallFlowPage() {
   const systemStatus = getCustomerSystemStatus(business, successfulLeadCount);
 
   const flowSteps = [
-    {
-      title: 'A caller reaches your business texting line',
-      detail: managedTextingNumber
-        ? `Calls hit ${formatPhoneForDisplay(managedTextingNumber)} so CallbackCloser can catch the missed-call moment.`
-        : 'CallbackCloser still needs to provision the business texting line that will cover missed calls.',
+      {
+        title: 'A caller reaches your business texting line',
+        detail: managedTextingNumber
+          ? `Calls hit ${formatPhoneForDisplay(managedTextingNumber)} so CallbackCloser can catch the missed-call moment.`
+          : 'CallbackCloser still needs to provision the business texting line that will cover missed calls.',
     },
     {
       title: 'CallbackCloser sees the missed call',
       detail: `Current missed-call timeout is ${business.missedCallSeconds} seconds before the recovery flow starts.`,
     },
-    {
-      title: 'The caller gets a text right away',
-      detail: 'The conversation collects the service type, urgency, ZIP, callback timing, and optional name without extra admin work.',
-    },
+      {
+        title: 'The caller gets a text right away',
+        detail: managedTwilioSummary.complianceReady
+          ? 'The conversation collects the service type, urgency, ZIP, callback timing, and optional name without extra admin work.'
+          : 'The automated SMS handoff stays pending until the managed Twilio setup and A2P approval are complete.',
+      },
     {
       title: 'You get the handoff ready to call',
       detail: business.notifyPhone
@@ -209,13 +210,13 @@ export default async function CallFlowPage() {
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             {readiness.ready ? (
               <div className="rounded-xl border border-accent/40 bg-accent/20 p-4">
-                Routing, notifications, billing, and managed setup look ready. Run the missed-call test and confirm the owner alert lands.
+                Routing, notifications, billing, managed setup, and A2P approval look ready. Run the missed-call test and confirm the owner alert lands.
               </div>
             ) : (
               <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-destructive">
                 <p className="font-medium">Action needed before go-live</p>
                 <p className="mt-1 text-sm text-destructive/80">
-                  {readiness.blockers.length} blocker{readiness.blockers.length === 1 ? '' : 's'} still need attention before the system is fully live.
+                  {readiness.blockers.length} blocker{readiness.blockers.length === 1 ? '' : 's'} still need attention before the system is operationally ready for live customer messaging.
                 </p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   {readiness.blockers.map((blocker) => (
