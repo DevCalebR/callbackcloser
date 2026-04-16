@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,7 +51,7 @@ export function PublicDemoReplay({
     return () => window.clearTimeout(timeout);
   }, [isReplaying, visibleCount, messages.length]);
 
-  const visibleMessages = useMemo(() => messages.slice(0, visibleCount), [messages, visibleCount]);
+  const visibleMessages = messages.slice(0, visibleCount);
   const replayStage = getReplayStage(visibleMessages.length, messages.length);
   const ownerAlertReady = replayStage === 'qualified';
 

@@ -60,7 +60,7 @@ export default function DemoPage() {
                     See it in action
                   </Link>
                 </div>
-                <p className="text-sm text-muted-foreground">I can set this up for your business in 10 minutes.</p>
+                <p className="text-sm text-muted-foreground">Get this live on your number fast, without changing how your team already works.</p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -257,7 +257,7 @@ export default function DemoPage() {
             <div className="space-y-3">
               <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Want this on your business?</h2>
               <p className="mx-auto max-w-2xl text-muted-foreground">
-                I can set it up on your number and have you live fast.
+                We can set it up on your number and get you live fast.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
