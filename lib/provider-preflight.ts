@@ -213,13 +213,15 @@ export function runTwilioPreflight(env: EnvMap = process.env): ProviderPreflight
   const details: string[] = [];
   const fixes = [
     'Set NEXT_PUBLIC_APP_URL to the exact public origin used in Twilio webhook configuration.',
-    'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WEBHOOK_AUTH_TOKEN, and TWILIO_VALIDATE_SIGNATURE=true in production.',
+    'Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN, then enable TWILIO_VALIDATE_SIGNATURE=true in production.',
+    'Use TWILIO_WEBHOOK_AUTH_TOKEN only for local/non-production token-mode webhook testing.',
     'Run npm run webhooks:print and compare those URLs against Twilio Console.',
   ];
 
   const app = getAppUrlContext(env);
   const webhookToken = readEnv(env, 'TWILIO_WEBHOOK_AUTH_TOKEN');
   const signatureValidationEnabled = readBooleanEnv(env, 'TWILIO_VALIDATE_SIGNATURE');
+  const usesSharedWebhookToken = !signatureValidationEnabled;
   const productionLike = readEnv(env, 'NODE_ENV') === 'production' || readEnv(env, 'VERCEL_ENV') === 'production';
 
   if (!readEnv(env, 'TWILIO_ACCOUNT_SID')) {
@@ -230,8 +232,8 @@ export function runTwilioPreflight(env: EnvMap = process.env): ProviderPreflight
     failures.push('TWILIO_AUTH_TOKEN is missing.');
   }
 
-  if (!webhookToken) {
-    failures.push('TWILIO_WEBHOOK_AUTH_TOKEN is missing.');
+  if (usesSharedWebhookToken && !webhookToken) {
+    failures.push('TWILIO_WEBHOOK_AUTH_TOKEN is missing for token-mode webhook auth.');
   }
 
   if (productionLike && !signatureValidationEnabled) {
@@ -247,12 +249,17 @@ export function runTwilioPreflight(env: EnvMap = process.env): ProviderPreflight
   const smsUrl = new URL('/api/twilio/sms', `${app.baseUrl}/`);
   const statusUrl = new URL('/api/twilio/status', `${app.baseUrl}/`);
 
-  if (webhookToken) {
+  if (usesSharedWebhookToken && webhookToken) {
     voiceUrl.searchParams.set('webhook_token', webhookToken);
     smsUrl.searchParams.set('webhook_token', webhookToken);
     statusUrl.searchParams.set('webhook_token', webhookToken);
   }
 
+  details.push(
+    signatureValidationEnabled
+      ? 'Webhook auth mode: X-Twilio-Signature validation with account-aware auth token resolution.'
+      : 'Webhook auth mode: shared token fallback (non-production only).'
+  );
   details.push(`Expected voice webhook URL: ${redactWebhookToken(voiceUrl.toString())}`);
   details.push(`Expected SMS webhook URL: ${redactWebhookToken(smsUrl.toString())}`);
   details.push(`Expected status webhook URL: ${redactWebhookToken(statusUrl.toString())}`);

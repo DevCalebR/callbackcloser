@@ -201,8 +201,8 @@ Set:
 
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
-- `TWILIO_WEBHOOK_AUTH_TOKEN` (your shared secret used by this app)
 - `TWILIO_VALIDATE_SIGNATURE` (**required in production**, set to `true`)
+- `TWILIO_WEBHOOK_AUTH_TOKEN` (optional, only for local/non-production token-mode testing)
 
 ### Twilio number provisioning (recommended)
 
@@ -223,19 +223,18 @@ npm run webhooks:print
 
 - **Voice webhook (A CALL COMES IN)**
   - Method: `POST`
-  - URL: `https://YOUR_DOMAIN/api/twilio/voice?webhook_token=YOUR_TWILIO_WEBHOOK_AUTH_TOKEN`
+  - URL: `https://YOUR_DOMAIN/api/twilio/voice`
 - **Messaging webhook (A MESSAGE COMES IN)**
   - Method: `POST`
-  - URL: `https://YOUR_DOMAIN/api/twilio/sms?webhook_token=YOUR_TWILIO_WEBHOOK_AUTH_TOKEN`
+  - URL: `https://YOUR_DOMAIN/api/twilio/sms`
 
-The `/api/twilio/status` callback URL is set automatically by the TwiML returned from `/api/twilio/voice` (the `<Dial action="...">` URL includes the same `webhook_token`).
+The `/api/twilio/status` callback URL is set automatically by the TwiML returned from `/api/twilio/voice`.
 
 Notes:
 
-- The app supports shared-secret checks (header/query) for non-production/local workflows.
 - Production requires `TWILIO_VALIDATE_SIGNATURE=true` and valid Twilio `X-Twilio-Signature`.
-- In production, token-only webhook auth is rejected and signature validation fails closed.
-- Some Twilio Console surfaces do not expose custom header configuration, so query param fallback is supported for direct console setup.
+- Production rejects token-only webhook auth and validates subaccount webhooks with the correct Twilio account auth token.
+- Shared-secret checks (header/query) are kept only for explicit non-production/local token-mode workflows.
 - `/api/twilio/status` is called automatically by the TwiML generated from `/api/twilio/voice`.
 
 ## Twilio Webhook Flow

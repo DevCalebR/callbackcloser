@@ -1,5 +1,6 @@
 import { getConfiguredAppBaseUrl, resolveConfiguredAppBaseUrl } from '@/lib/env.server';
 import { getTwilioClient, type TwilioClient } from '@/lib/twilio-client';
+import { isTwilioSignatureValidationEnabled } from '@/lib/twilio-webhook';
 import {
   buildTwilioIncomingPhoneNumberWebhookUpdate,
   type TwilioWebhookConfigLite,
@@ -39,14 +40,17 @@ export function getTwilioWebhookConfig(): TwilioWebhookConfig {
   }
 
   const webhookToken = process.env.TWILIO_WEBHOOK_AUTH_TOKEN?.trim();
-  if (!webhookToken) {
+  const usesSharedWebhookToken = !isTwilioSignatureValidationEnabled();
+  if (usesSharedWebhookToken && !webhookToken) {
     throw new Error('Missing TWILIO_WEBHOOK_AUTH_TOKEN');
   }
 
   const normalizedBaseUrl = parsed.toString().replace(/\/$/, '');
   const buildUrl = (path: string) => {
     const next = new URL(path, `${normalizedBaseUrl}/`);
-    next.searchParams.set('webhook_token', webhookToken);
+    if (usesSharedWebhookToken && webhookToken) {
+      next.searchParams.set('webhook_token', webhookToken);
+    }
     return next.toString();
   };
 
