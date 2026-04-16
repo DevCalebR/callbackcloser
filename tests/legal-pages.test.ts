@@ -44,8 +44,8 @@ test('sms consent page includes required disclosures and trust links', () => {
     smsConsentForm,
     /By checking this box, you agree to receive SMS messages from CallbackCloser related to customer care and account[\s\S]*notifications\./
   );
-  assert.match(smsConsentForm, /Continue/);
-  assert.match(smsConsentForm, /disabled={!canSubmit}/);
+  assert.match(smsConsentForm, /does not submit or store phone numbers/i);
+  assert.match(smsConsentForm, /unchecked checkbox and a phone number before submission/i);
   assert.match(privacy, /does not sell mobile numbers/i);
   assert.match(terms, /SMS Consent/);
   assert.match(contact, /support@callbackcloser\.com/);
