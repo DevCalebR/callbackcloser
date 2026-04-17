@@ -1,5 +1,6 @@
 import { LeadStatus, SmsConversationState, type Business, type Lead } from '@prisma/client';
 
+import { isBusinessAutomationPaused } from '@/lib/admin-dashboard';
 import { db } from '@/lib/db';
 import { buildLeadSummary, getLeadReadiness, getQualifiedLeadStatus, isLeadQualified } from '@/lib/lead-qualification';
 import { notifyQualifiedLeadIfNeeded } from '@/lib/owner-notifications';
@@ -21,6 +22,8 @@ type LeadFlowBusiness = Pick<
   | 'managedTwilioStatus'
   | 'a2pFailureReason'
   | 'subscriptionStatus'
+  | 'provisioningStatus'
+  | 'archivedAt'
   | 'serviceLabel1'
   | 'serviceLabel2'
   | 'serviceLabel3'
@@ -147,6 +150,14 @@ export async function startMissedCallRecovery(params: StartRecoveryParams) {
     });
   }
 
+  if (isBusinessAutomationPaused(params.business)) {
+    return {
+      lead,
+      started: false as const,
+      reason: 'automation_paused' as const,
+    };
+  }
+
   const fromPhone = getBusinessTextingNumber(params.business);
   if (!fromPhone || lead.smsStartedAt || (!params.forceAutomation && lead.billingRequired)) {
     return {
@@ -255,7 +266,7 @@ export async function processLeadInboundReply(params: ProcessReplyParams) {
   }
 
   const fromPhone = getBusinessTextingNumber(params.business);
-  if (!fromPhone) {
+  if (!fromPhone || isBusinessAutomationPaused(params.business)) {
     return { lead: updatedLead, transition, duplicate: false as const, notificationResult };
   }
 
