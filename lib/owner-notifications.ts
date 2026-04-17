@@ -1,6 +1,7 @@
 import { LeadReadiness, LeadStatus, OwnerNotificationChannel, OwnerNotificationStatus, type Business, type Lead } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
+import { isBusinessAutomationPaused } from '@/lib/admin-dashboard';
 import { getEffectiveBusinessNotificationSettings } from '@/lib/business-notification-settings';
 import { db } from '@/lib/db';
 import { sendTransactionalEmail } from '@/lib/email';
@@ -137,6 +138,8 @@ async function getLeadForOwnerNotifications(leadId: string) {
           twilioPhoneNumber: true,
           managedTwilioStatus: true,
           a2pFailureReason: true,
+          provisioningStatus: true,
+          archivedAt: true,
         },
       },
     },
@@ -310,6 +313,9 @@ export async function notifyQualifiedLeadIfNeeded(leadId: string) {
   if (!lead) return { notified: false, reason: 'lead_not_found' as const };
   if (!isLeadQualified(lead)) return { notified: false, reason: 'lead_not_qualified' as const };
   if (lead.notifiedAt) return { notified: false, reason: 'already_notified' as const };
+  if (isBusinessAutomationPaused(lead.business)) {
+    return { notified: false, reason: 'business_paused' as const };
+  }
 
   const settings = await getEffectiveBusinessNotificationSettings(lead.business);
   if (settings.urgentOnly && lead.readiness !== LeadReadiness.URGENT) {

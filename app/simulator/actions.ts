@@ -101,6 +101,8 @@ export async function replyToSimulatorRunAction(formData: FormData) {
       ownerClerkId: 'simulator',
       notifyPhone: null,
       subscriptionStatus: SubscriptionStatus.ACTIVE,
+      provisioningStatus: 'LIVE',
+      archivedAt: null,
     },
     leadId: run.leadId,
     body,

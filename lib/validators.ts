@@ -42,6 +42,7 @@ export const adminBusinessDraftSchema = z.object({
   ownerName: z.string().trim().max(120).optional().or(z.literal('')),
   ownerEmail: z.string().trim().email(),
   ownerPhone: z.string().max(30).optional().or(z.literal('')),
+  isTestBusiness: z.coerce.boolean().optional().default(false),
   forwardingNumber: z.string().min(7).max(30),
   timezone: z.string().min(2).max(100).default('America/New_York'),
   missedCallSeconds: z.coerce.number().int().min(5).max(90).default(20),
@@ -122,6 +123,21 @@ export const adminWebhookSyncSchema = z.object({
 export const adminProvisioningStatusSchema = z.object({
   businessId: z.string().min(1),
   status: z.enum(['DRAFT', 'ONBOARDING', 'NEEDS_ATTENTION', 'LIVE', 'PAUSED']),
+});
+
+export const adminSendTestSmsSchema = z.object({
+  businessId: z.string().min(1),
+  destinationPhone: z.string().trim().min(7).max(30),
+});
+
+export const adminArchiveBusinessSchema = z.object({
+  businessId: z.string().min(1),
+  confirmationName: z.string().trim().min(1),
+});
+
+export const adminDeleteBusinessSchema = z.object({
+  businessId: z.string().min(1),
+  confirmationName: z.string().trim().min(1),
 });
 
 export const businessTwilioAdminOverrideSchema = z.object({

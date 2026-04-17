@@ -13,6 +13,8 @@ model Business {
   ownerClerkId                String             @unique
   name                        String
   ownerName                   String?
+  isTestBusiness              Boolean            @default(false)
+  archivedAt                  DateTime?
   forwardingNumber            String
   notifyPhone                 String?
   provisioningStatus          BusinessProvisioningStatus @default(DRAFT)
@@ -58,6 +60,8 @@ model Business {
   smsConsents                 SmsConsent[]
 
   @@index([subscriptionStatus])
+  @@index([archivedAt])
+  @@index([isTestBusiness])
 }
 
 model Call {

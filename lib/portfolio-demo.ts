@@ -35,6 +35,8 @@ const demoBusiness: Business = {
   ownerClerkId: DEMO_USER_ID,
   name: 'Northside HVAC & Plumbing (Demo)',
   ownerName: 'Jordan Smith',
+  isTestBusiness: false,
+  archivedAt: null,
   forwardingNumber: '+15125550111',
   notifyPhone: '+15125550199',
   provisioningStatus: BusinessProvisioningStatus.LIVE,
