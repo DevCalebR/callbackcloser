@@ -12,11 +12,16 @@ import {
   updateBusinessProvisioningStatus,
 } from '@/lib/admin-provisioning';
 import { requireAdmin } from '@/lib/admin';
+import { canDeleteTestBusiness } from '@/lib/admin-dashboard';
 import { logAuditEvent } from '@/lib/audit-log';
 import { db } from '@/lib/db';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
+import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import {
+  adminArchiveBusinessSchema,
   adminBusinessDraftSchema,
+  adminDeleteBusinessSchema,
+  adminSendTestSmsSchema,
   adminBusinessUpdateSchema,
   adminConnectOwnerSchema,
   adminProvisionBusinessSchema,
@@ -52,6 +57,7 @@ function buildAdminBusinessRedirectPath(
 async function revalidateAdminPaths(businessId: string) {
   revalidatePath('/admin');
   revalidatePath(`/admin/${businessId}`);
+  revalidatePath(`/admin/${businessId}/workspace`);
 }
 
 function normalizeOptionalE164Phone(value: string | null | undefined, label: string) {
@@ -97,6 +103,15 @@ function buildChangedFieldMetadata(changes: Array<{ key: string; label: string; 
   }));
 }
 
+async function loadBusinessForLifecycleAction(businessId: string) {
+  return db.business.findUnique({
+    where: { id: businessId },
+    include: {
+      notificationSettings: true,
+    },
+  });
+}
+
 export async function createDemoBusinessAction(formData: FormData) {
   const admin = await requireAdmin();
   const ownerPhone = normalizePhoneNumber(getString(formData, 'ownerPhone')) || null;
@@ -111,6 +126,7 @@ export async function createDemoBusinessAction(formData: FormData) {
       ownerClerkId: DEMO_OWNER_CLERK_ID,
       ownerName: 'CallbackCloser Demo',
       name: DEFAULT_DEMO_NAME,
+      isTestBusiness: true,
       forwardingNumber,
       notifyPhone: ownerPhone,
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
@@ -129,6 +145,8 @@ export async function createDemoBusinessAction(formData: FormData) {
     update: {
       ownerName: 'CallbackCloser Demo',
       name: DEFAULT_DEMO_NAME,
+      isTestBusiness: true,
+      archivedAt: null,
       forwardingNumber,
       notifyPhone: ownerPhone,
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
@@ -182,6 +200,7 @@ export async function createAdminBusinessAction(formData: FormData) {
       ownerClerkId: buildPendingOwnerClerkId(),
       ownerName: data.ownerName || null,
       name: data.name,
+      isTestBusiness: data.isTestBusiness,
       forwardingNumber,
       notifyPhone: ownerPhone,
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
@@ -307,6 +326,7 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
     existingBusiness.a2pBrandSid !== a2pBrandSid ||
     existingBusiness.a2pCampaignSid !== a2pCampaignSid ||
     existingBusiness.a2pFailureReason !== a2pFailureReason;
+  const testFlagChanged = existingBusiness.isTestBusiness !== data.isTestBusiness;
 
   const changedFields = [
     existingOwnerPhone !== ownerPhone
@@ -358,6 +378,14 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
           after: a2pFailureReason,
         }
       : null,
+    testFlagChanged
+      ? {
+          key: 'isTestBusiness',
+          label: 'test business flag',
+          before: existingBusiness.isTestBusiness ? 'true' : 'false',
+          after: data.isTestBusiness ? 'true' : 'false',
+        }
+      : null,
     managedTwilioStatusChanged
       ? {
           key: 'managedTwilioStatus',
@@ -373,6 +401,7 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
     data: {
       ownerName: data.ownerName || null,
       name: data.name,
+      isTestBusiness: data.isTestBusiness,
       forwardingNumber: normalizePhoneNumber(data.forwardingNumber),
       notifyPhone: ownerPhone,
       missedCallSeconds: data.missedCallSeconds,
@@ -590,4 +619,200 @@ export async function setBusinessProvisioningStatusAction(formData: FormData) {
   await updateBusinessProvisioningStatus(parsed.data.businessId, parsed.data.status as BusinessProvisioningStatus, null);
   await revalidateAdminPaths(parsed.data.businessId);
   redirect(buildAdminBusinessRedirectPath(parsed.data.businessId, { statusSaved: parsed.data.status.toLowerCase() }));
+}
+
+export async function sendBusinessTestSmsAction(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const parsed = adminSendTestSmsSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid test SMS request.')}`);
+  }
+
+  const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
+  if (!business) {
+    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+  }
+
+  const destinationPhone = normalizeOptionalE164Phone(parsed.data.destinationPhone, 'Test SMS destination');
+  const fromPhone = business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber;
+  if (!fromPhone) {
+    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'A business texting number is required before sending a test SMS.' }));
+  }
+
+  try {
+    const result = await sendAndPersistOutboundMessage({
+      businessId: business.id,
+      fromPhone,
+      toPhone: destinationPhone!,
+      body: `CallbackCloser admin test: ${business.name} is using ${fromPhone} for live support verification.`,
+      participant: 'OWNER',
+      twilioSubaccountSid: business.twilioSubaccountSid,
+      messagingServiceSid: business.twilioMessagingServiceSid,
+      managedTwilioStatus: business.managedTwilioStatus,
+      a2pFailureReason: business.a2pFailureReason,
+    });
+
+    if (result.suppressed) {
+      redirect(
+        buildAdminBusinessRedirectPath(business.id, {
+          error: `Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`,
+        })
+      );
+    }
+
+    logAuditEvent({
+      event: 'admin_test_sms_sent',
+      actorType: 'user',
+      actorId: admin.userId,
+      businessId: business.id,
+      targetType: 'business',
+      targetId: business.id,
+      metadata: {
+        actorEmail: admin.email,
+        destinationPhone: maskPhoneForAudit(destinationPhone),
+        messageSid: result.sent.sid,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to send test SMS.';
+    redirect(buildAdminBusinessRedirectPath(business.id, { error: message }));
+  }
+
+  await revalidateAdminPaths(business.id);
+  redirect(buildAdminBusinessRedirectPath(business.id, { testSms: 1 }));
+}
+
+export async function archiveBusinessAction(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const parsed = adminArchiveBusinessSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid archive request.')}`);
+  }
+
+  const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
+  if (!business) {
+    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+  }
+
+  if (parsed.data.confirmationName !== business.name) {
+    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to archive it.' }));
+  }
+
+  await db.business.update({
+    where: { id: business.id },
+    data: {
+      archivedAt: new Date(),
+      provisioningStatus: BusinessProvisioningStatus.PAUSED,
+      provisioningError: null,
+      provisioningLastRunAt: new Date(),
+    },
+  });
+
+  logAuditEvent({
+    event: 'admin_business_archived',
+    actorType: 'user',
+    actorId: admin.userId,
+    businessId: business.id,
+    targetType: 'business',
+    targetId: business.id,
+    metadata: {
+      actorEmail: admin.email,
+      businessName: business.name,
+      isTestBusiness: business.isTestBusiness,
+    },
+  });
+
+  await revalidateAdminPaths(business.id);
+  redirect(buildAdminBusinessRedirectPath(business.id, { archived: 1 }));
+}
+
+export async function restoreBusinessAction(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const parsed = adminArchiveBusinessSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid restore request.')}`);
+  }
+
+  const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
+  if (!business) {
+    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+  }
+
+  if (parsed.data.confirmationName !== business.name) {
+    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to restore it.' }));
+  }
+
+  await db.business.update({
+    where: { id: business.id },
+    data: {
+      archivedAt: null,
+      provisioningStatus:
+        business.provisioningStatus === BusinessProvisioningStatus.PAUSED ? BusinessProvisioningStatus.ONBOARDING : business.provisioningStatus,
+      provisioningLastRunAt: new Date(),
+    },
+  });
+
+  logAuditEvent({
+    event: 'admin_business_restored',
+    actorType: 'user',
+    actorId: admin.userId,
+    businessId: business.id,
+    targetType: 'business',
+    targetId: business.id,
+    metadata: {
+      actorEmail: admin.email,
+      businessName: business.name,
+    },
+  });
+
+  await revalidateAdminPaths(business.id);
+  redirect(buildAdminBusinessRedirectPath(business.id, { restored: 1 }));
+}
+
+export async function deleteTestBusinessAction(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const parsed = adminDeleteBusinessSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid delete request.')}`);
+  }
+
+  const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
+  if (!business) {
+    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+  }
+
+  if (parsed.data.confirmationName !== business.name) {
+    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to delete it.' }));
+  }
+
+  if (!canDeleteTestBusiness(business)) {
+    redirect(
+      buildAdminBusinessRedirectPath(business.id, {
+        error: 'Only archived test or demo businesses can be deleted from admin.',
+      })
+    );
+  }
+
+  await db.business.delete({ where: { id: business.id } });
+
+  logAuditEvent({
+    event: 'admin_test_business_deleted',
+    actorType: 'user',
+    actorId: admin.userId,
+    businessId: business.id,
+    targetType: 'business',
+    targetId: business.id,
+    metadata: {
+      actorEmail: admin.email,
+      businessName: business.name,
+      isTestBusiness: business.isTestBusiness,
+    },
+  });
+
+  revalidatePath('/admin');
+  redirect('/admin?deleted=1');
 }

@@ -9,10 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 const navItems = [
+  { href: '/app', label: 'Home' },
   { href: '/app/leads', label: 'Leads' },
   { href: '/app/conversations', label: 'Conversations' },
-  { href: '/app/call-flow', label: 'Call Flow' },
-  { href: '/app/settings', label: 'Business Settings' },
+  { href: '/app/settings', label: 'Settings' },
   { href: '/app/billing', label: 'Billing' },
 ];
 
@@ -30,6 +30,14 @@ export function AppNav({
   systemStatusVariant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'success';
 }) {
   const pathname = usePathname();
+
+  function isActivePath(href: string) {
+    if (href === '/app') {
+      return pathname === '/app';
+    }
+
+    return pathname.startsWith(href);
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b bg-white/80 backdrop-blur">
@@ -60,7 +68,7 @@ export function AppNav({
               href={item.href}
               className={cn(
                 'rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-muted',
-                pathname.startsWith(item.href) && 'bg-muted text-foreground',
+                isActivePath(item.href) && 'bg-muted text-foreground',
               )}
             >
               {item.label}
@@ -85,7 +93,7 @@ export function AppNav({
             href={item.href}
             className={cn(
               'rounded-md px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted',
-              pathname.startsWith(item.href) && 'bg-muted text-foreground',
+              isActivePath(item.href) && 'bg-muted text-foreground',
             )}
           >
             {item.label}

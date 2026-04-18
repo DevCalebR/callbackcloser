@@ -34,8 +34,8 @@ export default function TermsPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">SMS Messaging</h2>
             <p className="text-sm text-muted-foreground">
-              CallbackCloser currently uses SMS for customer care, account notifications, missed call follow-up, and service updates.
-              CallbackCloser is not presented on the public website as a promotional SMS marketing program.
+              CallbackCloser uses SMS for callback coordination, customer support, service updates, and account or service
+              notifications related to a user&apos;s request.
             </p>
             <p className="text-sm text-muted-foreground">
               Public opt-in language is described on the{' '}
@@ -43,7 +43,7 @@ export default function TermsPage() {
                 SMS Consent
               </Link>{' '}
               page. Recipients can use STOP to opt out and HELP for help where messaging is active. Message frequency varies and
-              message and data rates may apply.
+              message and data rates may apply. Consent to receive SMS messages is not a condition of purchase.
             </p>
           </section>
 

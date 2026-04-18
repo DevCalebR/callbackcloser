@@ -30,25 +30,37 @@ test('sms consent page includes required disclosures and trust links', () => {
   const terms = read('app/terms/page.tsx');
   const contact = read('app/contact/page.tsx');
 
-  assert.match(smsConsent, /missed call follow-up/i);
-  assert.match(smsConsent, /customer care/i);
+  assert.match(smsConsent, /respond to customer inquiries/i);
+  assert.match(smsConsent, /callback coordination/i);
+  assert.match(smsConsent, /customer support/i);
   assert.match(smsConsent, /service updates/i);
-  assert.match(smsConsent, /account notifications/i);
+  assert.match(smsConsent, /account or service notifications/i);
+  assert.match(smsConsent, /Consent to receive SMS messages is not a condition of purchase/i);
   assert.match(smsConsent, /Message and data rates may apply/i);
   assert.match(smsConsent, /Reply STOP/i);
   assert.match(smsConsent, /HELP/i);
+  assert.match(smsConsent, /support@callbackcloser\.com/i);
   assert.match(smsConsent, /href="\/privacy"/);
   assert.match(smsConsent, /href="\/terms"/);
-  assert.match(smsConsent, /href="\/contact"/);
   assert.match(
     smsConsentForm,
-    /By checking this box, you agree to receive SMS messages from CallbackCloser related to customer care and account[\s\S]*notifications\./
+    /I agree to receive SMS messages from CallbackCloser related to my request\./
   );
-  assert.match(smsConsentForm, /does not submit or store phone numbers/i);
-  assert.match(smsConsentForm, /compliance reference/i);
-  assert.match(smsConsent, /records consent inside the actual signup, intake, or customer[\s\S]*messaging flow/i);
+  assert.match(smsConsentForm, /htmlFor="sms-consent-phone"/);
+  assert.match(smsConsentForm, /name="phone"/);
+  assert.match(smsConsentForm, /type="tel"/);
+  assert.match(smsConsentForm, /defaultChecked=\{false\}/);
+  assert.match(smsConsentForm, /Continue/);
+  assert.match(smsConsentForm, /Consent to receive SMS messages is not a condition of purchase/i);
+  assert.doesNotMatch(smsConsent, /visual-only|Twilio review only|pilot reference|demo|public compliance reference|consent is recorded elsewhere/i);
+  assert.doesNotMatch(
+    smsConsentForm,
+    /consent language reference|does not submit or store phone numbers|compliance reference|buyers, carriers, and reviewers|use a real phone field|in production, your real consent flow should/i
+  );
   assert.match(privacy, /does not sell mobile numbers/i);
+  assert.match(privacy, /callback coordination/i);
   assert.match(terms, /SMS Consent/);
+  assert.match(terms, /callback coordination/i);
   assert.match(contact, /support@callbackcloser\.com/);
 });
 

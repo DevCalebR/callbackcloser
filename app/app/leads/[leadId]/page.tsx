@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MessageDirection, OwnerNotificationChannel } from '@prisma/client';
+import { LeadStatus, MessageDirection, OwnerNotificationChannel } from '@prisma/client';
 import { notFound } from 'next/navigation';
 
 import { updateLeadStatusAction } from '@/app/app/leads/actions';
@@ -11,7 +11,9 @@ import { getLeadDetailForBusiness } from '@/lib/business-access';
 import {
   formatDateTime,
   formatRelativeTime,
+  getLeadNextStepLabel,
   getLeadStatusBadgeVariant,
+  isLeadOpenStatus,
   isMessageDeliveryIssueStatus,
   leadReadinessLabels,
   leadStatusLabels,
@@ -27,6 +29,22 @@ function resolveSafeReturnPath(value: string | null | undefined) {
     return '/app/leads';
   }
   return nextPath;
+}
+
+function getLeadActionSummary(status: LeadStatus) {
+  if (status === LeadStatus.BOOKED) {
+    return 'This lead is marked booked. Keep the details here for reference.';
+  }
+
+  if (status === LeadStatus.LOST) {
+    return 'This lead is marked lost. You can still review the call and message history here.';
+  }
+
+  if (status === LeadStatus.CONTACTED) {
+    return 'You have already made contact. Update the final outcome when the customer decides.';
+  }
+
+  return 'Call this lead back, then update the outcome so your inbox stays clear.';
 }
 
 function LeadStatusActionForm({
@@ -82,77 +100,83 @@ export default async function LeadDetailPage({
     lead.callerName || lead.contactName ? formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone) : 'Caller name not captured yet';
   const redirectTo = `/app/leads/${lead.id}`;
   const recordingHref = lead.call?.recordingUrl ? `/api/leads/${lead.id}/recording` : null;
+  const nextStepLabel = getLeadNextStepLabel(lead.status);
+  const isOpenLead = isLeadOpenStatus(lead.status);
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
         <Link className="text-sm text-muted-foreground underline underline-offset-4" href={returnPath}>
-          Back to lead inbox
+          Back
         </Link>
-        <Badge variant="outline">Lead workspace</Badge>
+        <Badge variant="outline">Lead details</Badge>
       </div>
 
-      {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead status updated.</div> : null}
+      {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead updated.</div> : null}
       {messageIssues.length > 0 ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           This lead had an SMS delivery issue. Manual follow-up is recommended.
         </div>
       ) : null}
 
-      <Card className="bg-card/95">
-        <CardHeader className="gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <div>
-              <CardTitle className="text-2xl">{primaryLabel}</CardTitle>
-              <CardDescription>{secondaryLabel}</CardDescription>
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader className="gap-6">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">{nextStepLabel}</p>
+                <CardTitle className="text-3xl">{primaryLabel}</CardTitle>
+                <CardDescription>{secondaryLabel}</CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={getLeadStatusBadgeVariant(lead.status)}>{leadStatusLabels[lead.status]}</Badge>
+                <Badge variant={lead.readiness === 'URGENT' ? 'destructive' : lead.readiness === 'QUALIFIED' ? 'secondary' : 'outline'}>
+                  {leadReadinessLabels[lead.readiness]}
+                </Badge>
+                <Badge variant="outline">{smsStateLabels[lead.smsState]}</Badge>
+                {lead.notifiedAt || lead.ownerNotifiedAt ? <Badge variant="secondary">Owner alerted</Badge> : null}
+              </div>
+              <p className="max-w-2xl text-sm text-muted-foreground">{getLeadActionSummary(lead.status)}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant={getLeadStatusBadgeVariant(lead.status)}>{leadStatusLabels[lead.status]}</Badge>
-              <Badge variant={lead.readiness === 'URGENT' ? 'destructive' : lead.readiness === 'QUALIFIED' ? 'secondary' : 'outline'}>
-                {leadReadinessLabels[lead.readiness]}
-              </Badge>
-              <Badge variant="outline">{smsStateLabels[lead.smsState]}</Badge>
-              {lead.notifiedAt || lead.ownerNotifiedAt ? <Badge variant="secondary">Owner alerted</Badge> : null}
+
+            <div className="grid w-full gap-3 xl:max-w-2xl xl:grid-cols-[minmax(0,1.35fr)_repeat(3,minmax(0,1fr))]">
+              <Link className={buttonVariants({ className: 'w-full' })} href={`tel:${lead.callerPhoneNormalized || lead.callerPhone}`}>
+                Call now
+              </Link>
+              <LeadStatusActionForm leadId={lead.id} status="CONTACTED" redirectTo={redirectTo} label="Mark contacted" variant="outline" />
+              <LeadStatusActionForm leadId={lead.id} status="BOOKED" redirectTo={redirectTo} label="Mark booked" />
+              <LeadStatusActionForm leadId={lead.id} status="LOST" redirectTo={redirectTo} label="Mark lost" variant="destructive" />
             </div>
-          </div>
-          <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:min-w-[24rem]">
-            <Link className={buttonVariants({ className: 'w-full' })} href={`tel:${lead.callerPhoneNormalized || lead.callerPhone}`}>
-              Call Now
-            </Link>
-            <LeadStatusActionForm leadId={lead.id} status="CONTACTED" redirectTo={redirectTo} label="Mark Contacted" variant="outline" />
-            <LeadStatusActionForm leadId={lead.id} status="BOOKED" redirectTo={redirectTo} label="Mark Booked" />
-            <LeadStatusActionForm leadId={lead.id} status="LOST" redirectTo={redirectTo} label="Mark Lost" variant="destructive" />
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-xl border bg-background/80 p-4 text-sm">
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border bg-background/90 p-4 text-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Phone</p>
             <p className="mt-2 font-medium">{formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone)}</p>
-            <p className="mt-2 text-muted-foreground">Created {formatRelativeTime(lead.createdAt)} · {formatDateTime(lead.createdAt)}</p>
+            <p className="mt-2 text-muted-foreground">Created {formatRelativeTime(lead.createdAt)}.</p>
           </div>
-          <div className="rounded-xl border bg-background/80 p-4 text-sm">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Service requested</p>
+          <div className="rounded-2xl border bg-background/90 p-4 text-sm">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Service</p>
             <p className="mt-2 font-medium">{lead.serviceType || lead.serviceRequested || 'Still being captured'}</p>
             <p className="mt-2 text-muted-foreground">Urgency: {lead.urgency || 'Pending reply'}</p>
           </div>
-          <div className="rounded-xl border bg-background/80 p-4 text-sm">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Qualification</p>
-            <p className="mt-2 font-medium">{leadReadinessLabels[lead.readiness]}</p>
+          <div className="rounded-2xl border bg-background/90 p-4 text-sm">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Callback timing</p>
+            <p className="mt-2 font-medium">{lead.bestTime || 'No preferred time yet'}</p>
             <p className="mt-2 text-muted-foreground">
-              Callback requested:{' '}
-              {typeof lead.callbackRequested === 'boolean' ? (lead.callbackRequested ? 'Yes' : 'No') : 'Not answered'}
+              Callback requested: {typeof lead.callbackRequested === 'boolean' ? (lead.callbackRequested ? 'Yes' : 'No') : 'Not answered'}
             </p>
           </div>
-          <div className="rounded-xl border bg-background/80 p-4 text-sm">
+          <div className="rounded-2xl border bg-background/90 p-4 text-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Location</p>
             <p className="mt-2 font-medium">{lead.location || lead.zipCode || 'Still being captured'}</p>
-            <p className="mt-2 text-muted-foreground">Best callback time: {lead.bestTime || 'Pending reply'}</p>
+            <p className="mt-2 text-muted-foreground">{isOpenLead ? 'Still needs an outcome update.' : 'Outcome already captured.'}</p>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-        <Card className="bg-card/90">
+      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.85fr]">
+        <Card className="bg-card/95">
           <CardHeader>
             <CardTitle>Conversation history</CardTitle>
             <CardDescription>Review the full SMS thread before you call back.</CardDescription>
@@ -164,7 +188,7 @@ export default async function LeadDetailPage({
               lead.messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`rounded-xl border p-3 text-sm ${message.direction === MessageDirection.OUTBOUND ? 'bg-primary/5' : 'bg-card'}`}
+                  className={`rounded-2xl border p-3 text-sm ${message.direction === MessageDirection.OUTBOUND ? 'bg-primary/5' : 'bg-card'}`}
                 >
                   <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                     <span>{message.direction === MessageDirection.OUTBOUND ? 'CallbackCloser' : 'Lead'}</span>
@@ -187,8 +211,8 @@ export default async function LeadDetailPage({
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Lead summary</CardTitle>
-              <CardDescription>The details captured before the callback.</CardDescription>
+              <CardTitle>Qualification info</CardTitle>
+              <CardDescription>The notes CallbackCloser collected before you call back.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2">
@@ -196,12 +220,16 @@ export default async function LeadDetailPage({
                 <span>{lead.summary || 'Summary will update as the intake progresses.'}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <span className="text-muted-foreground">Qualified at</span>
-                <span>{formatDateTime(lead.qualifiedAt)}</span>
+                <span className="text-muted-foreground">Service requested</span>
+                <span>{lead.serviceType || lead.serviceRequested || 'Still being captured'}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <span className="text-muted-foreground">Owner alerted</span>
-                <span>{formatDateTime(lead.notifiedAt || lead.ownerNotifiedAt)}</span>
+                <span className="text-muted-foreground">Urgency</span>
+                <span>{lead.urgency || 'Pending reply'}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <span className="text-muted-foreground">Qualified at</span>
+                <span>{formatDateTime(lead.qualifiedAt)}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <span className="text-muted-foreground">Current status</span>
@@ -213,7 +241,7 @@ export default async function LeadDetailPage({
           <Card>
             <CardHeader>
               <CardTitle>Missed call details</CardTitle>
-              <CardDescription>The call record that opened this lead.</CardDescription>
+              <CardDescription>The call record that started this lead.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               {lead.call ? (
@@ -225,6 +253,10 @@ export default async function LeadDetailPage({
                   <div className="grid grid-cols-2 gap-2">
                     <span className="text-muted-foreground">Missed</span>
                     <span>{lead.call.missed ? 'Yes' : 'No'}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <span className="text-muted-foreground">Recorded at</span>
+                    <span>{formatDateTime(lead.call.createdAt)}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <span className="text-muted-foreground">Recording</span>
@@ -245,7 +277,7 @@ export default async function LeadDetailPage({
           <Card>
             <CardHeader>
               <CardTitle>Owner alerts</CardTitle>
-              <CardDescription>What CallbackCloser sent when this lead was ready for action.</CardDescription>
+              <CardDescription>When CallbackCloser told you this lead was ready.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2">

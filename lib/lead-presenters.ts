@@ -88,6 +88,17 @@ export function getLeadStatusBadgeVariant(status: LeadStatus) {
   return 'secondary';
 }
 
+export function isLeadOpenStatus(status: LeadStatus) {
+  return status !== LeadStatus.BOOKED && status !== LeadStatus.LOST;
+}
+
+export function getLeadNextStepLabel(status: LeadStatus) {
+  if (status === LeadStatus.BOOKED) return 'Booked';
+  if (status === LeadStatus.LOST) return 'Closed lost';
+  if (status === LeadStatus.CONTACTED) return 'Follow up again';
+  return 'Needs follow-up';
+}
+
 type LeadActivityInput = Pick<Lead, 'createdAt' | 'lastInteractionAt' | 'lastInboundAt' | 'lastOutboundAt'>;
 
 export function getLeadLastActivityAt(lead: LeadActivityInput) {
