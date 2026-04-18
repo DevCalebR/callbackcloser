@@ -37,17 +37,18 @@ import {
 import { db } from '@/lib/db';
 import {
   formatDateTime,
-  formatRelativeTime,
   formatMessageStatus,
+  formatRelativeTime,
   getLeadCallbackState,
   getLeadStatusBadgeVariant,
   leadReadinessLabels,
   leadStatusLabels,
 } from '@/lib/lead-presenters';
-import { getManagedTextingNumber, getManagedTwilioStatusSummary, managedTwilioStatusLabels } from '@/lib/managed-twilio';
+import { getManagedTextingNumber, getManagedTwilioStatusSummary, managedTwilioStatusLabels } from '@/lib/managed-twilio-status';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getAdminBusinessStatus, getCustomerSystemStatus } from '@/lib/system-status';
+import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +65,65 @@ const changedFieldLabels: Record<string, string> = {
   isTestBusiness: 'test business flag',
 };
 
+type AdminBusinessFormDefaults = {
+  name: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPhone: string;
+  isTestBusiness: boolean;
+  forwardingNumber: string;
+  timezone: string;
+  missedCallSeconds: string;
+  serviceLabel1: string;
+  serviceLabel2: string;
+  serviceLabel3: string;
+  internalNotes: string;
+  twilioPhoneNumber: string;
+  twilioPhoneNumberSid: string;
+  twilioMessagingServiceSid: string;
+  a2pCustomerProfileSid: string;
+  a2pBrandSid: string;
+  a2pCampaignSid: string;
+  a2pFailureReason: string;
+  managedTwilioStatus: string;
+  notifySms: boolean;
+  notifyEmail: boolean;
+  notifyInApp: boolean;
+  urgentOnly: boolean;
+};
+
+type AdminBusinessWithSettings = {
+  name: string;
+  ownerName: string | null;
+  notifyPhone: string | null;
+  isTestBusiness: boolean;
+  forwardingNumber: string;
+  timezone: string;
+  missedCallSeconds: number;
+  serviceLabel1: string;
+  serviceLabel2: string;
+  serviceLabel3: string;
+  internalNotes: string | null;
+  twilioPrimaryPhoneNumber: string | null;
+  twilioPhoneNumber: string | null;
+  twilioPrimaryNumberSid: string | null;
+  twilioPhoneNumberSid: string | null;
+  twilioMessagingServiceSid: string | null;
+  a2pCustomerProfileSid: string | null;
+  a2pBrandSid: string | null;
+  a2pCampaignSid: string | null;
+  a2pFailureReason: string | null;
+  managedTwilioStatus: string;
+  notificationSettings: {
+    ownerEmail: string | null;
+    ownerPhone: string | null;
+    notifySms: boolean;
+    notifyEmail: boolean;
+    notifyInApp: boolean;
+    urgentOnly: boolean;
+  } | null;
+};
+
 function getQueryValue(searchParams: Record<string, string | string[] | undefined> | undefined, key: string) {
   const value = searchParams?.[key];
   return typeof value === 'string' ? value : null;
@@ -74,6 +134,29 @@ function getNextStepBadgeVariant(tone: 'healthy' | 'pending' | 'attention' | 'pa
   if (tone === 'attention') return 'destructive' as const;
   if (tone === 'paused') return 'outline' as const;
   return 'secondary' as const;
+}
+
+function HiddenAdminBusinessFields({
+  defaults,
+  exclude = [],
+}: {
+  defaults: AdminBusinessFormDefaults;
+  exclude?: Array<keyof AdminBusinessFormDefaults>;
+}) {
+  return (
+    <>
+      {Object.entries(defaults).map(([name, value]) => {
+        if (exclude.includes(name as keyof AdminBusinessFormDefaults)) return null;
+
+        if (typeof value === 'boolean') {
+          if (!value) return null;
+          return <input key={name} name={name} type="hidden" value="true" />;
+        }
+
+        return <input key={name} name={name} type="hidden" value={value} />;
+      })}
+    </>
+  );
 }
 
 function StatusButton({
@@ -102,20 +185,51 @@ function WebhookResyncButton({
   businessId,
   target,
   label,
+  variant = 'outline',
 }: {
   businessId: string;
   target: 'VOICE' | 'SMS' | 'ALL';
   label: string;
+  variant?: 'default' | 'outline' | 'destructive' | 'secondary';
 }) {
   return (
     <form action={resyncBusinessWebhooksAction}>
       <input type="hidden" name="businessId" value={businessId} />
       <input type="hidden" name="target" value={target} />
-      <Button type="submit" size="sm" variant="outline">
+      <Button type="submit" size="sm" variant={variant}>
         {label}
       </Button>
     </form>
   );
+}
+
+function buildAdminFormDefaults(business: AdminBusinessWithSettings) {
+  return {
+    name: business.name,
+    ownerName: business.ownerName || '',
+    ownerEmail: business.notificationSettings?.ownerEmail || '',
+    ownerPhone: business.notificationSettings?.ownerPhone || business.notifyPhone || '',
+    isTestBusiness: business.isTestBusiness,
+    forwardingNumber: business.forwardingNumber,
+    timezone: business.timezone,
+    missedCallSeconds: String(business.missedCallSeconds),
+    serviceLabel1: business.serviceLabel1,
+    serviceLabel2: business.serviceLabel2,
+    serviceLabel3: business.serviceLabel3,
+    internalNotes: business.internalNotes || '',
+    twilioPhoneNumber: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || '',
+    twilioPhoneNumberSid: business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || '',
+    twilioMessagingServiceSid: business.twilioMessagingServiceSid || '',
+    a2pCustomerProfileSid: business.a2pCustomerProfileSid || '',
+    a2pBrandSid: business.a2pBrandSid || '',
+    a2pCampaignSid: business.a2pCampaignSid || '',
+    a2pFailureReason: business.a2pFailureReason || '',
+    managedTwilioStatus: business.managedTwilioStatus,
+    notifySms: business.notificationSettings?.notifySms ?? true,
+    notifyEmail: business.notificationSettings?.notifyEmail ?? true,
+    notifyInApp: business.notificationSettings?.notifyInApp ?? true,
+    urgentOnly: business.notificationSettings?.urgentOnly ?? false,
+  } satisfies AdminBusinessFormDefaults;
 }
 
 export default async function AdminBusinessDetailPage({
@@ -232,8 +346,47 @@ export default async function AdminBusinessDetailPage({
     ownerNotifications: recentOwnerNotifications,
     leads: recentLeads,
     calls: recentCalls,
-  }).slice(0, 10);
+  }).slice(0, 8);
   const assignedNumber = getManagedTextingNumber(business);
+  const defaults = buildAdminFormDefaults(business);
+  const pendingChecklist = checklist.filter((item) => !item.complete);
+  const completedChecklistCount = checklist.filter((item) => item.complete).length;
+  const webhooksNeedAttention = Boolean(
+    assignedNumber &&
+      (!business.twilioWebhookSyncedAt ||
+        webhookSnapshot?.voiceSynced === false ||
+        webhookSnapshot?.smsSynced === false ||
+        webhookSnapshot?.statusSynced === false)
+  );
+  const brandStatusLabel = business.a2pBrandSid
+    ? managedSummary.complianceReady
+      ? 'Approved'
+      : managedSummary.attentionRequired
+        ? 'Needs attention'
+        : 'Submitted'
+    : 'Not started';
+  const campaignStatusLabel = business.a2pCampaignSid
+    ? managedSummary.complianceReady
+      ? 'Approved'
+      : managedSummary.attentionRequired
+        ? 'Needs attention'
+        : 'Pending'
+    : 'Not started';
+  const latestProvisioningEvent = recentEvents.find((event) => event.label === 'Provisioning') || null;
+  const latestWebhookEvent =
+    recentEvents.find((event) => event.label === 'Webhook sync') ||
+    (webhooksNeedAttention
+      ? {
+          id: 'webhook-attention',
+          at: business.updatedAt,
+          severity: 'warning' as const,
+          label: 'Webhook sync',
+          summary: 'Webhook mismatch detected',
+          detail: webhookSnapshot?.error || 'Voice, SMS, or status callback sync still needs attention.',
+        }
+      : null);
+  const latestOutboundSms = recentMessages[0] || null;
+  const latestOwnerAlert = recentOwnerNotifications[0] || null;
 
   const created = getQueryValue(searchParams, 'created') === '1';
   const saved = getQueryValue(searchParams, 'saved') === '1';
@@ -260,17 +413,20 @@ export default async function AdminBusinessDetailPage({
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-3xl font-semibold tracking-tight">{business.name}</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">{business.name} business control panel</h1>
               {business.isTestBusiness ? <Badge variant="outline">Test</Badge> : null}
               {isBusinessArchived(business) ? <Badge variant="outline">Archived</Badge> : null}
             </div>
             <p className="text-sm text-muted-foreground">
-              One page for business health, recovery actions, safe editing, support workspace access, and recent operator context.
+              Compact owner-first workspace for onboarding, fast edits, support shortcuts, and the most common repair actions.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link className={buttonVariants({ variant: 'default' })} href={`/admin/${business.id}/workspace`}>
-              Open support workspace
+              Open customer workspace
+            </Link>
+            <Link className={buttonVariants({ variant: 'outline' })} href={`/admin/${business.id}/workspace#recent-leads`}>
+              Open customer leads
             </Link>
             <Link className={buttonVariants({ variant: 'outline' })} href="/admin">
               Back to board
@@ -302,7 +458,7 @@ export default async function AdminBusinessDetailPage({
               : 'Owner state updated.'}
         </div>
       ) : null}
-      {provisioned ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning finished. Review the health sections below.</div> : null}
+      {provisioned ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning finished. Review the health cards below.</div> : null}
       {synced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Webhook sync complete for {synced.toLowerCase()}.</div> : null}
       {statusSaved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business status updated to {statusSaved.replace(/_/g, ' ')}.</div> : null}
       {testSms ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Admin test SMS sent.</div> : null}
@@ -310,23 +466,90 @@ export default async function AdminBusinessDetailPage({
       {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored and ready for review.</div> : null}
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader>
             <CardTitle>What should I do next?</CardTitle>
-            <CardDescription>Plain-English guidance to keep the founder out of the weeds.</CardDescription>
+            <CardDescription>Plain-English operator guidance with the fastest next action at the top.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-xl border bg-background/80 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-lg font-semibold">{nextStep.title}</p>
-                  <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{nextStep.detail}</p>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-lg font-semibold">{nextStep.title}</p>
+                    <Badge variant={getNextStepBadgeVariant(nextStep.tone)}>{nextStep.actionLabel}</Badge>
+                  </div>
+                  <p className="max-w-3xl text-sm text-muted-foreground">{nextStep.detail}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Setup progress: {completedChecklistCount} / {checklist.length} steps done
+                  </p>
                 </div>
-                <Badge variant={getNextStepBadgeVariant(nextStep.tone)}>{nextStep.actionLabel}</Badge>
+                <div className="flex flex-wrap gap-2">
+                  {isBusinessArchived(business) ? (
+                    <Link className={buttonVariants({ size: 'sm' })} href="#advanced">
+                      Restore business
+                    </Link>
+                  ) : business.provisioningStatus === 'PAUSED' ? (
+                    <Link className={buttonVariants({ size: 'sm' })} href="#advanced">
+                      Resume automation
+                    </Link>
+                  ) : !ownerState.connected ? (
+                    <Link className={buttonVariants({ size: 'sm' })} href="#business-info">
+                      Connect owner
+                    </Link>
+                  ) : !(business.notificationSettings?.ownerPhone || business.notifyPhone) ? (
+                    <Link className={buttonVariants({ size: 'sm' })} href="#automation-settings">
+                      Add owner alert phone
+                    </Link>
+                  ) : !managedSummary.subaccountReady || !managedSummary.numberAssigned || !managedSummary.messagingServiceReady ? (
+                    <form action={provisionBusinessAction}>
+                      <input type="hidden" name="businessId" value={business.id} />
+                      <input type="hidden" name="mode" value="NEW_NUMBER" />
+                      <Button size="sm" type="submit">
+                        {managedSummary.numberAssigned ? 'Continue setup' : 'Provision business'}
+                      </Button>
+                    </form>
+                  ) : webhooksNeedAttention ? (
+                    <WebhookResyncButton businessId={business.id} label="Re-sync webhooks" target="ALL" variant="default" />
+                  ) : managedSummary.messagingReady && business.provisioningStatus !== 'LIVE' ? (
+                    <StatusButton businessId={business.id} label="Mark live" status="LIVE" variant="default" />
+                  ) : (
+                    <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${business.id}/workspace`}>
+                      Open support workspace
+                    </Link>
+                  )}
+
+                  {!isBusinessArchived(business) ? (
+                    <form action={provisionBusinessAction}>
+                      <input type="hidden" name="businessId" value={business.id} />
+                      <input type="hidden" name="mode" value="NEW_NUMBER" />
+                      <Button size="sm" type="submit" variant="outline">
+                        Re-run provisioning
+                      </Button>
+                    </form>
+                  ) : null}
+                  {assignedNumber ? <WebhookResyncButton businessId={business.id} label="Re-sync all webhooks" target="ALL" /> : null}
+                </div>
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+
+            {pendingChecklist.length > 0 ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                {pendingChecklist.slice(0, 4).map((item) => (
+                  <div key={item.key} className="rounded-xl border bg-background/80 p-4 text-sm">
+                    <p className="font-medium">{item.label}</p>
+                    <p className="mt-2 text-muted-foreground">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+                Setup checklist is complete. This business should only need normal monitoring and support-mode shortcuts.
+              </div>
+            )}
+
+            <div className="grid gap-3 md:grid-cols-4">
               {[
                 { label: 'Leads', value: leadCount },
                 { label: 'Calls', value: callCount },
@@ -344,25 +567,23 @@ export default async function AdminBusinessDetailPage({
 
         <Card className="bg-card/90">
           <CardHeader>
-            <CardTitle>Quick actions</CardTitle>
-            <CardDescription>Common fixes and shortcuts should be one click away.</CardDescription>
+            <CardTitle>Support mode shortcuts</CardTitle>
+            <CardDescription>Safe customer-side entry points without impersonation or tenant bleed.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <form action={provisionBusinessAction}>
-                <input type="hidden" name="businessId" value={business.id} />
-                <input type="hidden" name="mode" value="NEW_NUMBER" />
-                <Button size="sm" type="submit">
-                  Re-run provisioning
-                </Button>
-              </form>
-              <WebhookResyncButton businessId={business.id} target="ALL" label="Re-sync webhooks" />
-              {business.provisioningStatus === 'PAUSED' ? (
-                <StatusButton businessId={business.id} status="ONBOARDING" label="Resume automation" />
-              ) : (
-                <StatusButton businessId={business.id} status="PAUSED" label="Pause automation" variant="outline" />
-              )}
-              {business.provisioningStatus === 'LIVE' ? null : <StatusButton businessId={business.id} status="LIVE" label="Mark live" variant="secondary" />}
+            <div className="grid gap-2">
+              <Link className={buttonVariants({ variant: 'default', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
+                Open customer workspace
+              </Link>
+              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace#recent-leads`}>
+                Open customer leads
+              </Link>
+              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace#settings-snapshot`}>
+                Open customer settings
+              </Link>
+              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace#call-flow-snapshot`}>
+                Open customer call flow
+              </Link>
             </div>
 
             <form action={sendBusinessTestSmsAction} className="rounded-xl border bg-background/80 p-4">
@@ -385,552 +606,590 @@ export default async function AdminBusinessDetailPage({
               </Button>
             </form>
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
-                Open support workspace
-              </Link>
-              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`#recent-events`}>
-                Open recent events
-              </Link>
+            <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+              Support mode stays read-only. Use it to inspect leads, settings, and call flow quickly without weakening business isolation.
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="bg-card/90">
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card className="bg-card/90" id="business-info">
           <CardHeader>
             <CardTitle>Business info</CardTitle>
-            <CardDescription>Edit the business, owner contact settings, internal notes, and admin-only Twilio mapping safely from one place.</CardDescription>
+            <CardDescription>Fast edits for the business record, owner identity, and operator notes.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form action={saveAdminBusinessProfileAction} className="grid gap-4 md:grid-cols-2">
+          <CardContent className="space-y-5">
+            <form action={saveAdminBusinessProfileAction} className="space-y-4">
               <input type="hidden" name="businessId" value={business.id} />
-              <div className="space-y-2">
-                <Label htmlFor="name">Business name</Label>
-                <Input id="name" name="name" defaultValue={business.name} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ownerName">Owner name</Label>
-                <Input id="ownerName" name="ownerName" defaultValue={business.ownerName || ''} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ownerEmail">Owner email</Label>
-                <Input id="ownerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ownerPhone">Owner alert phone</Label>
-                <Input
-                  id="ownerPhone"
-                  name="ownerPhone"
-                  type="tel"
-                  defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="forwardingNumber">Forwarding number</Label>
-                <Input id="forwardingNumber" name="forwardingNumber" type="tel" defaultValue={business.forwardingNumber} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Timezone</Label>
-                <Input id="timezone" name="timezone" defaultValue={business.timezone} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="missedCallSeconds">Missed-call timeout</Label>
-                <Input id="missedCallSeconds" name="missedCallSeconds" type="number" min={5} max={90} defaultValue={business.missedCallSeconds} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="serviceLabel1">Primary service label</Label>
-                <Input id="serviceLabel1" name="serviceLabel1" defaultValue={business.serviceLabel1} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="serviceLabel2">Secondary service label</Label>
-                <Input id="serviceLabel2" name="serviceLabel2" defaultValue={business.serviceLabel2} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="serviceLabel3">Tertiary service label</Label>
-                <Input id="serviceLabel3" name="serviceLabel3" defaultValue={business.serviceLabel3} />
-              </div>
-              <label className="md:col-span-2 flex items-start gap-2 rounded-xl border bg-background/80 p-3 text-sm">
-                <input defaultChecked={business.isTestBusiness} name="isTestBusiness" type="checkbox" value="true" />
-                <span>Test/demo business. Required for safe destructive delete after archive.</span>
-              </label>
-              <div className="space-y-3 md:col-span-2">
-                <Label htmlFor="internalNotes">Internal notes</Label>
-                <Textarea
-                  id="internalNotes"
-                  name="internalNotes"
-                  defaultValue={business.internalNotes || ''}
-                  rows={5}
-                  placeholder="Store launch notes, handoff context, or anything the founder should not have to remember."
-                />
-              </div>
-
-              <div className="md:col-span-2 space-y-3 rounded-xl border bg-background/80 p-4">
-                <div>
-                  <p className="text-sm font-medium">Automation settings</p>
-                  <p className="text-xs text-muted-foreground">Critical owner alert toggles and operational state.</p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" name="notifySms" defaultChecked={business.notificationSettings?.notifySms ?? true} />
-                    Owner SMS alerts
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" name="notifyEmail" defaultChecked={business.notificationSettings?.notifyEmail ?? true} />
-                    Owner email alerts
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" name="notifyInApp" defaultChecked={business.notificationSettings?.notifyInApp ?? true} />
-                    In-app alerts
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" name="urgentOnly" defaultChecked={business.notificationSettings?.urgentOnly ?? false} />
-                    Urgent leads only
-                  </label>
-                </div>
-              </div>
-
-              <div className="md:col-span-2 space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                <div>
-                  <p className="text-sm font-medium">Admin Twilio editor</p>
-                  <p className="text-xs text-muted-foreground">
-                    Use this for safe business corrections, manual provisioning repair, or A2P tracking without leaving admin.
-                  </p>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="twilioPhoneNumber">Assigned number</Label>
-                    <Input
-                      id="twilioPhoneNumber"
-                      name="twilioPhoneNumber"
-                      type="tel"
-                      defaultValue={business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || ''}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="twilioPhoneNumberSid">Number SID</Label>
-                    <Input
-                      id="twilioPhoneNumberSid"
-                      name="twilioPhoneNumberSid"
-                      defaultValue={business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || ''}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="twilioMessagingServiceSid">Messaging Service SID</Label>
-                    <Input id="twilioMessagingServiceSid" name="twilioMessagingServiceSid" defaultValue={business.twilioMessagingServiceSid || ''} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="managedTwilioStatus">Managed Twilio status</Label>
-                    <Select id="managedTwilioStatus" name="managedTwilioStatus" defaultValue={business.managedTwilioStatus}>
-                      {Object.entries(managedTwilioStatusLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="a2pCustomerProfileSid">Customer profile SID</Label>
-                    <Input id="a2pCustomerProfileSid" name="a2pCustomerProfileSid" defaultValue={business.a2pCustomerProfileSid || ''} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="a2pBrandSid">Brand SID</Label>
-                    <Input id="a2pBrandSid" name="a2pBrandSid" defaultValue={business.a2pBrandSid || ''} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="a2pCampaignSid">Campaign SID</Label>
-                    <Input id="a2pCampaignSid" name="a2pCampaignSid" defaultValue={business.a2pCampaignSid || ''} />
-                  </div>
+              <HiddenAdminBusinessFields
+                defaults={defaults}
+                exclude={['name', 'ownerName', 'ownerEmail', 'internalNotes']}
+              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Business name</Label>
+                  <Input id="name" name="name" defaultValue={business.name} required />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="a2pFailureReason">A2P or launch attention note</Label>
+                  <Label htmlFor="ownerName">Owner name</Label>
+                  <Input id="ownerName" name="ownerName" defaultValue={business.ownerName || ''} />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="ownerEmail">Owner email</Label>
+                  <Input id="ownerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="internalNotes">Internal notes</Label>
                   <Textarea
-                    id="a2pFailureReason"
-                    name="a2pFailureReason"
-                    defaultValue={business.a2pFailureReason || ''}
-                    rows={3}
-                    placeholder="Record exactly what is blocking live messaging or what manual action is still needed."
+                    id="internalNotes"
+                    name="internalNotes"
+                    defaultValue={business.internalNotes || ''}
+                    rows={4}
+                    placeholder="Keep launch notes, edge cases, and handoff context here so the founder does not have to remember it."
                   />
                 </div>
-                <label className="flex items-start gap-2 rounded-lg border bg-background/80 p-3 text-sm">
-                  <input className="mt-1" type="checkbox" name="confirmCriticalFieldClears" value="true" />
-                  <span>I understand this can clear live Twilio mappings or alert routing and should only be used for deliberate internal corrections.</span>
-                </label>
               </div>
+              <Button type="submit">Save business info</Button>
+            </form>
 
+            <div className="rounded-xl border bg-background/80 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-medium">{ownerState.name || business.ownerName || 'Owner not named yet'}</p>
+                <Badge variant={ownerState.connected ? 'success' : ownerState.pending ? 'outline' : 'destructive'}>
+                  {ownerState.connected ? 'Connected' : ownerState.pending ? 'Pending invite' : 'Needs connection'}
+                </Badge>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {ownerState.email || business.notificationSettings?.ownerEmail || 'Owner email missing'}
+              </p>
+              {ownerState.clerkUserId ? <p className="mt-2 text-xs text-muted-foreground">{ownerState.clerkUserId}</p> : null}
+              {ownerState.invitedAt ? <p className="mt-2 text-xs text-muted-foreground">Invite sent {formatDateTime(ownerState.invitedAt)}</p> : null}
+            </div>
+
+            <form action={connectBusinessOwnerAction} className="grid gap-4 md:grid-cols-2 rounded-xl border bg-background/80 p-4">
+              <input type="hidden" name="businessId" value={business.id} />
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="connectOwnerEmail">Owner email</Label>
+                <Input id="connectOwnerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="connectOwnerName">Owner name</Label>
+                <Input id="connectOwnerName" name="ownerName" defaultValue={business.ownerName || ''} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ownerClerkId">Existing Clerk user ID</Label>
+                <Input id="ownerClerkId" name="ownerClerkId" defaultValue={ownerState.connected ? ownerState.clerkUserId || '' : ''} />
+              </div>
               <div className="md:col-span-2">
-                <Button type="submit">Save business settings</Button>
+                <Button type="submit" variant="outline">
+                  Connect or invite owner
+                </Button>
               </div>
             </form>
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card className="bg-card/90">
-            <CardHeader>
-              <CardTitle>Provisioning health</CardTitle>
-              <CardDescription>Checklist-style visibility into subaccount, number, webhooks, and readiness.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                  <p className="font-medium">Current status</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge variant={getAdminProvisioningStatusVariant(business.provisioningStatus)}>
-                      {adminProvisioningStatusLabels[business.provisioningStatus]}
-                    </Badge>
-                    <Badge variant={managedSummary.messagingReady ? 'success' : managedSummary.attentionRequired ? 'destructive' : 'secondary'}>
-                      {managedSummary.messagingReady ? 'Healthy' : managedSummary.attentionRequired ? 'Needs attention' : 'Pending'}
-                    </Badge>
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">Last provisioning run: {formatDateTime(business.provisioningLastRunAt)}</p>
-                  {business.provisioningError ? <p className="mt-2 text-sm text-destructive">{business.provisioningError}</p> : null}
-                </div>
-                <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                  <p className="font-medium">Webhooks</p>
-                  <p className="mt-2">{business.twilioWebhookSyncedAt ? 'Synced' : 'Needs sync'}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {business.twilioWebhookSyncedAt
-                      ? `Last synced ${formatRelativeTime(business.twilioWebhookSyncedAt)}`
-                      : 'Voice, SMS, and status callback URLs still need to be pushed to the assigned number.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {checklist.map((item) => (
-                  <div key={item.key} className="rounded-xl border bg-background/80 p-4 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium">{item.label}</span>
-                      <Badge variant={item.complete ? 'success' : 'outline'}>{item.complete ? 'Done' : 'Pending'}</Badge>
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">{item.detail}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <StatusButton businessId={business.id} status="LIVE" label="Mark live" />
-                <StatusButton businessId={business.id} status="ONBOARDING" label="Mark onboarding" variant="secondary" />
-                <StatusButton businessId={business.id} status="NEEDS_ATTENTION" label="Needs attention" variant="destructive" />
-                {business.provisioningStatus === 'PAUSED' ? (
-                  <StatusButton businessId={business.id} status="ONBOARDING" label="Resume" />
-                ) : (
-                  <StatusButton businessId={business.id} status="PAUSED" label="Pause" variant="outline" />
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/90">
-            <CardHeader>
-              <CardTitle>Owner account</CardTitle>
-              <CardDescription>Connect or re-invite the owner without leaving the operator page.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                <p className="font-medium">{ownerState.name || business.ownerName || 'Owner not named yet'}</p>
-                <p className="mt-1 text-muted-foreground">{ownerState.email || business.notificationSettings?.ownerEmail || 'Owner email missing'}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge variant={ownerState.connected ? 'success' : ownerState.pending ? 'outline' : 'destructive'}>
-                    {ownerState.connected ? 'Connected' : ownerState.pending ? 'Pending invite' : 'Needs connection'}
-                  </Badge>
-                  {ownerState.clerkUserId ? <Badge variant="outline">{ownerState.clerkUserId}</Badge> : null}
-                </div>
-                {ownerState.invitedAt ? <p className="mt-2 text-xs text-muted-foreground">Invite sent {formatDateTime(ownerState.invitedAt)}</p> : null}
-              </div>
-
-              <form action={connectBusinessOwnerAction} className="space-y-4">
-                <input type="hidden" name="businessId" value={business.id} />
-                <div className="space-y-2">
-                  <Label htmlFor="connectOwnerEmail">Owner email</Label>
-                  <Input id="connectOwnerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="connectOwnerName">Owner name</Label>
-                  <Input id="connectOwnerName" name="ownerName" defaultValue={business.ownerName || ''} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="ownerClerkId">Existing Clerk user ID</Label>
-                  <Input id="ownerClerkId" name="ownerClerkId" defaultValue={ownerState.connected ? ownerState.clerkUserId || '' : ''} />
-                </div>
-                <Button type="submit" variant="outline">
-                  Connect or invite owner
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="bg-card/90">
+        <Card className="bg-card/90" id="provisioning-health">
           <CardHeader>
             <CardTitle>Provisioning health</CardTitle>
-            <CardDescription>Technical truth without forcing the founder to hunt for it.</CardDescription>
+            <CardDescription>Everything needed to finish setup or repair launch blockers without digging through a long form.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border bg-background/80 p-4 text-sm">
+                <p className="font-medium">Current status</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge variant={getAdminProvisioningStatusVariant(business.provisioningStatus)}>
+                    {adminProvisioningStatusLabels[business.provisioningStatus]}
+                  </Badge>
+                  <Badge variant={managedSummary.messagingReady ? 'success' : managedSummary.attentionRequired ? 'destructive' : 'secondary'}>
+                    {managedSummary.messagingReady ? 'Healthy' : managedSummary.attentionRequired ? 'Needs attention' : 'Pending'}
+                  </Badge>
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">Last provisioning run: {formatDateTime(business.provisioningLastRunAt)}</p>
+                {business.provisioningError ? <p className="mt-2 text-sm text-destructive">{business.provisioningError}</p> : null}
+              </div>
+              <form action={provisionBusinessAction} className="rounded-xl border bg-background/80 p-4">
+                <input type="hidden" name="businessId" value={business.id} />
+                <input type="hidden" name="mode" value="NEW_NUMBER" />
+                <div className="space-y-2">
+                  <Label htmlFor="areaCode">Preferred area code</Label>
+                  <Input id="areaCode" name="areaCode" maxLength={3} placeholder="512" />
+                  <p className="text-xs text-muted-foreground">
+                    Use this as the main onboarding button. Existing-number attach stays in Advanced because it is still admin-assisted.
+                  </p>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="submit">{assignedNumber ? 'Continue setup' : 'Provision business'}</Button>
+                  <WebhookResyncButton businessId={business.id} label="Re-sync all webhooks" target="ALL" />
+                </div>
+              </form>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 text-sm">
               <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Subaccount</p>
-                <p className="mt-2 break-all text-muted-foreground">{business.twilioSubaccountSid || 'Not created yet'}</p>
+                <p className="font-medium">Subaccount status</p>
+                <p className="mt-2">{business.twilioSubaccountSid ? 'Connected' : 'Missing'}</p>
+                <p className="mt-2 break-all text-xs text-muted-foreground">{business.twilioSubaccountSid || 'Create or reconnect the business subaccount.'}</p>
               </div>
               <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Messaging Service</p>
-                <p className="mt-2 break-all text-muted-foreground">{business.twilioMessagingServiceSid || 'Not created yet'}</p>
+                <p className="font-medium">Messaging service</p>
+                <p className="mt-2">{business.twilioMessagingServiceSid ? 'Connected' : 'Missing'}</p>
+                <p className="mt-2 break-all text-xs text-muted-foreground">
+                  {business.twilioMessagingServiceSid || 'Provisioning will create or repair the Twilio Messaging Service.'}
+                </p>
               </div>
               <div className="rounded-xl border bg-background/80 p-4">
                 <p className="font-medium">Assigned number</p>
-                <p className="mt-2 text-muted-foreground">{formatPhoneForDisplay(assignedNumber)}</p>
-                <p className="mt-2 text-xs text-muted-foreground">{business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || 'Number SID missing'}</p>
+                <p className="mt-2">{assignedNumber ? formatPhoneForDisplay(assignedNumber) : 'Not assigned yet'}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || 'Number SID missing'}
+                </p>
               </div>
               <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Provisioning path</p>
-                <p className="mt-2 text-muted-foreground">{assignedNumber ? 'Number attached' : 'Choose new or existing number path below.'}</p>
+                <p className="font-medium">Number path</p>
+                <p className="mt-2">{assignedNumber ? 'Current path active' : 'Path not chosen yet'}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {assignedNumber
+                    ? 'New-number re-provisioning is the default. Existing-number support stays in Advanced.'
+                    : 'Use Provision business for a new number, or use the admin-assisted existing-number tools in Advanced.'}
+                </p>
               </div>
               <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Billing</p>
-                <p className="mt-2 text-muted-foreground">{billingAccess.billingActive ? 'Active' : business.subscriptionStatus.toLowerCase()}</p>
+                <p className="font-medium">Voice webhook sync</p>
+                <p className="mt-2">{webhookSnapshot?.voiceSynced ? 'Healthy' : 'Needs sync'}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {webhookSnapshot?.currentVoiceUrl || webhookSnapshot?.expectedVoiceUrl || 'Voice webhook will appear after number assignment.'}
+                </p>
               </div>
               <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Last update</p>
-                <p className="mt-2 text-muted-foreground">{formatDateTime(business.updatedAt)}</p>
+                <p className="font-medium">SMS webhook sync</p>
+                <p className="mt-2">{webhookSnapshot?.smsSynced ? 'Healthy' : 'Needs sync'}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {webhookSnapshot?.currentSmsUrl || webhookSnapshot?.expectedSmsUrl || 'SMS webhook will appear after number assignment.'}
+                </p>
+              </div>
+              <div className="rounded-xl border bg-background/80 p-4">
+                <p className="font-medium">Status callback sync</p>
+                <p className="mt-2">{webhookSnapshot?.statusSynced ? 'Healthy' : 'Needs sync'}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {webhookSnapshot?.currentStatusUrl || webhookSnapshot?.expectedStatusUrl || 'Status callback will appear after number assignment.'}
+                </p>
+              </div>
+              <div className="rounded-xl border bg-background/80 p-4">
+                <p className="font-medium">Last provisioning run</p>
+                <p className="mt-2 text-muted-foreground">{formatDateTime(business.provisioningLastRunAt)}</p>
+              </div>
+              <div className="rounded-xl border bg-background/80 p-4">
+                <p className="font-medium">Last provisioning error</p>
+                <p className={cn('mt-2 text-muted-foreground', business.provisioningError ? 'text-destructive' : '')}>
+                  {business.provisioningError || 'No current provisioning error recorded.'}
+                </p>
               </div>
             </div>
 
-            <div className="rounded-xl border bg-background/80 p-4">
-              <p className="font-medium">Webhook status</p>
-              {webhookSnapshot ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Voice</p>
-                    <p className="mt-1">{webhookSnapshot.voiceSynced ? 'Current app URL' : 'Drifted'}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{webhookSnapshot.currentVoiceUrl || webhookSnapshot.expectedVoiceUrl}</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              {checklist.map((item) => (
+                <div key={item.key} className="rounded-xl border bg-background/80 p-4 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{item.label}</span>
+                    <Badge variant={item.complete ? 'success' : 'outline'}>{item.complete ? 'Done' : 'Pending'}</Badge>
                   </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">SMS</p>
-                    <p className="mt-1">{webhookSnapshot.smsSynced ? 'Current app URL' : 'Drifted'}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{webhookSnapshot.currentSmsUrl || webhookSnapshot.expectedSmsUrl}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Status callback</p>
-                    <p className="mt-1">{webhookSnapshot.statusSynced ? 'Current app URL' : 'Drifted'}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{webhookSnapshot.currentStatusUrl || webhookSnapshot.expectedStatusUrl}</p>
-                  </div>
+                  <p className="mt-2 text-muted-foreground">{item.detail}</p>
                 </div>
-              ) : (
-                <p className="mt-2 text-muted-foreground">Webhook verification becomes available once a number is attached and Twilio credentials are present.</p>
-              )}
+              ))}
             </div>
 
-            <div className="rounded-xl border bg-background/80 p-4">
-              <p className="font-medium">Available existing numbers</p>
-              <p className="mt-2 text-muted-foreground">
-                {availableNumbers.error
-                  ? availableNumbers.error
-                  : availableNumbers.numbers.length > 0
-                    ? `Loaded from the ${availableNumbers.sourceLabel}.`
-                    : 'No Twilio numbers were found on the current account context.'}
-              </p>
-              {availableNumbers.numbers.length > 0 ? (
-                <ul className="mt-3 space-y-2">
-                  {availableNumbers.numbers.map((number) => (
-                    <li key={number.sid} className="rounded-lg border bg-card p-3">
-                      <p className="font-medium">{formatPhoneForDisplay(number.phoneNumber)}</p>
-                      <p className="text-xs text-muted-foreground">{number.friendlyName || 'No friendly name'} · {number.sid}</p>
-                    </li>
-                  ))}
-                </ul>
+            <div className="flex flex-wrap gap-2">
+              {assignedNumber ? <WebhookResyncButton businessId={business.id} label="Re-sync voice" target="VOICE" /> : null}
+              {assignedNumber ? <WebhookResyncButton businessId={business.id} label="Re-sync SMS" target="SMS" /> : null}
+              {managedSummary.messagingReady && business.provisioningStatus !== 'LIVE' ? (
+                <StatusButton businessId={business.id} label="Mark live" status="LIVE" variant="secondary" />
               ) : null}
             </div>
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card className="bg-card/90">
-            <CardHeader>
-              <CardTitle>Messaging / A2P readiness</CardTitle>
-              <CardDescription>Explain clearly what is blocking live messaging, or whether no action is needed.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Current state</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Badge variant={managedSummary.messagingReady ? 'success' : managedSummary.attentionRequired ? 'destructive' : 'secondary'}>
-                    {managedSummary.label}
-                  </Badge>
-                  {managedSummary.complianceReady ? <Badge variant="success">Approved</Badge> : null}
-                </div>
-                <p className="mt-3 text-muted-foreground">{managedSummary.description}</p>
-                <p className="mt-2 text-xs text-muted-foreground">{managedSummary.nextStep}</p>
-                {business.a2pApprovedAt ? <p className="mt-2 text-xs text-muted-foreground">Approved {formatDateTime(business.a2pApprovedAt)}</p> : null}
+        <Card className="bg-card/90" id="messaging-readiness">
+          <CardHeader>
+            <CardTitle>Messaging / A2P readiness</CardTitle>
+            <CardDescription>Plain-English launch blocker plus the operator tracking fields that matter for compliance follow-up.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-xl border bg-background/80 p-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={managedSummary.messagingReady ? 'success' : managedSummary.attentionRequired ? 'destructive' : 'secondary'}>
+                  {managedSummary.label}
+                </Badge>
+                <Badge variant={managedSummary.complianceReady ? 'success' : managedSummary.attentionRequired ? 'destructive' : 'outline'}>
+                  {managedSummary.complianceReady ? 'Approved' : managedSummary.attentionRequired ? 'Needs attention' : 'Pending'}
+                </Badge>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border bg-background/80 p-4">
-                  <p className="font-medium">Brand / campaign IDs</p>
-                  <p className="mt-2 break-all text-muted-foreground">{business.a2pBrandSid || 'Brand not recorded yet'}</p>
-                  <p className="mt-2 break-all text-muted-foreground">{business.a2pCampaignSid || 'Campaign not recorded yet'}</p>
-                </div>
-                <div className="rounded-xl border bg-background/80 p-4">
-                  <p className="font-medium">Attention note</p>
-                  <p className="mt-2 text-muted-foreground">{business.a2pFailureReason || 'No current compliance blocker recorded.'}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              <p className="mt-3 text-muted-foreground">{managedSummary.description}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {managedSummary.messagingReady ? 'Messaging is clear to go live.' : managedSummary.nextStep}
+              </p>
+              {business.a2pApprovedAt ? <p className="mt-2 text-xs text-muted-foreground">Approved {formatDateTime(business.a2pApprovedAt)}</p> : null}
+            </div>
 
-          <Card className="bg-card/90">
-            <CardHeader>
-              <CardTitle>Commercial / account state</CardTitle>
-              <CardDescription>Plan, setup state, alert routing, and live launch context.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2 text-sm">
-              <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Subscription</p>
-                <p className="mt-2 text-muted-foreground">{business.subscriptionStatus.toLowerCase()}</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border bg-background/80 p-4 text-sm">
+                <p className="font-medium">Readiness state</p>
+                <p className="mt-2">{managedSummary.label}</p>
               </div>
-              <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Billing access</p>
-                <p className="mt-2 text-muted-foreground">{billingAccess.billingActive ? 'Active' : 'Inactive'}</p>
+              <div className="rounded-xl border bg-background/80 p-4 text-sm">
+                <p className="font-medium">Live blocker</p>
+                <p className="mt-2 text-muted-foreground">{managedSummary.messagingReady ? 'No current blocker.' : managedSummary.nextStep}</p>
               </div>
-              <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Owner alert destination</p>
+              <div className="rounded-xl border bg-background/80 p-4 text-sm">
+                <p className="font-medium">Brand status</p>
+                <p className="mt-2">{brandStatusLabel}</p>
+                <p className="mt-2 break-all text-xs text-muted-foreground">{business.a2pBrandSid || 'Brand SID not recorded yet'}</p>
+              </div>
+              <div className="rounded-xl border bg-background/80 p-4 text-sm">
+                <p className="font-medium">Campaign status</p>
+                <p className="mt-2">{campaignStatusLabel}</p>
+                <p className="mt-2 break-all text-xs text-muted-foreground">{business.a2pCampaignSid || 'Campaign SID not recorded yet'}</p>
+              </div>
+            </div>
+
+            <form action={saveAdminBusinessProfileAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+              <input type="hidden" name="businessId" value={business.id} />
+              <HiddenAdminBusinessFields
+                defaults={defaults}
+                exclude={['managedTwilioStatus', 'a2pFailureReason', 'a2pCustomerProfileSid', 'a2pBrandSid', 'a2pCampaignSid']}
+              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="managedTwilioStatus">Readiness state</Label>
+                  <Select id="managedTwilioStatus" name="managedTwilioStatus" defaultValue={business.managedTwilioStatus}>
+                    {Object.entries(managedTwilioStatusLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="a2pCustomerProfileSid">Customer profile SID</Label>
+                  <Input id="a2pCustomerProfileSid" name="a2pCustomerProfileSid" defaultValue={business.a2pCustomerProfileSid || ''} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="a2pBrandSid">Brand SID</Label>
+                  <Input id="a2pBrandSid" name="a2pBrandSid" defaultValue={business.a2pBrandSid || ''} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="a2pCampaignSid">Campaign SID</Label>
+                  <Input id="a2pCampaignSid" name="a2pCampaignSid" defaultValue={business.a2pCampaignSid || ''} />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="a2pFailureReason">Launch blocker note</Label>
+                  <Textarea
+                    id="a2pFailureReason"
+                    name="a2pFailureReason"
+                    defaultValue={business.a2pFailureReason || ''}
+                    rows={3}
+                    placeholder="Record what is still blocking live texting, or what manual review is waiting on Twilio."
+                  />
+                </div>
+              </div>
+              <Button type="submit" variant="outline">
+                Save readiness tracking
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/90" id="automation-settings">
+          <CardHeader>
+            <CardTitle>Automation settings</CardTitle>
+            <CardDescription>Quick edits for owner alert routing, missed-call handling, and the controls that affect day-to-day operations.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border bg-background/80 p-4 text-sm">
+                <p className="font-medium">Automation state</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge variant={getAdminProvisioningStatusVariant(business.provisioningStatus)}>
+                    {adminProvisioningStatusLabels[business.provisioningStatus]}
+                  </Badge>
+                  <Badge variant={defaults.notifySms ? 'success' : 'outline'}>{defaults.notifySms ? 'Owner SMS alerts on' : 'Owner SMS alerts off'}</Badge>
+                </div>
+              </div>
+              <div className="rounded-xl border bg-background/80 p-4 text-sm">
+                <p className="font-medium">Alert destination</p>
                 <p className="mt-2 text-muted-foreground">
                   {formatPhoneForDisplay(business.notificationSettings?.ownerPhone || business.notifyPhone)} · {business.notificationSettings?.ownerEmail || 'No owner email'}
                 </p>
               </div>
-              <div className="rounded-xl border bg-background/80 p-4">
-                <p className="font-medium">Customer-facing status</p>
-                <p className="mt-2 text-muted-foreground">{customerStatus.description}</p>
+            </div>
+
+            <form action={saveAdminBusinessProfileAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+              <input type="hidden" name="businessId" value={business.id} />
+              <HiddenAdminBusinessFields
+                defaults={defaults}
+                exclude={['ownerPhone', 'forwardingNumber', 'missedCallSeconds', 'notifySms', 'notifyEmail', 'notifyInApp', 'urgentOnly']}
+              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="ownerPhone">Owner alert phone</Label>
+                  <Input
+                    id="ownerPhone"
+                    name="ownerPhone"
+                    type="tel"
+                    defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''}
+                    placeholder="+1 555 123 4567"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="forwardingNumber">Missed-call forward number</Label>
+                  <Input id="forwardingNumber" name="forwardingNumber" type="tel" defaultValue={business.forwardingNumber} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="missedCallSeconds">Missed-call timeout</Label>
+                  <Input id="missedCallSeconds" name="missedCallSeconds" type="number" min={5} max={90} defaultValue={business.missedCallSeconds} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="timezone">Timezone</Label>
+                  <Input id="timezone" name="timezone" defaultValue={business.timezone} />
+                </div>
               </div>
-            </CardContent>
-          </Card>
 
-          <Card className="bg-card/90">
-            <CardHeader>
-              <CardTitle>Provision / attach number</CardTitle>
-              <CardDescription>Use the new-number path for normal launches. Existing numbers stay admin-assisted.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <form action={provisionBusinessAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
-                <input type="hidden" name="businessId" value={business.id} />
-                <input type="hidden" name="mode" value="NEW_NUMBER" />
-                <div className="space-y-2">
-                  <Label htmlFor="areaCode">Preferred area code</Label>
-                  <Input id="areaCode" name="areaCode" placeholder="512" maxLength={3} />
-                </div>
-                <Button type="submit">Provision new number</Button>
-              </form>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="flex items-center gap-2 rounded-xl border p-3 text-sm">
+                  <input type="checkbox" name="notifySms" defaultChecked={business.notificationSettings?.notifySms ?? true} />
+                  Owner SMS alerts
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border p-3 text-sm">
+                  <input type="checkbox" name="notifyEmail" defaultChecked={business.notificationSettings?.notifyEmail ?? true} />
+                  Owner email alerts
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border p-3 text-sm">
+                  <input type="checkbox" name="notifyInApp" defaultChecked={business.notificationSettings?.notifyInApp ?? true} />
+                  In-app alerts
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border p-3 text-sm">
+                  <input type="checkbox" name="urgentOnly" defaultChecked={business.notificationSettings?.urgentOnly ?? false} />
+                  Urgent leads only
+                </label>
+              </div>
 
-              <form action={provisionBusinessAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
-                <input type="hidden" name="businessId" value={business.id} />
-                <input type="hidden" name="mode" value="EXISTING_NUMBER" />
-                <div className="space-y-2">
-                  <Label htmlFor="existingNumberSidManual">Existing number SID</Label>
-                  <Input id="existingNumberSidManual" name="existingNumberSidManual" placeholder="PN..." />
-                  <p className="text-xs text-muted-foreground">
-                    Keep-number launches are still admin-assisted. The number must already exist in the target Twilio account context first.
-                  </p>
-                </div>
-                {availableNumbers.numbers.length > 0 ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="existingNumberSelect">Choose loaded number</Label>
-                    <select
-                      id="existingNumberSelect"
-                      name="existingNumberSidSelect"
-                      defaultValue=""
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="">Select a number</option>
-                      {availableNumbers.numbers.map((number) => (
-                        <option key={number.sid} value={number.sid}>
-                          {formatPhoneForDisplay(number.phoneNumber)} · {number.sid}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-                <Button type="submit" variant="outline">
-                  Attach existing number
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit">Save automation settings</Button>
+                {business.provisioningStatus !== 'LIVE' ? (
+                  <StatusButton businessId={business.id} label="Mark live" status="LIVE" variant="secondary" />
+                ) : (
+                  <StatusButton businessId={business.id} label="Back to onboarding" status="ONBOARDING" variant="outline" />
+                )}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
-          <Card className="bg-card/90">
-            <CardHeader>
-              <CardTitle>Webhook tools</CardTitle>
-              <CardDescription>Keep recovery actions close to the thing they fix.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <WebhookResyncButton businessId={business.id} target="VOICE" label="Re-sync voice webhook" />
-              <WebhookResyncButton businessId={business.id} target="SMS" label="Re-sync SMS webhook" />
-              <WebhookResyncButton businessId={business.id} target="ALL" label="Re-sync all webhooks" />
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="bg-card/90" id="account-state">
+          <CardHeader>
+            <CardTitle>Account / commercial state</CardTitle>
+            <CardDescription>Plan, billing, lifecycle, and business state in one compact scan.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 text-sm">
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Subscription</p>
+              <p className="mt-2 text-muted-foreground">{business.subscriptionStatus.toLowerCase()}</p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Billing access</p>
+              <p className="mt-2 text-muted-foreground">{billingAccess.billingActive ? 'Active' : 'Inactive'}</p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Setup state</p>
+              <p className="mt-2 text-muted-foreground">{adminProvisioningStatusLabels[business.provisioningStatus]}</p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Archive state</p>
+              <p className="mt-2 text-muted-foreground">{isBusinessArchived(business) ? 'Archived' : 'Active'}</p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Customer-facing state</p>
+              <p className="mt-2 text-muted-foreground">{customerStatus.description}</p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Last updated</p>
+              <p className="mt-2 text-muted-foreground">{formatDateTime(business.updatedAt)}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="bg-card/90" id="recent-events">
         <CardHeader>
-          <CardTitle>Logs / recent events</CardTitle>
-          <CardDescription>Concise summaries first, details on demand, no secrets.</CardDescription>
+          <CardTitle>Recent events / troubleshooting</CardTitle>
+          <CardDescription>Short operator summaries first, then the supporting event history.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Latest provisioning attempt</p>
+              <p className="mt-2">{latestProvisioningEvent?.summary || 'No provisioning run recorded'}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {latestProvisioningEvent ? latestProvisioningEvent.detail : 'Run provisioning from the top of this page when setup should continue.'}
+              </p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Latest webhook issue</p>
+              <p className="mt-2">{latestWebhookEvent?.summary || 'No webhook issue recorded'}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {latestWebhookEvent?.detail || 'Webhook sync looks healthy.'}
+              </p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Latest outbound SMS</p>
+              <p className="mt-2">
+                {latestOutboundSms
+                  ? `${latestOutboundSms.participant === 'OWNER' ? 'Owner SMS' : 'Lead SMS'}${latestOutboundSms.status ? ` · ${formatMessageStatus(latestOutboundSms.status)}` : ''}`
+                  : 'No outbound SMS yet'}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">{latestOutboundSms?.body || 'No outbound SMS has been recorded yet.'}</p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Latest owner alert</p>
+              <p className="mt-2">
+                {latestOwnerAlert ? `Owner ${latestOwnerAlert.channel.toLowerCase()} · ${latestOwnerAlert.status.toLowerCase()}` : 'No owner alert yet'}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {latestOwnerAlert?.error || latestOwnerAlert?.destination || 'No owner alert issue is currently recorded.'}
+              </p>
+            </div>
+          </div>
+
           {recentEvents.length === 0 ? (
             <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">No recent operator events are recorded for this business yet.</div>
           ) : (
-            recentEvents.map((event) => (
-              <details key={event.id} className="rounded-xl border bg-background/80 p-4 text-sm">
-                <summary className="cursor-pointer list-none">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={event.severity === 'error' ? 'destructive' : event.severity === 'warning' ? 'outline' : 'secondary'}>
-                          {event.label}
-                        </Badge>
-                        <span className="font-medium">{event.summary}</span>
+            <div className="grid gap-3">
+              {recentEvents.map((event) => (
+                <details key={event.id} className="rounded-xl border bg-background/80 p-4 text-sm">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={event.severity === 'error' ? 'destructive' : event.severity === 'warning' ? 'outline' : 'secondary'}>
+                            {event.label}
+                          </Badge>
+                          <span className="font-medium">{event.summary}</span>
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">{formatDateTime(event.at)}</p>
                       </div>
-                      <p className="mt-2 text-xs text-muted-foreground">{formatDateTime(event.at)}</p>
+                      <span className="text-xs text-muted-foreground">Show detail</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">Show detail</span>
-                  </div>
-                </summary>
-                <p className="mt-3 text-muted-foreground">{event.detail}</p>
-              </details>
-            ))
+                  </summary>
+                  <p className="mt-3 text-muted-foreground">{event.detail}</p>
+                </details>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="bg-card/90">
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]" id="advanced">
+        <Card className="border-destructive/20 bg-card/90">
           <CardHeader>
-            <CardTitle>Support workspace access</CardTitle>
-            <CardDescription>Fast entry into a safe customer-style snapshot without risky impersonation.</CardDescription>
+            <CardTitle>Advanced / rare actions</CardTitle>
+            <CardDescription>Manual number support and low-level Twilio repair stay separated from the everyday onboarding path.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <p className="text-muted-foreground">
-              The support workspace is read-only by design. It surfaces recent leads, recent alerts, and key settings for this business without weakening tenant isolation.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Link className={buttonVariants({ variant: 'default' })} href={`/admin/${business.id}/workspace`}>
-                Open support workspace
-              </Link>
-              <Link className={buttonVariants({ variant: 'outline' })} href={`/admin/${business.id}/workspace#recent-leads`}>
-                Open recent leads
-              </Link>
-            </div>
+          <CardContent className="space-y-6">
+            <form action={provisionBusinessAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+              <input type="hidden" name="businessId" value={business.id} />
+              <input type="hidden" name="mode" value="EXISTING_NUMBER" />
+              <div className="space-y-2">
+                <Label htmlFor="existingNumberSidManual">Attach existing number</Label>
+                <Input id="existingNumberSidManual" name="existingNumberSidManual" placeholder="PN..." />
+                <p className="text-xs text-muted-foreground">
+                  Existing-number launches remain admin-assisted. The number must already exist in the right Twilio account context before attach.
+                </p>
+              </div>
+              {availableNumbers.numbers.length > 0 ? (
+                <div className="space-y-2">
+                  <Label htmlFor="existingNumberSelect">Choose loaded number</Label>
+                  <select
+                    id="existingNumberSelect"
+                    name="existingNumberSidSelect"
+                    defaultValue=""
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Select a number</option>
+                    {availableNumbers.numbers.map((number) => (
+                      <option key={number.sid} value={number.sid}>
+                        {formatPhoneForDisplay(number.phoneNumber)} · {number.sid}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {availableNumbers.error || 'No Twilio numbers were found on the current account context.'}
+                </p>
+              )}
+              <Button type="submit" variant="outline">
+                Attach existing number
+              </Button>
+            </form>
+
+            <form action={saveAdminBusinessProfileAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+              <input type="hidden" name="businessId" value={business.id} />
+              <HiddenAdminBusinessFields
+                defaults={defaults}
+                exclude={['twilioPhoneNumber', 'twilioPhoneNumberSid', 'twilioMessagingServiceSid']}
+              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="twilioPhoneNumber">Assigned number</Label>
+                  <Input
+                    id="twilioPhoneNumber"
+                    name="twilioPhoneNumber"
+                    type="tel"
+                    defaultValue={business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || ''}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="twilioPhoneNumberSid">Number SID</Label>
+                  <Input
+                    id="twilioPhoneNumberSid"
+                    name="twilioPhoneNumberSid"
+                    defaultValue={business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || ''}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="twilioMessagingServiceSid">Messaging Service SID</Label>
+                  <Input id="twilioMessagingServiceSid" name="twilioMessagingServiceSid" defaultValue={business.twilioMessagingServiceSid || ''} />
+                </div>
+              </div>
+              <label className="flex items-start gap-2 rounded-lg border bg-background/80 p-3 text-sm">
+                <input className="mt-1" type="checkbox" name="confirmCriticalFieldClears" value="true" />
+                <span>I understand this can clear or replace live Twilio mappings and should only be used for deliberate internal repair.</span>
+              </label>
+              <Button type="submit" variant="outline">
+                Save manual Twilio mapping
+              </Button>
+            </form>
           </CardContent>
         </Card>
 
-        <Card className="bg-card/90">
+        <Card className="border-destructive/20 bg-card/90">
           <CardHeader>
-            <CardTitle>Archive / delete controls</CardTitle>
-            <CardDescription>Archive real businesses safely. Delete only archived test/demo workspaces.</CardDescription>
+            <CardTitle>Lifecycle / destructive actions</CardTitle>
+            <CardDescription>Pause or archive safely. Delete stays locked to archived test/demo businesses only.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
+            <div className="flex flex-wrap gap-2 rounded-xl border bg-background/80 p-4">
+              {business.provisioningStatus === 'PAUSED' ? (
+                <StatusButton businessId={business.id} label="Resume automation" status="ONBOARDING" />
+              ) : (
+                <StatusButton businessId={business.id} label="Pause automation" status="PAUSED" variant="outline" />
+              )}
+              <StatusButton businessId={business.id} label="Mark needs attention" status="NEEDS_ATTENTION" variant="destructive" />
+              <StatusButton businessId={business.id} label="Mark onboarding" status="ONBOARDING" variant="secondary" />
+            </div>
+
             {isBusinessArchived(business) ? (
               <form action={restoreBusinessAction} className="rounded-xl border bg-background/80 p-4">
                 <input type="hidden" name="businessId" value={business.id} />

@@ -5,13 +5,11 @@ import {
   createDemoBusinessAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
-  restoreBusinessAction,
-  setBusinessProvisioningStatusAction,
+  sendBusinessTestSmsAction,
 } from '@/app/admin/actions';
 import {
   adminBoardFilterOptions,
   buildAdminNextStep,
-  getBusinessLifecycleLabel,
   isBusinessArchived,
   matchesAdminBoardFilter,
   type AdminBoardFilter,
@@ -22,15 +20,11 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  adminProvisioningStatusLabels,
-  getAdminProvisioningStatusVariant,
-  isPendingOwnerClerkId,
-} from '@/lib/admin-provisioning';
+import { isPendingOwnerClerkId } from '@/lib/admin-provisioning';
 import { searchBusinessesForAdmin } from '@/lib/business';
 import { db } from '@/lib/db';
 import { formatDateTime, formatRelativeTime } from '@/lib/lead-presenters';
-import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
+import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { cn } from '@/lib/utils';
 
@@ -50,11 +44,31 @@ function maxDate(...values: Array<Date | null | undefined>) {
   return new Date(Math.max(...timestamps));
 }
 
-function getNextStepBadgeVariant(tone: 'healthy' | 'pending' | 'attention' | 'paused') {
-  if (tone === 'healthy') return 'success' as const;
-  if (tone === 'attention') return 'destructive' as const;
-  if (tone === 'paused') return 'outline' as const;
-  return 'secondary' as const;
+function getOverallStatus(params: {
+  archived: boolean;
+  paused: boolean;
+  live: boolean;
+  needsAttention: boolean;
+}) {
+  if (params.archived) return { label: 'Archived', variant: 'outline' as const };
+  if (params.paused) return { label: 'Paused', variant: 'outline' as const };
+  if (params.needsAttention) return { label: 'Needs attention', variant: 'destructive' as const };
+  if (params.live) return { label: 'Live', variant: 'success' as const };
+  return { label: 'Pending', variant: 'secondary' as const };
+}
+
+function getA2pStateLabel(params: { complianceReady: boolean; attentionRequired: boolean; complianceStarted: boolean }) {
+  if (params.complianceReady) return { label: 'Approved', variant: 'success' as const };
+  if (params.attentionRequired) return { label: 'Needs attention', variant: 'destructive' as const };
+  if (params.complianceStarted) return { label: 'Pending', variant: 'secondary' as const };
+  return { label: 'Not started', variant: 'outline' as const };
+}
+
+function compactCopy(value: string, maxLength = 110) {
+  const trimmed = value.trim();
+  if (!trimmed) return 'No issues recorded.';
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength - 1)}…`;
 }
 
 export default async function AdminPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
@@ -138,6 +152,25 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       messageActivityMap.get(business.id)
     );
     const latestFailure = notificationFailureMap.get(business.id);
+    const assignedNumber = getManagedTextingNumber(business);
+    const archived = isBusinessArchived(business);
+    const paused = !archived && business.provisioningStatus === 'PAUSED';
+    const overallStatus = getOverallStatus({
+      archived,
+      paused,
+      live: business.provisioningStatus === 'LIVE' && managedSummary.messagingReady,
+      needsAttention: nextStep.tone === 'attention' || managedSummary.attentionRequired,
+    });
+    const a2pState = getA2pStateLabel({
+      complianceReady: managedSummary.complianceReady,
+      attentionRequired: managedSummary.attentionRequired,
+      complianceStarted: managedSummary.complianceStarted,
+    });
+    const attentionSignal = latestFailure
+      ? compactCopy(`${latestFailure.error || `${latestFailure.status.toLowerCase()} owner notification`} on ${formatDateTime(latestFailure.createdAt)}.`)
+      : nextStep.tone === 'healthy'
+        ? 'Healthy. No immediate operator action needed.'
+        : compactCopy(`${nextStep.title}. ${nextStep.detail}`);
 
     return {
       business,
@@ -146,9 +179,13 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       managedSummary,
       nextStep,
       leadCount: leadCountMap.get(business.id) ?? 0,
-      assignedNumber: getManagedTextingNumber(business),
+      assignedNumber,
       lastActivityAt,
       latestFailure,
+      overallStatus,
+      a2pState,
+      attentionSignal,
+      canSendTestSms: Boolean(assignedNumber && (business.notificationSettings?.ownerPhone || business.notifyPhone)),
     };
   });
 
@@ -167,8 +204,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
   const summaryStats = [
     { label: 'Needs attention', value: filterCounts.get('needs_attention') ?? 0 },
+    { label: 'Not fully provisioned', value: filterCounts.get('not_fully_provisioned') ?? 0 },
     { label: 'Live', value: filterCounts.get('live') ?? 0 },
-    { label: 'Pending A2P', value: filterCounts.get('pending_a2p') ?? 0 },
     { label: 'Archived', value: filterCounts.get('archived') ?? 0 },
   ];
 
@@ -178,9 +215,10 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
         <Badge variant="outline">Internal Admin</Badge>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight">Operator triage board</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">Operator control panel</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Open admin and immediately see which businesses are healthy, which ones need help, and the next safe action to take.
+              Compact business list, fast onboarding entry, and one-click recovery actions so the founder can scan, decide, and move without
+              hunting through long pages.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-4">
@@ -207,72 +245,32 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
         </div>
       ) : null}
 
-      <Card className="bg-card/90">
-        <CardHeader>
-          <CardTitle>Find any business fast</CardTitle>
-          <CardDescription>Search by business name, owner email, business ID, Twilio number, or Twilio SID.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-            <Input
-              aria-label="Search businesses"
-              defaultValue={query}
-              name="q"
-              placeholder="Search name, owner email, +18777480449, PN..., or business ID"
-            />
-            <input type="hidden" name="view" value={view} />
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-            {query ? (
-              <Link className={buttonVariants({ variant: 'ghost' })} href={`/admin?view=${encodeURIComponent(view)}`}>
-                Clear
-              </Link>
-            ) : null}
-          </form>
-          <div className="flex flex-wrap gap-2">
-            {adminBoardFilterOptions.map((option) => {
-              const href = query
-                ? `/admin?view=${encodeURIComponent(option.key)}&q=${encodeURIComponent(query)}`
-                : `/admin?view=${encodeURIComponent(option.key)}`;
-              return (
-                <Link
-                  key={option.key}
-                  className={cn(
-                    buttonVariants({ variant: option.key === view ? 'default' : 'outline', size: 'sm' }),
-                    option.key === view && 'pointer-events-none'
-                  )}
-                  href={href}
-                >
-                  {option.label} ({filterCounts.get(option.key) ?? 0})
-                </Link>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader>
-            <CardTitle>Create customer business</CardTitle>
+            <CardTitle>Fast onboard</CardTitle>
             <CardDescription>
-              Save the business workspace, owner details, test flag, and default routing in one pass so provisioning can start immediately.
+              Start the business workspace with the minimum founder-needed inputs. Everything else can be tightened inside the business control panel.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form action={createAdminBusinessAction} className="grid gap-4 md:grid-cols-2">
+              <input type="hidden" name="missedCallSeconds" value="20" />
+              <input type="hidden" name="serviceLabel1" value="Repair" />
+              <input type="hidden" name="serviceLabel2" value="Install" />
+              <input type="hidden" name="serviceLabel3" value="Maintenance" />
+
               <div className="space-y-2">
                 <Label htmlFor="name">Business name</Label>
                 <Input id="name" name="name" placeholder="Acme Plumbing" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ownerName">Owner name</Label>
-                <Input id="ownerName" name="ownerName" placeholder="Casey Owner" />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="ownerEmail">Owner email</Label>
                 <Input id="ownerEmail" name="ownerEmail" type="email" placeholder="owner@business.com" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ownerName">Owner name</Label>
+                <Input id="ownerName" name="ownerName" placeholder="Casey Owner" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ownerPhone">Owner alert phone</Label>
@@ -286,29 +284,15 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                 <Label htmlFor="timezone">Timezone</Label>
                 <Input id="timezone" name="timezone" defaultValue="America/New_York" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="missedCallSeconds">Missed-call timeout</Label>
-                <Input id="missedCallSeconds" name="missedCallSeconds" type="number" min={5} max={90} defaultValue={20} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="serviceLabel1">Primary service label</Label>
-                <Input id="serviceLabel1" name="serviceLabel1" defaultValue="Repair" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="serviceLabel2">Secondary service label</Label>
-                <Input id="serviceLabel2" name="serviceLabel2" defaultValue="Install" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="serviceLabel3">Tertiary service label</Label>
-                <Input id="serviceLabel3" name="serviceLabel3" defaultValue="Maintenance" />
-              </div>
+
               <label className="md:col-span-2 flex items-start gap-2 rounded-xl border bg-background/80 p-3 text-sm">
                 <input name="isTestBusiness" type="checkbox" value="true" />
-                <span>Mark this as a test/demo business so it can be safely archived and deleted later.</span>
+                <span>Mark as a test/demo business so archive and delete stay safely separated from real customers.</span>
               </label>
+
               <div className="md:col-span-2 flex flex-wrap items-center gap-3">
                 <Button type="submit">Create business workspace</Button>
-                <p className="text-sm text-muted-foreground">If the owner already exists in Clerk, CallbackCloser will connect that account automatically.</p>
+                <p className="text-sm text-muted-foreground">CallbackCloser will auto-connect an existing owner account or send an invite if needed.</p>
               </div>
             </form>
           </CardContent>
@@ -316,11 +300,11 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
         <Card className="bg-card/90">
           <CardHeader>
-            <CardTitle>Create dedicated simulator workspace</CardTitle>
-            <CardDescription>Keep simulator traffic isolated from real customers while still using the real operator controls.</CardDescription>
+            <CardTitle>Demo / support tools</CardTitle>
+            <CardDescription>Keep demo traffic and founder troubleshooting inside the same operator flow.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form action={createDemoBusinessAction} className="space-y-4">
+          <CardContent className="space-y-5">
+            <form action={createDemoBusinessAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
               <div className="space-y-2">
                 <Label htmlFor="demoOwnerPhone">Owner phone for previews</Label>
                 <Input
@@ -351,127 +335,171 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                   placeholder="+1 555 000 0001"
                 />
               </div>
-              <Button type="submit">Create demo workspace</Button>
+              <Button type="submit" variant="outline">
+                Create demo workspace
+              </Button>
             </form>
+
+            <div className="rounded-xl border bg-background/80 p-4 text-sm">
+              <p className="font-medium text-foreground">What this board should answer immediately</p>
+              <ul className="mt-3 space-y-2 text-muted-foreground">
+                <li>Which businesses are healthy</li>
+                <li>Which ones need intervention</li>
+                <li>What the next likely operator action is</li>
+              </ul>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight">Businesses</h2>
-            <p className="text-sm text-muted-foreground">
-              {query ? `Showing ${visibleRows.length} result${visibleRows.length === 1 ? '' : 's'} for ${query}.` : 'Use this board as the founder control center.'}
-            </p>
+      <Card className="bg-card/90">
+        <CardHeader>
+          <CardTitle>Business triage board</CardTitle>
+          <CardDescription>Compact rows with status, readiness, one clear attention signal, and the fastest next actions.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
+            <Input
+              aria-label="Search businesses"
+              defaultValue={query}
+              name="q"
+              placeholder="Search business, owner email, business ID, Twilio number, or Twilio SID"
+            />
+            <input type="hidden" name="view" value={view} />
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+            {query ? (
+              <Link className={buttonVariants({ variant: 'ghost' })} href={`/admin?view=${encodeURIComponent(view)}`}>
+                Clear
+              </Link>
+            ) : null}
+          </form>
+
+          <div className="flex flex-wrap gap-2">
+            {adminBoardFilterOptions.map((option) => {
+              const href = query
+                ? `/admin?view=${encodeURIComponent(option.key)}&q=${encodeURIComponent(query)}`
+                : `/admin?view=${encodeURIComponent(option.key)}`;
+              return (
+                <Link
+                  key={option.key}
+                  className={cn(
+                    buttonVariants({ variant: option.key === view ? 'default' : 'outline', size: 'sm' }),
+                    option.key === view && 'pointer-events-none'
+                  )}
+                  href={href}
+                >
+                  {option.label} ({filterCounts.get(option.key) ?? 0})
+                </Link>
+              );
+            })}
           </div>
-        </div>
 
-        {visibleRows.length === 0 ? (
-          <Card className="bg-card/90">
-            <CardContent className="p-6 text-sm text-muted-foreground">
+          {visibleRows.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
               No businesses matched this view. Try a different filter or search for the exact business ID, owner email, or Twilio number.
-            </CardContent>
-          </Card>
-        ) : (
-          visibleRows.map(({ business, ownerPending, managedSummary, nextStep, leadCount, assignedNumber, lastActivityAt, latestFailure }) => (
-            <Card key={business.id} className="bg-card/90">
-              <CardContent className="space-y-5 p-5">
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link className="text-lg font-semibold hover:underline" href={`/admin/${business.id}`}>
-                        {business.name}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border">
+              {visibleRows.map(
+                ({
+                  business,
+                  ownerPending,
+                  managedSummary,
+                  nextStep,
+                  leadCount,
+                  assignedNumber,
+                  lastActivityAt,
+                  latestFailure,
+                  overallStatus,
+                  a2pState,
+                  attentionSignal,
+                  canSendTestSms,
+                }) => (
+                  <div key={business.id} className="grid gap-4 border-t bg-background/80 px-5 py-4 first:border-t-0 xl:grid-cols-[1.7fr_1fr_1.15fr_0.95fr_1.3fr]">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link className="text-base font-semibold hover:underline" href={`/admin/${business.id}`}>
+                          {business.name}
+                        </Link>
+                        <Badge variant={overallStatus.variant}>{overallStatus.label}</Badge>
+                        {business.isTestBusiness ? <Badge variant="outline">Test</Badge> : null}
+                        {isBusinessArchived(business) ? <Badge variant="outline">Archived</Badge> : null}
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium">Needs attention signal</p>
+                        <p className={cn('text-muted-foreground', latestFailure ? 'text-destructive' : '')}>{attentionSignal}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>{business.id}</span>
+                        <span>{leadCount} lead{leadCount === 1 ? '' : 's'}</span>
+                        <span>{lastActivityAt ? `Last activity ${formatRelativeTime(lastActivityAt)}` : 'No activity yet'}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 text-sm">
+                      <p className="font-medium">Owner</p>
+                      <p>{business.ownerName || 'Owner name missing'}</p>
+                      <p className="text-muted-foreground">{business.notificationSettings?.ownerEmail || 'Owner email missing'}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={ownerPending ? 'outline' : 'secondary'}>{ownerPending ? 'Invite pending' : 'Linked'}</Badge>
+                        {business.notificationSettings?.ownerPhone || business.notifyPhone ? (
+                          <Badge variant="outline">{formatPhoneForDisplay(business.notificationSettings?.ownerPhone || business.notifyPhone)}</Badge>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-1">
+                      <div>
+                        <p className="font-medium">Provisioning</p>
+                        <p className="mt-1">{managedSummary.label}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{managedSummary.nextStep}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">A2P</p>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          <Badge variant={a2pState.variant}>{a2pState.label}</Badge>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="font-medium">Assigned number</p>
+                        <p className="mt-1 text-muted-foreground">{assignedNumber ? formatPhoneForDisplay(assignedNumber) : 'Not assigned yet'}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 text-sm">
+                      <p className="font-medium">Next action</p>
+                      <p>{nextStep.actionLabel}</p>
+                      <p className="text-muted-foreground">{nextStep.title}</p>
+                      {business.twilioWebhookSyncedAt ? (
+                        <p className="text-xs text-muted-foreground">Webhook sync {formatRelativeTime(business.twilioWebhookSyncedAt)}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Webhook sync still needed</p>
+                      )}
+                      {latestFailure ? <p className="text-xs text-destructive">Latest issue recorded {formatRelativeTime(latestFailure.createdAt)}</p> : null}
+                    </div>
+
+                    <div className="flex flex-wrap content-start gap-2">
+                      <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${business.id}`}>
+                        Open business
                       </Link>
-                      {business.isTestBusiness ? <Badge variant="outline">Test</Badge> : null}
-                      {isBusinessArchived(business) ? <Badge variant="outline">Archived</Badge> : null}
-                      <Badge variant={getNextStepBadgeVariant(nextStep.tone)}>{nextStep.title}</Badge>
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <span>{business.id}</span>
-                      <span>Owner: {business.ownerName || 'Missing owner name'}</span>
-                      <span>{business.notificationSettings?.ownerEmail || 'Missing owner email'}</span>
-                      {ownerPending ? <span>Owner invite pending</span> : <span>Owner linked</span>}
-                    </div>
-                    <p className="max-w-3xl text-sm text-muted-foreground">{nextStep.detail}</p>
-                    {latestFailure ? (
-                      <p className="text-sm text-destructive">
-                        Latest attention item: {latestFailure.error || `${latestFailure.status.toLowerCase()} owner notification`} on{' '}
-                        {formatDateTime(latestFailure.createdAt)}.
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Link className={buttonVariants({ variant: 'default' })} href={`/admin/${business.id}`}>
-                      Open operator page
-                    </Link>
-                    <Link className={buttonVariants({ variant: 'outline' })} href={`/admin/${business.id}/workspace`}>
-                      Open support workspace
-                    </Link>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                  <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                    <p className="font-medium text-foreground">Lifecycle</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Badge variant={getAdminProvisioningStatusVariant(business.provisioningStatus)}>
-                        {adminProvisioningStatusLabels[business.provisioningStatus]}
-                      </Badge>
-                      <Badge variant={managedSummary.messagingReady ? 'success' : managedSummary.attentionRequired ? 'destructive' : 'secondary'}>
-                        {managedSummary.messagingReady ? 'Healthy' : managedSummary.attentionRequired ? 'Needs attention' : 'Pending'}
-                      </Badge>
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">{getBusinessLifecycleLabel(business)}</p>
-                  </div>
-
-                  <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                    <p className="font-medium text-foreground">Twilio readiness</p>
-                    <p className="mt-2">{managedSummary.label}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {assignedNumber ? `Number ${formatPhoneForDisplay(assignedNumber)}` : 'No number assigned yet'}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                    <p className="font-medium text-foreground">A2P + webhooks</p>
-                    <p className="mt-2">
-                      {managedSummary.complianceReady ? 'Approved' : managedSummary.complianceStarted ? 'Pending review' : 'Not started'}
-                    </p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {business.twilioWebhookSyncedAt ? `Webhook sync ${formatRelativeTime(business.twilioWebhookSyncedAt)}` : 'Webhook sync still needed'}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                    <p className="font-medium text-foreground">Activity</p>
-                    <p className="mt-2">{leadCount} lead{leadCount === 1 ? '' : 's'}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {lastActivityAt ? `Last activity ${formatRelativeTime(lastActivityAt)}` : 'No activity yet'}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                    <p className="font-medium text-foreground">Quick recovery</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {isBusinessArchived(business) ? (
-                        <form action={restoreBusinessAction}>
-                          <input type="hidden" name="businessId" value={business.id} />
-                          <input type="hidden" name="confirmationName" value={business.name} />
-                          <Button size="sm" type="submit" variant="outline">
-                            Restore
-                          </Button>
-                        </form>
-                      ) : !assignedNumber ? (
+                      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
+                        Open workspace
+                      </Link>
+                      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace#recent-leads`}>
+                        Open customer leads
+                      </Link>
+                      {!isBusinessArchived(business) ? (
                         <form action={provisionBusinessAction}>
                           <input type="hidden" name="businessId" value={business.id} />
                           <input type="hidden" name="mode" value="NEW_NUMBER" />
-                          <Button size="sm" type="submit">
-                            Provision
+                          <Button size="sm" type="submit" variant="outline">
+                            {assignedNumber ? 'Continue setup' : 'Provision business'}
                           </Button>
                         </form>
-                      ) : (
+                      ) : null}
+                      {assignedNumber ? (
                         <form action={resyncBusinessWebhooksAction}>
                           <input type="hidden" name="businessId" value={business.id} />
                           <input type="hidden" name="target" value="ALL" />
@@ -479,23 +507,27 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                             Re-sync webhooks
                           </Button>
                         </form>
-                      )}
-
-                      <form action={setBusinessProvisioningStatusAction}>
-                        <input type="hidden" name="businessId" value={business.id} />
-                        <input type="hidden" name="status" value={business.provisioningStatus === 'PAUSED' ? 'ONBOARDING' : 'PAUSED'} />
-                        <Button size="sm" type="submit" variant="ghost">
-                          {business.provisioningStatus === 'PAUSED' ? 'Resume' : 'Pause'}
-                        </Button>
-                      </form>
+                      ) : null}
+                      {canSendTestSms ? (
+                        <form action={sendBusinessTestSmsAction}>
+                          <input type="hidden" name="businessId" value={business.id} />
+                          <input type="hidden" name="destinationPhone" value={business.notificationSettings?.ownerPhone || business.notifyPhone || ''} />
+                          <Button size="sm" type="submit" variant="ghost">
+                            Send test SMS
+                          </Button>
+                        </form>
+                      ) : null}
+                      <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${business.id}#advanced`}>
+                        {isBusinessArchived(business) ? 'Restore / manage' : 'Archive / manage'}
+                      </Link>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+                )
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

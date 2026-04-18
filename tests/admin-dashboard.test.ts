@@ -79,6 +79,40 @@ test('next-step guidance calls out webhook recovery and live health clearly', ()
   assert.equal(healthy.tone, 'healthy');
 });
 
+test('next-step guidance stays explicit for owner setup and pending A2P review', () => {
+  const missingOwnerContact = buildAdminNextStep({
+    business: createBusiness({
+      notifyPhone: null,
+      twilioSubaccountSid: null,
+      twilioMessagingServiceSid: null,
+      twilioPrimaryNumberSid: null,
+      twilioPhoneNumberSid: null,
+      twilioPrimaryPhoneNumber: null,
+      twilioPhoneNumber: null,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    }),
+    notificationSettings: createNotificationSettings({
+      ownerPhone: null,
+      ownerEmail: '',
+    }),
+    ownerConnected: false,
+  });
+
+  assert.equal(missingOwnerContact.title, 'Owner contact info is missing');
+  assert.equal(missingOwnerContact.actionLabel, 'Save owner contact info');
+
+  const pendingA2p = buildAdminNextStep({
+    business: createBusiness({
+      managedTwilioStatus: ManagedTwilioStatus.CAMPAIGN_SUBMITTED,
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+  });
+
+  assert.equal(pendingA2p.title, 'A2P campaign still pending');
+  assert.equal(pendingA2p.tone, 'pending');
+});
+
 test('board filters and delete guard stay conservative', () => {
   const pausedTestBusiness = createBusiness({
     isTestBusiness: true,
