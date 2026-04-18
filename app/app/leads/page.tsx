@@ -1,211 +1,237 @@
 import Link from 'next/link';
-import { LeadStatus } from '@prisma/client';
+import { LeadReadiness, LeadStatus } from '@prisma/client';
 
-import { UpgradeBanner } from '@/components/upgrade-banner';
+import { CustomerLeadRow } from '@/components/customer-lead-row';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
-import { listAllDashboardLeadsForBusiness, listDashboardLeadsForBusiness } from '@/lib/business-access';
-import { db } from '@/lib/db';
-import {
-  formatDateTime,
-  formatRelativeTime,
-  getLeadStatusBadgeVariant,
-  leadReadinessLabels,
-  leadStatusLabels,
-  leadStatusOrder,
-} from '@/lib/lead-presenters';
-import { formatPhoneForDisplay } from '@/lib/phone';
-import { getPortfolioDemoBlockedCount, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
-import { getBusinessBillingAccessState } from '@/lib/subscription';
-import { getConversationUsageForBusiness } from '@/lib/usage';
-import { describeAutomationBlockReason, resolveAutomationBlockReason } from '@/lib/usage-visibility';
+import { listAllDashboardLeadsForBusiness } from '@/lib/business-access';
+import { getLeadLastActivityAt, isLeadOpenStatus, leadStatusLabels } from '@/lib/lead-presenters';
+import { getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { cn } from '@/lib/utils';
 
 type SearchParams = Record<string, string | string[] | undefined>;
+type InboxView = 'attention' | 'all' | 'booked' | 'lost';
 
-function buildLeadsHref(status: LeadStatus | null) {
-  const params = new URLSearchParams();
-  if (status) params.set('status', status.toLowerCase());
-  const query = params.toString();
-  return query ? `/app/leads?${query}` : '/app/leads';
+function buildLeadsHref(view: InboxView) {
+  if (view === 'attention') return '/app/leads?view=attention';
+  if (view === 'all') return '/app/leads';
+  return `/app/leads?view=${view}`;
 }
 
-function buildLeadDetailHref(leadId: string, status: LeadStatus | null) {
-  const params = new URLSearchParams();
-  const returnTo = buildLeadsHref(status);
-  if (returnTo !== '/app/leads') {
-    params.set('from', returnTo);
-  }
-  const query = params.toString();
-  return query ? `/app/leads/${leadId}?${query}` : `/app/leads/${leadId}`;
+function buildStatusHref(status: LeadStatus) {
+  return `/app/leads?status=${status.toLowerCase()}`;
 }
 
-function getLeadPrimaryLabel(lead: {
-  callerName?: string | null;
-  contactName?: string | null;
-  callerPhoneNormalized?: string | null;
-  callerPhone: string;
-}) {
-  return lead.callerName || lead.contactName || formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone);
-}
+function buildLeadDetailHref(leadId: string, params: { view?: InboxView; status?: LeadStatus | null }) {
+  const query = new URLSearchParams();
 
-function getLeadSecondaryLabel(lead: {
-  callerName?: string | null;
-  contactName?: string | null;
-  callerPhoneNormalized?: string | null;
-  callerPhone: string;
-}) {
-  if (lead.callerName || lead.contactName) {
-    return formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone);
+  if (params.status) {
+    query.set('from', buildStatusHref(params.status));
+  } else if (params.view && params.view !== 'all') {
+    query.set('from', buildLeadsHref(params.view));
   }
 
-  return 'Name not captured yet';
+  const queryString = query.toString();
+  return queryString ? `/app/leads/${leadId}?${queryString}` : `/app/leads/${leadId}`;
+}
+
+function parseInboxView(value: string | undefined): InboxView {
+  if (value === 'all' || value === 'booked' || value === 'lost' || value === 'attention') {
+    return value;
+  }
+
+  return 'attention';
+}
+
+function getAttentionPriority(lead: {
+  status: LeadStatus;
+  readiness: LeadReadiness;
+  createdAt: Date;
+  lastInteractionAt: Date | null;
+  lastInboundAt: Date | null;
+  lastOutboundAt: Date | null;
+}) {
+  const statusPriority: Record<LeadStatus, number> = {
+    NEW: 0,
+    QUALIFIED: 1,
+    NOTIFIED: 2,
+    CONTACTED: 3,
+    BOOKED: 4,
+    LOST: 5,
+  };
+  const readinessPriority: Record<LeadReadiness, number> = {
+    URGENT: 0,
+    QUALIFIED: 1,
+    PENDING: 2,
+  };
+
+  return {
+    status: statusPriority[lead.status],
+    readiness: readinessPriority[lead.readiness],
+    activityAt: getLeadLastActivityAt(lead).getTime(),
+  };
+}
+
+function sortAttentionLeads<
+  T extends {
+    status: LeadStatus;
+    readiness: LeadReadiness;
+    createdAt: Date;
+    lastInteractionAt: Date | null;
+    lastInboundAt: Date | null;
+    lastOutboundAt: Date | null;
+  },
+>(leads: T[]) {
+  return [...leads].sort((left, right) => {
+    const leftPriority = getAttentionPriority(left);
+    const rightPriority = getAttentionPriority(right);
+
+    if (leftPriority.status !== rightPriority.status) {
+      return leftPriority.status - rightPriority.status;
+    }
+
+    if (leftPriority.readiness !== rightPriority.readiness) {
+      return leftPriority.readiness - rightPriority.readiness;
+    }
+
+    return rightPriority.activityAt - leftPriority.activityAt;
+  });
 }
 
 export default async function LeadsPage({ searchParams }: { searchParams?: SearchParams }) {
   const business = await requireBusiness();
-  const rawFilter = typeof searchParams?.status === 'string' ? searchParams.status.toUpperCase() : 'ALL';
-  const statusFilter = Object.values(LeadStatus).includes(rawFilter as LeadStatus) ? (rawFilter as LeadStatus) : null;
+  const demoMode = isPortfolioDemoMode();
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const saved = searchParams?.saved === '1';
-  const demoMode = isPortfolioDemoMode();
-  const billingAccess = getBusinessBillingAccessState(business);
-
-  const [filteredLeads, allLeads, blockedCount, usage] = demoMode
-    ? [getPortfolioDemoLeads(statusFilter), getPortfolioDemoLeads(null), getPortfolioDemoBlockedCount(), null]
-    : await Promise.all([
-        listDashboardLeadsForBusiness(business.id, statusFilter),
-        listAllDashboardLeadsForBusiness(business.id),
-        db.lead.count({ where: { businessId: business.id, billingRequired: true } }),
-        getConversationUsageForBusiness(business),
-      ]);
+  const rawStatus = typeof searchParams?.status === 'string' ? searchParams.status.toUpperCase() : null;
+  const statusFilter = rawStatus && Object.values(LeadStatus).includes(rawStatus as LeadStatus) ? (rawStatus as LeadStatus) : null;
+  const view = statusFilter ? 'all' : parseInboxView(typeof searchParams?.view === 'string' ? searchParams.view : undefined);
+  const allLeads = demoMode ? getPortfolioDemoLeads(null) : await listAllDashboardLeadsForBusiness(business.id);
   const hasLeads = allLeads.length > 0;
-  const automationBlockReason = resolveAutomationBlockReason({
-    blockedCount,
-    subscriptionStatus: business.subscriptionStatus,
-    billingActive: billingAccess.billingActive,
-    usage,
-  });
-  const automationBlockMessage = describeAutomationBlockReason(automationBlockReason, {
-    blockedCount,
-    usage: usage ?? undefined,
-  });
+
+  const filteredLeads = statusFilter
+    ? allLeads.filter((lead) => lead.status === statusFilter)
+    : view === 'attention'
+      ? sortAttentionLeads(allLeads.filter((lead) => isLeadOpenStatus(lead.status)))
+      : view === 'booked'
+        ? allLeads.filter((lead) => lead.status === LeadStatus.BOOKED)
+        : view === 'lost'
+          ? allLeads.filter((lead) => lead.status === LeadStatus.LOST)
+          : allLeads;
+
+  const filterChips = [
+    {
+      key: 'attention' as const,
+      label: 'Needs follow-up',
+      href: buildLeadsHref('attention'),
+      count: allLeads.filter((lead) => isLeadOpenStatus(lead.status)).length,
+      active: !statusFilter && view === 'attention',
+    },
+    {
+      key: 'all' as const,
+      label: 'All leads',
+      href: buildLeadsHref('all'),
+      count: allLeads.length,
+      active: !statusFilter && view === 'all',
+    },
+    {
+      key: 'booked' as const,
+      label: 'Booked',
+      href: buildLeadsHref('booked'),
+      count: allLeads.filter((lead) => lead.status === LeadStatus.BOOKED).length,
+      active: !statusFilter && view === 'booked',
+    },
+    {
+      key: 'lost' as const,
+      label: 'Lost',
+      href: buildLeadsHref('lost'),
+      count: allLeads.filter((lead) => lead.status === LeadStatus.LOST).length,
+      active: !statusFilter && view === 'lost',
+    },
+  ];
+
+  const listDescription = statusFilter
+    ? `Showing ${leadStatusLabels[statusFilter].toLowerCase()} leads. Open a lead to act on it.`
+    : view === 'attention'
+      ? 'Showing leads that still need action. Open one to call back or update the outcome.'
+      : 'Open any lead to review the conversation and update the outcome from the detail page.';
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="space-y-3">
+        <Badge variant="outline">Lead inbox</Badge>
         <div className="space-y-2">
-          <Badge variant="outline">Recovered Leads</Badge>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Lead inbox</h1>
-            <p className="text-sm text-muted-foreground">
-              Open any lead to call back, review the conversation, and update the outcome from one clear workspace.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link className={buttonVariants({ variant: 'outline' })} href="/app/conversations">
-            Open Conversations
-          </Link>
-          <Link className={buttonVariants({ variant: 'outline' })} href="/app/call-flow">
-            Run test flow
-          </Link>
+          <h1 className="text-2xl font-semibold tracking-tight">Scan the list. Open the lead. Take action.</h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            This page is only for scanning. Click a lead to open the detail page where the real follow-up work happens.
+          </p>
         </div>
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
-      {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead status updated.</div> : null}
-      {automationBlockReason !== 'none' && blockedCount > 0 ? (
-        <UpgradeBanner
-          blockedCount={blockedCount}
-          title="Automated follow-up needs billing attention."
-          description={automationBlockMessage}
-          ctaLabel={automationBlockReason === 'usage_limit_reached' ? 'Upgrade Plan' : 'Open Billing'}
-        />
-      ) : null}
+      {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead updated.</div> : null}
 
       {!hasLeads ? (
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader>
-            <CardTitle>No recovered leads yet</CardTitle>
-            <CardDescription>Run your first missed-call test. New leads will appear here as soon as CallbackCloser captures them.</CardDescription>
+            <CardTitle>No leads yet</CardTitle>
+            <CardDescription>When a missed call becomes a lead, it will appear here automatically.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
-            <Link className={buttonVariants()} href="/app/call-flow">
-              Run your first test call
-            </Link>
             <Link className={buttonVariants({ variant: 'outline' })} href="/app/settings">
-              Finish setup
+              Check setup
+            </Link>
+            <Link className={buttonVariants()} href="/app/call-flow">
+              Run a test call
             </Link>
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-card/90">
+        <Card className="bg-card/95">
           <CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <CardTitle>Lead inbox</CardTitle>
-              <CardDescription>
-                {filteredLeads.length} visible lead{filteredLeads.length === 1 ? '' : 's'}.
-                {' '}Click a lead to open the full action screen.
-              </CardDescription>
+              <CardTitle>Inbox</CardTitle>
+              <CardDescription>{listDescription}</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link href={buildLeadsHref(null)} className={cn('rounded-md border px-3 py-1.5 text-sm', !statusFilter && 'bg-muted')}>
-                All
-              </Link>
-              {leadStatusOrder.map((status) => (
+              {filterChips.map((chip) => (
                 <Link
-                  key={status}
-                  href={buildLeadsHref(status)}
-                  className={cn('rounded-md border px-3 py-1.5 text-sm', statusFilter === status && 'bg-muted')}
+                  key={chip.key}
+                  className={cn('rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-muted', chip.active && 'bg-muted')}
+                  href={chip.href}
                 >
-                  {leadStatusLabels[status]}
+                  {chip.label} <span className="text-muted-foreground">{chip.count}</span>
                 </Link>
               ))}
             </div>
           </CardHeader>
-          <CardContent className="space-y-1">
+          <CardContent className="space-y-3">
+            {statusFilter ? (
+              <div className="flex items-center gap-3 rounded-2xl border bg-muted/20 px-4 py-3 text-sm">
+                <span className="font-medium">Status filter:</span>
+                <Badge variant="secondary">{leadStatusLabels[statusFilter]}</Badge>
+                <Link className="text-muted-foreground underline underline-offset-4" href="/app/leads?view=attention">
+                  Clear filter
+                </Link>
+              </div>
+            ) : null}
+
             {filteredLeads.length === 0 ? (
-              <div className="rounded-xl border bg-muted/20 p-6 text-sm text-muted-foreground">
-                No leads match this filter right now.
+              <div className="rounded-2xl border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
+                No leads match this view right now.
               </div>
             ) : (
               filteredLeads.map((lead) => (
-                <Link
+                <CustomerLeadRow
                   key={lead.id}
-                  href={buildLeadDetailHref(lead.id, statusFilter)}
-                  className="block rounded-2xl border bg-background/70 p-4 transition-colors hover:bg-muted/20"
-                >
-                  <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] lg:items-center">
-                    <div className="space-y-1">
-                      <p className="font-medium text-foreground">{getLeadPrimaryLabel(lead)}</p>
-                      <p className="text-sm text-muted-foreground">{getLeadSecondaryLabel(lead)}</p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">{lead.serviceType || lead.serviceRequested || 'Service not captured yet'}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {lead.location || lead.zipCode ? `Location: ${lead.location || lead.zipCode}` : 'Location pending'}
-                      </p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">{lead.urgency || 'Urgency pending'}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Created {formatRelativeTime(lead.createdAt)} · {formatDateTime(lead.createdAt)}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                      <Badge variant={getLeadStatusBadgeVariant(lead.status)}>{leadStatusLabels[lead.status]}</Badge>
-                      <Badge variant={lead.readiness === 'URGENT' ? 'destructive' : lead.readiness === 'QUALIFIED' ? 'secondary' : 'outline'}>
-                        {leadReadinessLabels[lead.readiness]}
-                      </Badge>
-                    </div>
-                  </div>
-                </Link>
+                  lead={lead}
+                  href={buildLeadDetailHref(lead.id, {
+                    view,
+                    status: statusFilter,
+                  })}
+                />
               ))
             )}
           </CardContent>

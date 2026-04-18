@@ -9,6 +9,7 @@ function read(relativePath: string) {
 
 test('protected app surfaces use shared tenant-scoped access helpers', () => {
   const auth = read('lib/auth.ts');
+  const appHomePage = read('app/app/page.tsx');
   const leadsPage = read('app/app/leads/page.tsx');
   const leadDetailPage = read('app/app/leads/[leadId]/page.tsx');
   const conversationsPage = read('app/app/conversations/page.tsx');
@@ -19,7 +20,8 @@ test('protected app surfaces use shared tenant-scoped access helpers', () => {
   const recordingRoute = read('app/api/leads/[leadId]/recording/route.ts');
 
   assert.match(auth, /getBusinessForOwnerClerkId/);
-  assert.match(leadsPage, /listDashboardLeadsForBusiness/);
+  assert.match(appHomePage, /requireBusiness/);
+  assert.match(appHomePage, /listAllDashboardLeadsForBusiness/);
   assert.match(leadsPage, /listAllDashboardLeadsForBusiness/);
   assert.match(leadsPage, /buildLeadDetailHref/);
   assert.doesNotMatch(leadsPage, /selectedLeadId/);
