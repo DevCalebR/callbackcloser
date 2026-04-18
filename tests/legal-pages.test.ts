@@ -46,10 +46,17 @@ test('sms consent page includes required disclosures and trust links', () => {
     smsConsentForm,
     /I agree to receive SMS messages from CallbackCloser related to my request\./
   );
+  assert.match(smsConsentForm, /htmlFor="sms-consent-phone"/);
+  assert.match(smsConsentForm, /name="phone"/);
+  assert.match(smsConsentForm, /type="tel"/);
   assert.match(smsConsentForm, /defaultChecked=\{false\}/);
+  assert.match(smsConsentForm, /Continue/);
   assert.match(smsConsentForm, /Consent to receive SMS messages is not a condition of purchase/i);
-  assert.doesNotMatch(smsConsent, /visual-only|Twilio review only|pilot reference|demo|public compliance reference/i);
-  assert.doesNotMatch(smsConsentForm, /does not submit or store phone numbers|compliance reference|buyers, carriers, and reviewers/i);
+  assert.doesNotMatch(smsConsent, /visual-only|Twilio review only|pilot reference|demo|public compliance reference|consent is recorded elsewhere/i);
+  assert.doesNotMatch(
+    smsConsentForm,
+    /consent language reference|does not submit or store phone numbers|compliance reference|buyers, carriers, and reviewers|use a real phone field|in production, your real consent flow should/i
+  );
   assert.match(privacy, /does not sell mobile numbers/i);
   assert.match(privacy, /callback coordination/i);
   assert.match(terms, /SMS Consent/);
