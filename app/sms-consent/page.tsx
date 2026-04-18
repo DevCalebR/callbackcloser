@@ -11,15 +11,16 @@ const EFFECTIVE_DATE = 'April 5, 2026';
 export const metadata: Metadata = {
   title: 'SMS Consent | CallbackCloser',
   description:
-    'Review the SMS consent disclosure language CallbackCloser uses for missed call follow-up, callback coordination, customer care, and account updates.',
+    'CallbackCloser uses SMS messaging to respond to customer inquiries and provide service-related updates.',
 };
 
-const messageTypes = ['Missed call follow-up', 'Callback coordination', 'Service updates', 'Customer care', 'Account notifications'];
-const messageDetails = [
+const messageExamples = ['Callback coordination', 'Customer support', 'Service-related questions', 'Status updates', 'Account or service notifications'];
+const requiredDisclosures = [
   'Message frequency varies.',
   'Message and data rates may apply.',
   'Reply STOP to opt out.',
   'Reply HELP for help.',
+  'Contact: support@callbackcloser.com',
 ];
 
 export default function SmsConsentPage() {
@@ -29,12 +30,11 @@ export default function SmsConsentPage() {
 
       <main className="container py-12">
         <article className="mx-auto max-w-4xl space-y-8">
-          <header className="max-w-2xl space-y-3">
+          <header className="max-w-3xl space-y-3">
             <h1 className="text-4xl font-semibold tracking-tight">SMS Consent</h1>
             <p className="text-sm text-muted-foreground">Effective date: {EFFECTIVE_DATE}</p>
             <p className="text-base text-muted-foreground">
-              Review the disclosure language CallbackCloser uses in live SMS opt-in flows for missed call follow-up, callback
-              coordination, service updates, customer care, and account notifications.
+              CallbackCloser uses SMS messaging to respond to customer inquiries and provide service-related updates.
             </p>
           </header>
 
@@ -44,62 +44,58 @@ export default function SmsConsentPage() {
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>What to expect</CardTitle>
-                  <CardDescription>CallbackCloser uses text messages to keep service conversations moving after a missed call.</CardDescription>
+                  <CardTitle>Consent explanation</CardTitle>
+                  <CardDescription>
+                    By providing a phone number and agreeing to the disclosure, the user consents to receive SMS messages from
+                    CallbackCloser related to callback coordination, customer support, service updates, and account or service
+                    notifications related to the user&apos;s request.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {messageTypes.map((type) => (
-                      <div key={type} className="rounded-lg border bg-muted/30 px-4 py-3">
-                        <p className="font-medium text-foreground">{type}</p>
-                      </div>
-                    ))}
-                  </div>
+                <CardContent className="text-sm text-muted-foreground">
+                  Consent to receive SMS messages is not a condition of purchase.
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Message details</CardTitle>
-                  <CardDescription>Live opt-in flows must show these terms before consent is captured.</CardDescription>
+                  <CardTitle>These messages may include</CardTitle>
+                  <CardDescription>CallbackCloser uses SMS for coordination, support, and service-related communication tied to a request.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2 text-sm text-muted-foreground">
-                  {messageDetails.map((item) => (
-                    <p key={item}>- {item}</p>
+                <CardContent className="grid gap-2 sm:grid-cols-2">
+                  {messageExamples.map((item) => (
+                    <div key={item} className="rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+                      <p className="font-medium text-foreground">{item}</p>
+                    </div>
                   ))}
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Related trust pages</CardTitle>
-                  <CardDescription>Review the policies connected to CallbackCloser messaging and service use.</CardDescription>
+                  <CardTitle>Required disclosures</CardTitle>
+                  <CardDescription>These terms apply to service-related SMS messages sent by CallbackCloser.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex flex-wrap gap-3 text-sm">
-                  <Link className="underline underline-offset-4" href="/privacy">
-                    Privacy Policy
-                  </Link>
-                  <Link className="underline underline-offset-4" href="/terms">
-                    Terms &amp; Conditions
-                  </Link>
-                  <Link className="underline underline-offset-4" href="/contact">
-                    Contact
-                  </Link>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  {requiredDisclosures.map((item) => (
+                    <p key={item}>- {item}</p>
+                  ))}
                 </CardContent>
               </Card>
 
-              <p className="text-sm text-muted-foreground">
-                This page is a public compliance reference. CallbackCloser records consent inside the actual signup, intake, or customer
-                messaging flow, not on this page.
-              </p>
-
-              <p className="text-sm text-muted-foreground">
-                Need help? Email{' '}
-                <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
-                  support@callbackcloser.com
-                </a>
-                .
-              </p>
+              <div className="rounded-2xl border bg-card/80 p-5 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">Related policies</p>
+                <p className="mt-2">
+                  Review our{' '}
+                  <Link className="underline underline-offset-4" href="/privacy">
+                    Privacy Policy
+                  </Link>{' '}
+                  and{' '}
+                  <Link className="underline underline-offset-4" href="/terms">
+                    Terms &amp; Conditions
+                  </Link>
+                  .
+                </p>
+              </div>
             </div>
           </section>
         </article>

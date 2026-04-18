@@ -28,16 +28,16 @@ export default function PrivacyPage() {
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">How We Use Data</h2>
             <p className="text-sm text-muted-foreground">
-              Data is used to deliver missed-call follow-up, surface leads in the dashboard, support customer care, send account
-              notifications, deliver service updates, maintain service reliability, and support account operations.
+              Data is used to support callback coordination, customer support, service updates, account or service notifications,
+              lead visibility in the dashboard, service reliability, and account operations.
             </p>
           </section>
 
           <section className="space-y-2">
             <h2 className="text-xl font-semibold">SMS And Customer Communications</h2>
             <p className="text-sm text-muted-foreground">
-              CallbackCloser may process phone numbers, missed-call records, and SMS conversation content to provide customer care,
-              account notifications, missed call follow-up, and service updates tied to the CallbackCloser workflow.
+              CallbackCloser may process phone numbers, missed-call records, and SMS conversation content to provide callback
+              coordination, customer support, service updates, and account or service notifications related to a user&apos;s request.
             </p>
             <p className="text-sm text-muted-foreground">
               Message frequency varies by conversation. Message and data rates may apply. Recipients can reply STOP to opt out or HELP

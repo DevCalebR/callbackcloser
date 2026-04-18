@@ -474,7 +474,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                 <div className="rounded-xl border bg-muted/20 p-4">
                   <p className="font-medium">Message disclaimer preview</p>
                   <p className="mt-2 text-muted-foreground">
-                    By replying, callers consent to text messages related to their missed call. Message frequency varies. Message and data rates may apply. Reply STOP to opt out, HELP for help.
+                    By providing a phone number and agreeing to receive messages, callers consent to SMS from CallbackCloser related
+                    to callback coordination, customer support, service updates, and account or service notifications tied to their
+                    request. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help.
                   </p>
                 </div>
               </CardContent>
