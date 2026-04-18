@@ -21,6 +21,7 @@ const requiredDisclosures = [
   'Reply STOP to opt out.',
   'Reply HELP for help.',
   'Contact: support@callbackcloser.com',
+  'Consent to receive SMS messages is not a condition of purchase.',
 ];
 
 export default function SmsConsentPage() {
@@ -46,14 +47,12 @@ export default function SmsConsentPage() {
                 <CardHeader>
                   <CardTitle>Consent explanation</CardTitle>
                   <CardDescription>
-                    By providing a phone number and agreeing to the disclosure, the user consents to receive SMS messages from
-                    CallbackCloser related to callback coordination, customer support, service updates, and account or service
-                    notifications related to the user&apos;s request.
+                    By providing your phone number and checking the consent box, you agree to receive SMS messages from CallbackCloser
+                    related to your request, including callback coordination, customer support, service updates, and account or
+                    service notifications.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Consent to receive SMS messages is not a condition of purchase.
-                </CardContent>
+                <CardContent className="text-sm text-muted-foreground">CallbackCloser uses SMS for service-related communication tied to a customer request.</CardContent>
               </Card>
 
               <Card>
