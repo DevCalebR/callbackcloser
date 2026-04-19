@@ -2,6 +2,7 @@ import { ManagedTwilioStatus, Prisma, MessageParticipant } from '@prisma/client'
 
 import { db } from '@/lib/db';
 import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
+import { formatPhoneDetail, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
@@ -51,6 +52,21 @@ export async function persistInboundMessage(params: {
     throw error;
   }
 
+  await recordBusinessOperatorEvent({
+    businessId: params.businessId,
+    type: 'messaging.inbound_sms_received',
+    category: 'MESSAGING',
+    status: 'INFO',
+    summary: 'Inbound SMS received',
+    details: {
+      fromPhone: formatPhoneDetail(normalizedFrom),
+      toPhone: formatPhoneDetail(normalizedTo),
+      bodyPreview: params.body.slice(0, 80),
+    },
+    relatedEntityType: params.leadId ? 'lead' : 'message',
+    relatedEntityId: params.leadId ?? message.id,
+  });
+
   return { message, duplicate: false };
 }
 
@@ -70,8 +86,23 @@ export async function sendAndPersistOutboundMessage(params: {
   const from = normalizePhoneNumber(params.fromPhone) || params.fromPhone;
   const to = normalizePhoneNumber(params.toPhone) || params.toPhone;
   const participant = params.participant ?? 'LEAD';
+  const recipientLabel = participant === 'OWNER' ? 'owner SMS' : 'lead SMS';
 
   if (await isSmsRecipientOptedOut({ businessId: params.businessId, phone: to })) {
+    await recordBusinessOperatorEvent({
+      businessId: params.businessId,
+      type: 'messaging.outbound_sms_suppressed',
+      category: 'MESSAGING',
+      status: 'WARNING',
+      summary: `Outbound ${recipientLabel} suppressed`,
+      details: {
+        reason: 'recipient_opted_out',
+        toPhone: formatPhoneDetail(to),
+        participant,
+      },
+      relatedEntityType: params.leadId ? 'lead' : null,
+      relatedEntityId: params.leadId ?? null,
+    });
     logTwilioWarn('messaging', 'outbound_suppressed_opted_out', {
       decision: 'suppress_opted_out',
       businessId: params.businessId,
@@ -112,6 +143,20 @@ export async function sendAndPersistOutboundMessage(params: {
         ? 'managed_twilio_compliance_blocked'
         : 'managed_twilio_compliance_pending';
 
+    await recordBusinessOperatorEvent({
+      businessId: params.businessId,
+      type: 'messaging.outbound_sms_suppressed',
+      category: 'MESSAGING',
+      status: 'WARNING',
+      summary: `Outbound ${recipientLabel} suppressed`,
+      details: {
+        reason,
+        participant,
+        nextStep: managedSummary.nextStep,
+      },
+      relatedEntityType: params.leadId ? 'lead' : null,
+      relatedEntityId: params.leadId ?? null,
+    });
     logTwilioWarn('messaging', 'outbound_suppressed_managed_twilio_not_ready', {
       decision: reason,
       businessId: params.businessId,
@@ -125,6 +170,21 @@ export async function sendAndPersistOutboundMessage(params: {
       reason,
     };
   }
+
+  await recordBusinessOperatorEvent({
+    businessId: params.businessId,
+    type: 'messaging.outbound_sms_requested',
+    category: 'MESSAGING',
+    status: 'PENDING',
+    summary: `Outbound ${recipientLabel} requested`,
+    details: {
+      fromPhone: formatPhoneDetail(from),
+      toPhone: formatPhoneDetail(to),
+      participant,
+    },
+    relatedEntityType: params.leadId ? 'lead' : null,
+    relatedEntityId: params.leadId ?? null,
+  });
 
   const client = getTwilioBusinessClient(params.twilioSubaccountSid);
   const sent = await client.messages.create(
@@ -151,6 +211,21 @@ export async function sendAndPersistOutboundMessage(params: {
     twilioSid: sent.sid,
     status: sent.status,
     twilioCreatedAt: sent.dateCreated ?? undefined,
+  });
+  await recordBusinessOperatorEvent({
+    businessId: params.businessId,
+    type: 'messaging.outbound_sms_accepted',
+    category: 'MESSAGING',
+    status: 'SUCCESS',
+    summary: `Outbound ${recipientLabel} accepted by Twilio`,
+    details: {
+      fromPhone: formatPhoneDetail(from),
+      toPhone: formatPhoneDetail(to),
+      messageStatus: sent.status,
+      participant,
+    },
+    relatedEntityType: params.leadId ? 'lead' : 'message',
+    relatedEntityId: params.leadId ?? message.id,
   });
 
   logTwilioInfo('messaging', 'outbound_sent_and_persisted', {

@@ -25,6 +25,7 @@ import { searchBusinessesForAdmin } from '@/lib/business';
 import { db } from '@/lib/db';
 import { formatDateTime, formatRelativeTime } from '@/lib/lead-presenters';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
+import { OperatorEventStatus } from '@prisma/client';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { cn } from '@/lib/utils';
 
@@ -81,7 +82,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const view = (getQueryValue(searchParams, 'view') as AdminBoardFilter | null) || 'all';
   const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
-  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, notificationFailures] = await Promise.all([
+  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, notificationFailures, operatorSignals] = await Promise.all([
     query
       ? searchBusinessesForAdmin(query)
       : db.business.findMany({
@@ -120,6 +121,17 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       },
       take: 200,
     }),
+    db.businessOperatorEvent.findMany({
+      where: {
+        status: { in: [OperatorEventStatus.FAILED, OperatorEventStatus.WARNING] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        businessId: true,
+        status: true,
+      },
+      take: 600,
+    }),
   ]);
 
   const leadCountMap = new Map(leadCounts.map((item) => [item.businessId, item._count._all]));
@@ -129,11 +141,22 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const callActivityMap = new Map(callActivity.map((item) => [item.businessId, item._max.createdAt]));
   const messageActivityMap = new Map(messageActivity.map((item) => [item.businessId, item._max.createdAt]));
   const notificationFailureMap = new Map<string, { status: string; error: string | null; createdAt: Date }>();
+  const operatorSignalMap = new Map<string, { failed: number; warning: number }>();
 
   for (const failure of notificationFailures) {
     if (!notificationFailureMap.has(failure.businessId)) {
       notificationFailureMap.set(failure.businessId, failure);
     }
+  }
+
+  for (const signal of operatorSignals) {
+    const entry = operatorSignalMap.get(signal.businessId) || { failed: 0, warning: 0 };
+    if (signal.status === OperatorEventStatus.FAILED) {
+      entry.failed += 1;
+    } else {
+      entry.warning += 1;
+    }
+    operatorSignalMap.set(signal.businessId, entry);
   }
 
   const businessRows = businesses.map((business) => {
@@ -171,6 +194,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       : nextStep.tone === 'healthy'
         ? 'Healthy. No immediate operator action needed.'
         : compactCopy(`${nextStep.title}. ${nextStep.detail}`);
+    const operatorSignals = operatorSignalMap.get(business.id) || { failed: 0, warning: 0 };
 
     return {
       business,
@@ -185,6 +209,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       overallStatus,
       a2pState,
       attentionSignal,
+      operatorSignals,
       canSendTestSms: Boolean(assignedNumber && (business.notificationSettings?.ownerPhone || business.notifyPhone)),
     };
   });
@@ -415,6 +440,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                   overallStatus,
                   a2pState,
                   attentionSignal,
+                  operatorSignals,
                   canSendTestSms,
                 }) => (
                   <div key={business.id} className="grid gap-4 border-t bg-background/80 px-5 py-4 first:border-t-0 xl:grid-cols-[1.7fr_1fr_1.15fr_0.95fr_1.3fr]">
@@ -435,6 +461,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                         <span>{business.id}</span>
                         <span>{leadCount} lead{leadCount === 1 ? '' : 's'}</span>
                         <span>{lastActivityAt ? `Last activity ${formatRelativeTime(lastActivityAt)}` : 'No activity yet'}</span>
+                        {operatorSignals.failed > 0 ? <span>{operatorSignals.failed} error{operatorSignals.failed === 1 ? '' : 's'}</span> : null}
+                        {operatorSignals.warning > 0 ? <span>{operatorSignals.warning} warning{operatorSignals.warning === 1 ? '' : 's'}</span> : null}
                       </div>
                     </div>
 

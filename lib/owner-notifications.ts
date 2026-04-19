@@ -6,6 +6,7 @@ import { getEffectiveBusinessNotificationSettings } from '@/lib/business-notific
 import { db } from '@/lib/db';
 import { sendTransactionalEmail } from '@/lib/email';
 import { buildLeadSummary, getLeadServiceType, isLeadQualified } from '@/lib/lead-qualification';
+import { formatPhoneDetail, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
@@ -166,6 +167,19 @@ export async function sendOwnerLeadSms(leadId: string) {
       status: OwnerNotificationStatus.SKIPPED,
       error: 'SMS notifications disabled',
     });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: 'owner_alert.sms_skipped',
+      category: 'OWNER_ALERTS',
+      status: 'WARNING',
+      summary: 'Owner SMS alert skipped',
+      details: {
+        reason: 'SMS notifications disabled',
+        destinationPhone: formatPhoneDetail(destination),
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
+    });
     return { status: 'skipped' as const };
   }
 
@@ -174,6 +188,19 @@ export async function sendOwnerLeadSms(leadId: string) {
       status: OwnerNotificationStatus.SKIPPED,
       error: 'Missing owner phone or business texting number',
     });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: 'owner_alert.sms_skipped',
+      category: 'OWNER_ALERTS',
+      status: 'WARNING',
+      summary: 'Owner SMS alert skipped',
+      details: {
+        reason: 'Missing owner phone or business texting number',
+        destinationPhone: formatPhoneDetail(destination),
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
+    });
     return { status: 'skipped' as const };
   }
 
@@ -181,6 +208,19 @@ export async function sendOwnerLeadSms(leadId: string) {
     await markNotificationResult(leadId, OwnerNotificationChannel.SMS, {
       status: OwnerNotificationStatus.SENT,
       metadata: { simulated: true, preview: true },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: 'owner_alert.sms_sent',
+      category: 'OWNER_ALERTS',
+      status: 'SUCCESS',
+      summary: 'Owner SMS alert recorded for simulator',
+      details: {
+        destinationPhone: formatPhoneDetail(destination),
+        simulated: true,
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
     });
     return { status: 'simulated' as const };
   }
@@ -204,6 +244,19 @@ export async function sendOwnerLeadSms(leadId: string) {
         status: OwnerNotificationStatus.SKIPPED,
         error: result.reason,
       });
+      await recordBusinessOperatorEvent({
+        businessId: lead.businessId,
+        type: 'owner_alert.sms_skipped',
+        category: 'OWNER_ALERTS',
+        status: 'WARNING',
+        summary: 'Owner SMS alert skipped',
+        details: {
+          reason: result.reason,
+          destinationPhone: formatPhoneDetail(destination),
+        },
+        relatedEntityType: 'lead',
+        relatedEntityId: leadId,
+      });
       logTwilioWarn('sms', 'owner_lead_sms_skipped', { leadId, businessId: lead.businessId, decision: result.reason });
       return { status: 'skipped' as const };
     }
@@ -212,12 +265,37 @@ export async function sendOwnerLeadSms(leadId: string) {
       status: OwnerNotificationStatus.SENT,
       metadata: { twilioSid: result.sent.sid, provider: 'twilio' },
     });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: 'owner_alert.sms_sent',
+      category: 'OWNER_ALERTS',
+      status: 'SUCCESS',
+      summary: 'Owner SMS alert sent',
+      details: {
+        destinationPhone: formatPhoneDetail(destination),
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
+    });
 
     return { status: 'sent' as const };
   } catch (error) {
     await markNotificationResult(leadId, OwnerNotificationChannel.SMS, {
       status: OwnerNotificationStatus.FAILED,
       error: error instanceof Error ? error.message : String(error),
+    });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: 'owner_alert.sms_failed',
+      category: 'OWNER_ALERTS',
+      status: 'FAILED',
+      summary: 'Owner SMS alert failed',
+      details: {
+        destinationPhone: formatPhoneDetail(destination),
+        error: error instanceof Error ? error.message : String(error),
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
     });
     logTwilioError('sms', 'owner_lead_sms_failed', { leadId, businessId: lead.businessId, decision: 'owner_sms_failed' }, error);
     return { status: 'failed' as const };
@@ -244,6 +322,19 @@ export async function sendOwnerLeadEmail(leadId: string) {
       status: OwnerNotificationStatus.SKIPPED,
       error: 'Email notifications disabled',
     });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: 'owner_alert.email_skipped',
+      category: 'OWNER_ALERTS',
+      status: 'WARNING',
+      summary: 'Owner email alert skipped',
+      details: {
+        reason: 'Email notifications disabled',
+        destinationEmail: settings.ownerEmail,
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
+    });
     return { status: 'skipped' as const };
   }
 
@@ -252,6 +343,18 @@ export async function sendOwnerLeadEmail(leadId: string) {
       status: OwnerNotificationStatus.SKIPPED,
       error: 'Missing owner email',
     });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: 'owner_alert.email_skipped',
+      category: 'OWNER_ALERTS',
+      status: 'WARNING',
+      summary: 'Owner email alert skipped',
+      details: {
+        reason: 'Missing owner email',
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
+    });
     return { status: 'skipped' as const };
   }
 
@@ -259,6 +362,19 @@ export async function sendOwnerLeadEmail(leadId: string) {
     await markNotificationResult(leadId, OwnerNotificationChannel.EMAIL, {
       status: OwnerNotificationStatus.SENT,
       metadata: { simulated: true, preview: true },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: 'owner_alert.email_sent',
+      category: 'OWNER_ALERTS',
+      status: 'SUCCESS',
+      summary: 'Owner email alert recorded for simulator',
+      details: {
+        destinationEmail: settings.ownerEmail,
+        simulated: true,
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
     });
     return { status: 'simulated' as const };
   }
@@ -269,12 +385,38 @@ export async function sendOwnerLeadEmail(leadId: string) {
       status: result.reason === 'missing_config' ? OwnerNotificationStatus.SKIPPED : OwnerNotificationStatus.FAILED,
       error: result.error || result.reason,
     });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: result.reason === 'missing_config' ? 'owner_alert.email_skipped' : 'owner_alert.email_failed',
+      category: 'OWNER_ALERTS',
+      status: result.reason === 'missing_config' ? 'WARNING' : 'FAILED',
+      summary: result.reason === 'missing_config' ? 'Owner email alert skipped' : 'Owner email alert failed',
+      details: {
+        destinationEmail: settings.ownerEmail,
+        error: result.error || result.reason,
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
+    });
     return { status: result.reason === 'missing_config' ? 'skipped' as const : 'failed' as const };
   }
 
   await markNotificationResult(leadId, OwnerNotificationChannel.EMAIL, {
     status: OwnerNotificationStatus.SENT,
     metadata: { provider: result.provider },
+  });
+  await recordBusinessOperatorEvent({
+    businessId: lead.businessId,
+    type: 'owner_alert.email_sent',
+    category: 'OWNER_ALERTS',
+    status: 'SUCCESS',
+    summary: 'Owner email alert sent',
+    details: {
+      destinationEmail: settings.ownerEmail,
+      provider: result.provider,
+    },
+    relatedEntityType: 'lead',
+    relatedEntityId: leadId,
   });
   return { status: 'sent' as const };
 }
@@ -298,12 +440,36 @@ export async function createOwnerInAppNotification(leadId: string) {
       status: OwnerNotificationStatus.SKIPPED,
       error: 'In-app notifications disabled',
     });
+    await recordBusinessOperatorEvent({
+      businessId: lead.businessId,
+      type: 'owner_alert.in_app_skipped',
+      category: 'OWNER_ALERTS',
+      status: 'WARNING',
+      summary: 'In-app owner alert skipped',
+      details: {
+        reason: 'In-app notifications disabled',
+      },
+      relatedEntityType: 'lead',
+      relatedEntityId: leadId,
+    });
     return { status: 'skipped' as const };
   }
 
   await markNotificationResult(leadId, OwnerNotificationChannel.IN_APP, {
     status: OwnerNotificationStatus.SENT,
     metadata: { dashboardVisible: true },
+  });
+  await recordBusinessOperatorEvent({
+    businessId: lead.businessId,
+    type: 'owner_alert.in_app_sent',
+    category: 'OWNER_ALERTS',
+    status: 'SUCCESS',
+    summary: 'In-app owner alert created',
+    details: {
+      dashboardVisible: true,
+    },
+    relatedEntityType: 'lead',
+    relatedEntityId: leadId,
   });
   return { status: 'sent' as const };
 }

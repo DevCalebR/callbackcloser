@@ -15,6 +15,7 @@ import { requireAdmin } from '@/lib/admin';
 import { canDeleteTestBusiness } from '@/lib/admin-dashboard';
 import { logAuditEvent } from '@/lib/audit-log';
 import { db } from '@/lib/db';
+import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import {
@@ -235,6 +236,18 @@ export async function createAdminBusinessAction(formData: FormData) {
       urgentOnly: false,
     },
   });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'onboarding.business_workspace_created',
+    category: 'ONBOARDING',
+    status: 'PENDING',
+    summary: 'Business workspace created',
+    details: {
+      ownerEmail: data.ownerEmail.trim().toLowerCase(),
+      ownerPhone: formatPhoneDetail(ownerPhone),
+      isTestBusiness: data.isTestBusiness,
+    },
+  });
 
   let redirectPath: string;
   try {
@@ -257,6 +270,16 @@ export async function createAdminBusinessAction(formData: FormData) {
       data: {
         provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
         provisioningError: message,
+      },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'onboarding.owner_setup_failed',
+      category: 'ONBOARDING',
+      status: 'FAILED',
+      summary: 'Owner setup failed after business creation',
+      details: {
+        error: message,
       },
     });
 
@@ -460,6 +483,16 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
   });
 
   if (changedFields.length > 0) {
+    await recordBusinessOperatorEvent({
+      businessId: data.businessId,
+      type: managedTwilioStatusChanged || a2pMetadataChanged ? 'admin.readiness_tracking_updated' : 'admin.business_profile_updated',
+      category: managedTwilioStatusChanged || a2pMetadataChanged ? 'ONBOARDING' : 'ADMIN_ACTIONS',
+      status: managedTwilioStatusChanged || a2pMetadataChanged ? 'INFO' : 'SUCCESS',
+      summary: managedTwilioStatusChanged || a2pMetadataChanged ? 'Onboarding tracking updated' : 'Business profile updated',
+      details: {
+        changedFields: buildChangedFieldMetadata(changedFields),
+      },
+    });
     logAuditEvent({
       event: 'admin_business_editor_saved',
       actorType: 'user',
@@ -512,6 +545,16 @@ export async function connectBusinessOwnerAction(formData: FormData) {
       data: {
         provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
         provisioningError: message,
+      },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: parsed.data.businessId,
+      type: 'onboarding.owner_connection_failed',
+      category: 'ONBOARDING',
+      status: 'FAILED',
+      summary: 'Owner connection failed',
+      details: {
+        error: message,
       },
     });
 
@@ -600,6 +643,17 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
         provisioningError: message,
       },
     });
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'webhooks.sync_failed',
+      category: 'WEBHOOKS',
+      status: 'FAILED',
+      summary: 'Webhook sync failed',
+      details: {
+        target: parsed.data.target,
+        error: message,
+      },
+    });
 
     redirectPath = buildAdminBusinessRedirectPath(business.id, { error: message });
   }
@@ -641,6 +695,17 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
   }
 
   try {
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'admin.test_sms_initiated',
+      category: 'ADMIN_ACTIONS',
+      status: 'PENDING',
+      summary: 'Test SMS initiated',
+      details: {
+        destinationPhone: formatPhoneDetail(destinationPhone),
+        fromPhone: formatPhoneDetail(fromPhone),
+      },
+    });
     const result = await sendAndPersistOutboundMessage({
       businessId: business.id,
       fromPhone,
@@ -654,12 +719,38 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
     });
 
     if (result.suppressed) {
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'admin.test_sms_suppressed',
+        category: 'ADMIN_ACTIONS',
+        status: 'WARNING',
+        summary: 'Test SMS could not be sent',
+        details: {
+          destinationPhone: formatPhoneDetail(destinationPhone),
+          reason: result.reason,
+        },
+      });
       redirect(
         buildAdminBusinessRedirectPath(business.id, {
           error: `Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`,
         })
       );
     }
+
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'admin.test_sms_accepted',
+      category: 'ADMIN_ACTIONS',
+      status: 'SUCCESS',
+      summary: 'Test SMS accepted by Twilio',
+      details: {
+        destinationPhone: formatPhoneDetail(destinationPhone),
+        fromPhone: formatPhoneDetail(fromPhone),
+        messageSid: maskSid(result.sent.sid),
+      },
+      relatedEntityType: 'message',
+      relatedEntityId: result.message.id,
+    });
 
     logAuditEvent({
       event: 'admin_test_sms_sent',
@@ -676,6 +767,17 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send test SMS.';
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'admin.test_sms_failed',
+      category: 'ADMIN_ACTIONS',
+      status: 'FAILED',
+      summary: 'Test SMS failed',
+      details: {
+        destinationPhone: formatPhoneDetail(destinationPhone),
+        error: message,
+      },
+    });
     redirect(buildAdminBusinessRedirectPath(business.id, { error: message }));
   }
 
@@ -723,6 +825,17 @@ export async function archiveBusinessAction(formData: FormData) {
       isTestBusiness: business.isTestBusiness,
     },
   });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'admin.business_archived',
+    category: 'ADMIN_ACTIONS',
+    status: 'WARNING',
+    summary: 'Business archived',
+    details: {
+      businessName: business.name,
+      isTestBusiness: business.isTestBusiness,
+    },
+  });
 
   await revalidateAdminPaths(business.id);
   redirect(buildAdminBusinessRedirectPath(business.id, { archived: 1 }));
@@ -764,6 +877,16 @@ export async function restoreBusinessAction(formData: FormData) {
     targetId: business.id,
     metadata: {
       actorEmail: admin.email,
+      businessName: business.name,
+    },
+  });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'admin.business_restored',
+    category: 'ADMIN_ACTIONS',
+    status: 'SUCCESS',
+    summary: 'Business restored',
+    details: {
       businessName: business.name,
     },
   });

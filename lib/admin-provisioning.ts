@@ -18,6 +18,7 @@ import {
   syncManagedTwilioNumberWebhooks,
   updateManagedTwilioStatus,
 } from '@/lib/managed-twilio';
+import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { getTwilioBusinessClient, hasTwilioClientEnv } from '@/lib/twilio-client';
 import { getTwilioWebhookConfig, syncTwilioIncomingPhoneNumberWebhooks, type TwilioWebhookSyncOptions } from '@/lib/twilio';
@@ -168,6 +169,18 @@ export async function connectOrInviteBusinessOwner(params: {
       }
     );
 
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'onboarding.owner_connected',
+      category: 'ONBOARDING',
+      status: 'SUCCESS',
+      summary: 'Owner connected to business',
+      details: {
+        ownerEmail,
+        ownerClerkId: userId,
+      },
+    });
+
     return { state: 'connected' as const, ownerClerkId: userId };
   }
 
@@ -203,6 +216,18 @@ export async function connectOrInviteBusinessOwner(params: {
       ownerEmail,
     }
   );
+
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'onboarding.owner_invited',
+    category: 'ONBOARDING',
+    status: 'PENDING',
+    summary: 'Owner invite sent',
+    details: {
+      ownerEmail,
+      inviteSentAt: new Date().toISOString(),
+    },
+  });
 
   return { state: 'invited' as const, ownerClerkId: pendingOwnerId };
 }
@@ -315,6 +340,19 @@ export async function syncBusinessTwilioWebhooks(
       provisioningError: null,
     },
   });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'webhooks.sync_succeeded',
+    category: 'WEBHOOKS',
+    status: 'SUCCESS',
+    summary: 'Webhook sync completed',
+    details: {
+      target: options,
+      phoneNumber: formatPhoneDetail(normalizedPhoneNumber),
+      phoneNumberSid: maskSid(number.sid),
+      syncedAt: syncedAt.toISOString(),
+    },
+  });
 
   return { number, syncedAt };
 }
@@ -401,6 +439,20 @@ export async function attachExistingNumberToBusiness(params: {
     twilioProvisionedAt: new Date(),
     twilioWebhookSyncedAt: syncedNumber.syncedAt,
   });
+  await recordBusinessOperatorEvent({
+    businessId: params.business.id,
+    type: 'provisioning.existing_number_attached',
+    category: 'PROVISIONING',
+    status: 'SUCCESS',
+    summary: 'Existing number attached',
+    details: {
+      phoneNumber: formatPhoneDetail(syncedNumber.phoneNumber),
+      phoneNumberSid: maskSid(syncedNumber.phoneNumberSid),
+      messagingServiceSid: maskSid(messagingServiceSid),
+      subaccountSid: maskSid(subaccountSid),
+      correlationId,
+    },
+  });
 
   return db.business.findUniqueOrThrow({ where: { id: params.business.id } });
 }
@@ -437,6 +489,18 @@ export async function runAdminProvisioning(params: {
       provisioningStatus: BusinessProvisioningStatus.ONBOARDING,
       provisioningLastRunAt: new Date(),
       provisioningError: null,
+    },
+  });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'provisioning.started',
+    category: 'PROVISIONING',
+    status: 'PENDING',
+    summary: 'Provisioning started',
+    details: {
+      mode: params.mode,
+      areaCode: params.areaCode ?? null,
+      existingNumberSid: maskSid(params.existingNumberSid),
     },
   });
 
@@ -483,6 +547,16 @@ export async function runAdminProvisioning(params: {
         provisioningError: null,
       },
     });
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.run_completed',
+      category: 'PROVISIONING',
+      status: 'SUCCESS',
+      summary: 'Provisioning run completed',
+      details: {
+        mode: params.mode,
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Provisioning failed.';
     await db.business.update({
@@ -491,6 +565,17 @@ export async function runAdminProvisioning(params: {
         provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
         provisioningLastRunAt: new Date(),
         provisioningError: message,
+      },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.failed',
+      category: 'PROVISIONING',
+      status: 'FAILED',
+      summary: 'Provisioning failed',
+      details: {
+        mode: params.mode,
+        error: message,
       },
     });
     throw error;
@@ -502,7 +587,7 @@ export async function updateBusinessProvisioningStatus(
   status: BusinessProvisioningStatus,
   error: string | null = null
 ) {
-  return db.business.update({
+  const updated = await db.business.update({
     where: { id: businessId },
     data: {
       provisioningStatus: status,
@@ -510,4 +595,21 @@ export async function updateBusinessProvisioningStatus(
       provisioningError: error,
     },
   });
+  await recordBusinessOperatorEvent({
+    businessId,
+    type: 'admin.provisioning_status_updated',
+    category: 'ADMIN_ACTIONS',
+    status: status === BusinessProvisioningStatus.PAUSED ? 'WARNING' : 'INFO',
+    summary:
+      status === BusinessProvisioningStatus.PAUSED
+        ? 'Automation paused'
+        : status === BusinessProvisioningStatus.LIVE
+          ? 'Business marked live'
+          : `Provisioning state set to ${status.toLowerCase().replace(/_/g, ' ')}`,
+    details: {
+      provisioningStatus: status,
+      error,
+    },
+  });
+  return updated;
 }
