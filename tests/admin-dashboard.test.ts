@@ -17,6 +17,7 @@ function createBusiness(overrides: Record<string, unknown> = {}) {
     name: 'Acme Plumbing',
     ownerClerkId: 'user_123',
     ownerName: 'Casey Owner',
+    ownerInviteSentAt: null,
     isTestBusiness: false,
     archivedAt: null,
     forwardingNumber: '+15557654321',
@@ -101,6 +102,24 @@ test('next-step guidance stays explicit for owner setup and pending A2P review',
 
   assert.equal(missingOwnerContact.title, 'Owner contact info is missing');
   assert.equal(missingOwnerContact.actionLabel, 'Save owner contact info');
+
+  const invitedOwner = buildAdminNextStep({
+    business: createBusiness({
+      ownerInviteSentAt: new Date('2026-04-16T00:00:00.000Z'),
+      twilioSubaccountSid: null,
+      twilioMessagingServiceSid: null,
+      twilioPrimaryNumberSid: null,
+      twilioPhoneNumberSid: null,
+      twilioPrimaryPhoneNumber: null,
+      twilioPhoneNumber: null,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: false,
+  });
+
+  assert.equal(invitedOwner.title, 'Owner invitation is still pending');
+  assert.equal(invitedOwner.actionLabel, 'Review owner setup');
 
   const pendingA2p = buildAdminNextStep({
     business: createBusiness({

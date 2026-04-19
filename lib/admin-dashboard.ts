@@ -20,6 +20,7 @@ type DashboardBusiness = Pick<
   | 'name'
   | 'ownerClerkId'
   | 'ownerName'
+  | 'ownerInviteSentAt'
   | 'isTestBusiness'
   | 'archivedAt'
   | 'provisioningStatus'
@@ -228,12 +229,14 @@ export function buildAdminNextStep(params: {
 
   if (!ownerConnected) {
     return {
-      title: 'Owner account still needs connection',
+      title: business.ownerInviteSentAt ? 'Owner invitation is still pending' : 'Owner account still needs setup',
       detail: ownerEmail
-        ? 'The business is saved, but the Clerk owner is not attached yet. Re-run the owner connection flow from admin.'
-        : 'Add the owner email first, then connect or invite the owner.',
+        ? business.ownerInviteSentAt
+          ? 'The invite has been sent, but the owner account is not attached yet. Wait for acceptance or use Connect existing owner after they create the account.'
+          : 'The business is saved, but the owner account still needs a deliberate admin action. Use Invite owner by email or Connect existing owner.'
+        : 'Add the owner email first, then choose Invite owner by email or Connect existing owner.',
       tone: 'attention',
-      actionLabel: 'Connect owner',
+      actionLabel: 'Review owner setup',
     };
   }
 
@@ -427,7 +430,13 @@ export function buildAdminOnboardingConfidence(params: {
       label: 'Owner connected',
       complete: ownerConnected,
       variant: milestoneVariant({ complete: ownerConnected, blocking: true }),
-      detail: ownerConnected ? 'A Clerk owner is linked to this business.' : ownerEmail ? 'Owner invite or attachment still needs to finish.' : 'Add the owner email and connect the owner account.',
+      detail: ownerConnected
+        ? 'A CallbackCloser owner account is linked to this business.'
+        : ownerEmail
+          ? business.ownerInviteSentAt
+            ? 'The owner invite is still pending or the accepted account still needs linking.'
+            : 'Choose Invite owner by email or Connect existing owner.'
+          : 'Add the owner email and then choose the correct owner setup action.',
     },
     {
       key: 'owner_alerts',

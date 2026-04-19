@@ -13,6 +13,7 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
 
   assert.match(adminHome, /Operator control panel/);
   assert.match(adminHome, /Fast onboard/);
+  assert.match(adminHome, /Create workspace and start provisioning/);
   assert.match(adminHome, /Business triage board/);
   assert.match(adminHome, /Open customer leads/);
   assert.match(adminDetail, /Onboarding confidence/);
@@ -23,7 +24,10 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /Account \/ commercial state/);
   assert.match(adminDetail, /Recent activity/);
   assert.match(adminDetail, /Advanced \/ rare actions/);
+  assert.match(adminDetail, /Invite owner by email/);
+  assert.match(adminDetail, /Connect existing owner/);
   assert.match(adminDetail, /Send test SMS/);
+  assert.doesNotMatch(adminDetail, /Connect or invite owner/);
   assert.match(supportWorkspace, /support mode workspace/);
   assert.match(supportWorkspace, /Customer settings snapshot/);
   assert.match(supportWorkspace, /Customer call flow snapshot/);

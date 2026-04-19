@@ -3,8 +3,9 @@ import { notFound } from 'next/navigation';
 
 import {
   archiveBusinessAction,
-  connectBusinessOwnerAction,
+  connectExistingBusinessOwnerAction,
   deleteTestBusinessAction,
+  inviteBusinessOwnerAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
   restoreBusinessAction,
@@ -462,7 +463,7 @@ export default async function AdminBusinessDetailPage({
 
   const created = getQueryValue(searchParams, 'created') === '1';
   const saved = getQueryValue(searchParams, 'saved') === '1';
-  const ownerStateMessage = getQueryValue(searchParams, 'ownerState');
+  const ownerAction = getQueryValue(searchParams, 'ownerAction');
   const provisioned = getQueryValue(searchParams, 'provisioned') === '1';
   const synced = getQueryValue(searchParams, 'synced');
   const statusSaved = getQueryValue(searchParams, 'statusSaved');
@@ -516,19 +517,21 @@ export default async function AdminBusinessDetailPage({
         </div>
       </div>
 
-      {created ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business workspace created and ready for provisioning.</div> : null}
+      {created ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business workspace created. Review owner setup and provisioning health below.</div> : null}
       {saved ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           Business details saved{changed.length > 0 ? `: ${changed.join(', ')}.` : '.'}
         </div>
       ) : null}
-      {ownerStateMessage ? (
+      {ownerAction ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
-          {ownerStateMessage === 'connected'
-            ? 'Owner account connected.'
-            : ownerStateMessage === 'invited'
-              ? 'Owner invite sent. Re-run owner connection after the invite is accepted.'
-              : 'Owner state updated.'}
+          {ownerAction === 'connected'
+            ? 'Existing owner connected.'
+            : ownerAction === 'invited'
+              ? 'Owner invitation sent.'
+              : ownerAction === 'resent'
+                ? 'Owner invitation resent.'
+                : 'Owner state updated.'}
         </div>
       ) : null}
       {provisioned ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning finished. Review the health cards below.</div> : null}
@@ -571,7 +574,7 @@ export default async function AdminBusinessDetailPage({
                     </Link>
                   ) : !ownerState.connected ? (
                     <Link className={buttonVariants({ size: 'sm' })} href="#business-info">
-                      Connect owner
+                      Review owner setup
                     </Link>
                   ) : !(business.notificationSettings?.ownerPhone || business.notifyPhone) ? (
                     <Link className={buttonVariants({ size: 'sm' })} href="#automation-settings">
@@ -697,10 +700,12 @@ export default async function AdminBusinessDetailPage({
                   placeholder="+1 555 123 4567"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Sends a short admin verification message from the assigned business line to the destination above.
+                  {assignedNumber
+                    ? 'Sends a short admin verification message from the assigned business line to the destination above.'
+                    : 'Assign the business number first. Test SMS stays unavailable until the business line is ready.'}
                 </p>
               </div>
-              <Button className="mt-3" size="sm" type="submit" variant="outline">
+              <Button className="mt-3" disabled={!assignedNumber} size="sm" type="submit" variant="outline">
                 Send test SMS
               </Button>
             </form>
@@ -752,40 +757,78 @@ export default async function AdminBusinessDetailPage({
               <Button type="submit">Save business info</Button>
             </form>
 
-            <div className="rounded-xl border bg-background/80 p-4">
+            <div className="rounded-xl border bg-background/80 p-4" id="owner-setup">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium">{ownerState.name || business.ownerName || 'Owner not named yet'}</p>
-                <Badge variant={ownerState.connected ? 'success' : ownerState.pending ? 'outline' : 'destructive'}>
-                  {ownerState.connected ? 'Connected' : ownerState.pending ? 'Pending invite' : 'Needs connection'}
-                </Badge>
+                <Badge variant={ownerState.badgeVariant}>{ownerState.statusLabel}</Badge>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
                 {ownerState.email || business.notificationSettings?.ownerEmail || 'Owner email missing'}
               </p>
+              <p className="mt-2 text-sm text-muted-foreground">{ownerState.detail}</p>
               {ownerState.clerkUserId ? <p className="mt-2 text-xs text-muted-foreground">{ownerState.clerkUserId}</p> : null}
+              {ownerState.matchedUserId && !ownerState.connected ? (
+                <p className="mt-2 text-xs text-muted-foreground">Matching Clerk user: {ownerState.matchedUserId}</p>
+              ) : null}
               {ownerState.invitedAt ? <p className="mt-2 text-xs text-muted-foreground">Invite sent {formatDateTime(ownerState.invitedAt)}</p> : null}
             </div>
 
-            <form action={connectBusinessOwnerAction} className="grid gap-4 md:grid-cols-2 rounded-xl border bg-background/80 p-4">
-              <input type="hidden" name="businessId" value={business.id} />
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="connectOwnerEmail">Owner email</Label>
-                <Input id="connectOwnerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="connectOwnerName">Owner name</Label>
-                <Input id="connectOwnerName" name="ownerName" defaultValue={business.ownerName || ''} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ownerClerkId">Existing Clerk user ID</Label>
-                <Input id="ownerClerkId" name="ownerClerkId" defaultValue={ownerState.connected ? ownerState.clerkUserId || '' : ''} />
-              </div>
-              <div className="md:col-span-2">
-                <Button type="submit" variant="outline">
-                  Connect or invite owner
+            <div className="grid gap-4 md:grid-cols-2">
+              <form action={inviteBusinessOwnerAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+                <input type="hidden" name="businessId" value={business.id} />
+                <div className="space-y-1">
+                  <p className="font-medium">Invite owner by email</p>
+                  <p className="text-xs text-muted-foreground">Use this when the owner still needs a CallbackCloser account.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inviteOwnerEmail">Owner email</Label>
+                  <Input id="inviteOwnerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inviteOwnerName">Owner name</Label>
+                  <Input id="inviteOwnerName" name="ownerName" defaultValue={business.ownerName || ''} />
+                </div>
+                <Button
+                  disabled={ownerState.connected || Boolean(ownerState.matchedUserId)}
+                  type="submit"
+                  variant="outline"
+                >
+                  {ownerState.connected
+                    ? 'Owner already connected'
+                    : ownerState.matchedUserId
+                      ? 'Use Connect existing owner'
+                      : ownerState.status === 'invitation_pending'
+                        ? 'Resend invite'
+                        : 'Invite owner by email'}
                 </Button>
-              </div>
-            </form>
+              </form>
+
+              <form action={connectExistingBusinessOwnerAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+                <input type="hidden" name="businessId" value={business.id} />
+                <div className="space-y-1">
+                  <p className="font-medium">Connect existing owner</p>
+                  <p className="text-xs text-muted-foreground">Use this when the owner already has a CallbackCloser account, or after they accept the invite and finish sign-up.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="connectOwnerEmail">Owner email</Label>
+                  <Input id="connectOwnerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="connectOwnerName">Owner name</Label>
+                  <Input id="connectOwnerName" name="ownerName" defaultValue={business.ownerName || ''} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ownerClerkId">Existing Clerk user ID (optional)</Label>
+                  <Input
+                    id="ownerClerkId"
+                    name="ownerClerkId"
+                    defaultValue={ownerState.connected ? ownerState.clerkUserId || '' : ownerState.matchedUserId || ''}
+                    placeholder="user_..."
+                  />
+                </div>
+                <Button type="submit">Connect existing owner</Button>
+              </form>
+            </div>
           </CardContent>
         </Card>
 
@@ -821,7 +864,7 @@ export default async function AdminBusinessDetailPage({
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="submit">{assignedNumber ? 'Continue setup' : 'Provision business'}</Button>
-                  <WebhookResyncButton businessId={business.id} label="Re-sync all webhooks" target="ALL" />
+                  {assignedNumber ? <WebhookResyncButton businessId={business.id} label="Re-sync all webhooks" target="ALL" /> : null}
                 </div>
               </form>
             </div>

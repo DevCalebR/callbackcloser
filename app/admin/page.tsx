@@ -163,6 +163,20 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
     const managedSummary = getManagedTwilioStatusSummary(business);
     const ownerPending = isPendingOwnerClerkId(business.ownerClerkId);
     const ownerConnected = !ownerPending;
+    const ownerStatusLabel = !business.notificationSettings?.ownerEmail
+      ? 'Owner email missing'
+      : ownerPending
+        ? business.ownerInviteSentAt
+          ? 'Invite sent'
+          : 'Invite ready'
+        : 'Connected';
+    const ownerStatusVariant = !business.notificationSettings?.ownerEmail
+      ? ('destructive' as const)
+      : ownerPending
+        ? business.ownerInviteSentAt
+          ? ('outline' as const)
+          : ('secondary' as const)
+        : ('success' as const);
     const nextStep = buildAdminNextStep({
       business,
       notificationSettings: business.notificationSettings,
@@ -198,8 +212,9 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
     return {
       business,
-      ownerPending,
       ownerConnected,
+      ownerStatusLabel,
+      ownerStatusVariant,
       managedSummary,
       nextStep,
       leadCount: leadCountMap.get(business.id) ?? 0,
@@ -275,7 +290,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           <CardHeader>
             <CardTitle>Fast onboard</CardTitle>
             <CardDescription>
-              Start the business workspace with the minimum founder-needed inputs. Everything else can be tightened inside the business control panel.
+              Create the workspace, save owner contact info, and start the managed new-number Twilio path immediately. Owner invite and existing-owner connect stay explicit on the business page.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -309,6 +324,10 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                 <Label htmlFor="timezone">Timezone</Label>
                 <Input id="timezone" name="timezone" defaultValue="America/New_York" />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="areaCode">Preferred area code</Label>
+                <Input id="areaCode" name="areaCode" maxLength={3} placeholder="512" />
+              </div>
 
               <label className="md:col-span-2 flex items-start gap-2 rounded-xl border bg-background/80 p-3 text-sm">
                 <input name="isTestBusiness" type="checkbox" value="true" />
@@ -316,8 +335,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
               </label>
 
               <div className="md:col-span-2 flex flex-wrap items-center gap-3">
-                <Button type="submit">Create business workspace</Button>
-                <p className="text-sm text-muted-foreground">CallbackCloser will auto-connect an existing owner account or send an invite if needed.</p>
+                <Button type="submit">Create workspace and start provisioning</Button>
+                <p className="text-sm text-muted-foreground">This saves owner contact info and immediately starts managed Twilio provisioning. Owner invite and existing-owner connect are handled separately inside the business panel.</p>
               </div>
             </form>
           </CardContent>
@@ -430,7 +449,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
               {visibleRows.map(
                 ({
                   business,
-                  ownerPending,
+                  ownerStatusLabel,
+                  ownerStatusVariant,
                   managedSummary,
                   nextStep,
                   leadCount,
@@ -471,7 +491,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       <p>{business.ownerName || 'Owner name missing'}</p>
                       <p className="text-muted-foreground">{business.notificationSettings?.ownerEmail || 'Owner email missing'}</p>
                       <div className="flex flex-wrap gap-2">
-                        <Badge variant={ownerPending ? 'outline' : 'secondary'}>{ownerPending ? 'Invite pending' : 'Linked'}</Badge>
+                        <Badge variant={ownerStatusVariant}>{ownerStatusLabel}</Badge>
                         {business.notificationSettings?.ownerPhone || business.notifyPhone ? (
                           <Badge variant="outline">{formatPhoneForDisplay(business.notificationSettings?.ownerPhone || business.notifyPhone)}</Badge>
                         ) : null}

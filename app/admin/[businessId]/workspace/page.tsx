@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { buildAdminNextStep } from '@/lib/admin-dashboard';
 import { requireAdmin } from '@/lib/admin';
+import { getAdminOwnerState } from '@/lib/admin-provisioning';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,10 +60,11 @@ export default async function AdminBusinessWorkspacePage({ params }: { params: {
   if (!business) notFound();
 
   const successfulLeadCount = recentLeads.filter((lead) => lead.ownerNotifiedAt || lead.notifiedAt).length;
+  const ownerState = await getAdminOwnerState(business, business.notificationSettings);
   const nextStep = buildAdminNextStep({
     business,
     notificationSettings: business.notificationSettings,
-    ownerConnected: !business.ownerClerkId.startsWith('pending_owner_'),
+    ownerConnected: ownerState.connected,
   });
   const managedSummary = getManagedTwilioStatusSummary(business);
   const billingAccess = getBusinessBillingAccessState(business);

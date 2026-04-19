@@ -6,7 +6,8 @@ import { redirect } from 'next/navigation';
 
 import {
   buildPendingOwnerClerkId,
-  connectOrInviteBusinessOwner,
+  connectExistingBusinessOwner,
+  inviteBusinessOwner,
   runAdminProvisioning,
   syncBusinessTwilioWebhooks,
   updateBusinessProvisioningStatus,
@@ -21,10 +22,11 @@ import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import {
   adminArchiveBusinessSchema,
   adminBusinessDraftSchema,
+  adminConnectExistingOwnerSchema,
   adminDeleteBusinessSchema,
+  adminInviteOwnerSchema,
   adminSendTestSmsSchema,
   adminBusinessUpdateSchema,
-  adminConnectOwnerSchema,
   adminProvisionBusinessSchema,
   adminProvisioningStatusSchema,
   adminWebhookSyncSchema,
@@ -251,39 +253,22 @@ export async function createAdminBusinessAction(formData: FormData) {
 
   let redirectPath: string;
   try {
-    const ownerResult = await connectOrInviteBusinessOwner({
+    await runAdminProvisioning({
       businessId: business.id,
-      ownerEmail: data.ownerEmail,
-      ownerName: data.ownerName || null,
-      inviteIfMissing: true,
+      mode: 'NEW_NUMBER',
+      areaCode: data.areaCode || null,
     });
 
     redirectPath = buildAdminBusinessRedirectPath(business.id, {
       created: 1,
-      ownerState: ownerResult.state,
+      provisioned: 1,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Business created, but owner setup failed.';
-
-    await db.business.update({
-      where: { id: business.id },
-      data: {
-        provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
-        provisioningError: message,
-      },
+    const message = error instanceof Error ? error.message : 'Business created, but managed Twilio provisioning failed.';
+    redirectPath = buildAdminBusinessRedirectPath(business.id, {
+      created: 1,
+      error: message,
     });
-    await recordBusinessOperatorEvent({
-      businessId: business.id,
-      type: 'onboarding.owner_setup_failed',
-      category: 'ONBOARDING',
-      status: 'FAILED',
-      summary: 'Owner setup failed after business creation',
-      details: {
-        error: message,
-      },
-    });
-
-    redirectPath = buildAdminBusinessRedirectPath(business.id, { created: 1, error: message });
   }
 
   await revalidateAdminPaths(business.id);
@@ -519,27 +504,70 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
   );
 }
 
-export async function connectBusinessOwnerAction(formData: FormData) {
+export async function inviteBusinessOwnerAction(formData: FormData) {
   await requireAdmin();
 
-  const parsed = adminConnectOwnerSchema.safeParse(Object.fromEntries(formData));
+  const parsed = adminInviteOwnerSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid owner invite request.')}`);
+  }
+
+  let redirectPath: string;
+  try {
+    const result = await inviteBusinessOwner({
+      businessId: parsed.data.businessId,
+      ownerEmail: parsed.data.ownerEmail,
+      ownerName: parsed.data.ownerName || null,
+    });
+
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerAction: result.state });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Owner invite failed.';
+    await db.business.update({
+      where: { id: parsed.data.businessId },
+      data: {
+        provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
+        provisioningError: message,
+      },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: parsed.data.businessId,
+      type: 'onboarding.owner_invite_failed',
+      category: 'ONBOARDING',
+      status: 'FAILED',
+      summary: 'Owner invite failed',
+      details: {
+        error: message,
+      },
+    });
+
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { error: message });
+  }
+
+  await revalidateAdminPaths(parsed.data.businessId);
+  redirect(redirectPath);
+}
+
+export async function connectExistingBusinessOwnerAction(formData: FormData) {
+  await requireAdmin();
+
+  const parsed = adminConnectExistingOwnerSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid owner connection request.')}`);
   }
 
   let redirectPath: string;
   try {
-    const result = await connectOrInviteBusinessOwner({
+    await connectExistingBusinessOwner({
       businessId: parsed.data.businessId,
       ownerEmail: parsed.data.ownerEmail,
       ownerName: parsed.data.ownerName || null,
       ownerClerkId: parsed.data.ownerClerkId || null,
-      inviteIfMissing: true,
     });
 
-    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerState: result.state });
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerAction: 'connected' });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Owner setup failed.';
+    const message = error instanceof Error ? error.message : 'Owner connection failed.';
     await db.business.update({
       where: { id: parsed.data.businessId },
       data: {
