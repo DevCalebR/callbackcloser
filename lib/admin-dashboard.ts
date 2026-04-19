@@ -1,6 +1,7 @@
 import {
   BusinessProvisioningStatus,
   ManagedTwilioStatus,
+  OperatorEventStatus,
   OwnerNotificationStatus,
   type Business,
   type BusinessNotificationSettings,
@@ -82,6 +83,52 @@ export type AdminBusinessEvent = {
   label: string;
   summary: string;
   detail: string;
+};
+
+export type OnboardingConfidenceState =
+  | 'draft'
+  | 'in_setup'
+  | 'needs_attention'
+  | 'waiting_on_a2p'
+  | 'ready_for_test'
+  | 'ready_to_go_live'
+  | 'live'
+  | 'live_with_warnings'
+  | 'archived';
+
+export type OnboardingConfidenceMilestone = {
+  key:
+    | 'business_profile'
+    | 'owner_connected'
+    | 'owner_alerts'
+    | 'twilio_setup'
+    | 'texting_number'
+    | 'messaging_service'
+    | 'webhooks'
+    | 'a2p'
+    | 'test_sms'
+    | 'missed_call_validation'
+    | 'live_gate';
+  label: string;
+  complete: boolean;
+  variant: 'success' | 'warning' | 'pending';
+  detail: string;
+};
+
+export type AdminOnboardingConfidence = {
+  state: OnboardingConfidenceState;
+  stateLabel: string;
+  stateVariant: 'success' | 'secondary' | 'outline' | 'destructive';
+  readinessLabel: 'Not ready' | 'Ready for test' | 'Ready for live' | 'Live with warnings' | 'Waiting on external approval';
+  readinessVariant: 'success' | 'secondary' | 'outline' | 'destructive';
+  nextAction: string;
+  summary: string;
+  blockers: Array<{ level: 'warning' | 'error'; message: string }>;
+  milestones: OnboardingConfidenceMilestone[];
+  readyForTest: boolean;
+  readyForLive: boolean;
+  canSafelyMarkLive: boolean;
+  hasRecentFailures: boolean;
 };
 
 export const adminBoardFilterOptions: AdminBoardFilterOption[] = [
@@ -286,6 +333,252 @@ export function buildAdminNextStep(params: {
     tone: 'pending',
     actionLabel: 'Review provisioning health',
   };
+}
+
+function milestoneVariant(params: { complete: boolean; blocking?: boolean }) {
+  if (params.complete) return 'success' as const;
+  if (params.blocking) return 'warning' as const;
+  return 'pending' as const;
+}
+
+export function buildAdminOnboardingConfidence(params: {
+  business: DashboardBusiness;
+  notificationSettings: DashboardNotificationSettings | null;
+  ownerConnected: boolean;
+  successfulLeadCount: number;
+  operatorEvents: Array<{ type: string; status: OperatorEventStatus; createdAt: Date }>;
+}) {
+  const { business, notificationSettings, ownerConnected, successfulLeadCount, operatorEvents } = params;
+  const managedSummary = getManagedTwilioStatusSummary(business);
+  const nextStep = buildAdminNextStep({ business, notificationSettings, ownerConnected });
+  const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
+  const ownerPhone = notificationSettings?.ownerPhone?.trim() || business.notifyPhone || null;
+  const hasProfile = Boolean(business.name.trim() && business.forwardingNumber.trim());
+  const ownerAlertsReady = Boolean(ownerPhone || ownerEmail);
+  const twilioSetupReady = Boolean(business.twilioSubaccountSid);
+  const numberReady = Boolean(getManagedTextingNumber(business) && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid));
+  const messagingServiceReady = Boolean(business.twilioMessagingServiceSid);
+  const webhooksReady = Boolean(business.twilioWebhookSyncedAt);
+  const compliancePending =
+    managedSummary.onboardingReady && !managedSummary.complianceReady && !managedSummary.attentionRequired;
+  const hasTestSmsSuccess = operatorEvents.some(
+    (event) => event.type === 'admin.test_sms_accepted' && event.status === OperatorEventStatus.SUCCESS
+  );
+  const hasTestSmsFailure = operatorEvents.some(
+    (event) => event.type === 'admin.test_sms_failed' || event.type === 'admin.test_sms_suppressed'
+  );
+  const hasRecentFailures = operatorEvents.some(
+    (event) => event.status === OperatorEventStatus.FAILED || event.status === OperatorEventStatus.WARNING
+  );
+  const missedCallValidated = successfulLeadCount > 0;
+  const readyForTest = ownerConnected && ownerAlertsReady && twilioSetupReady && numberReady && messagingServiceReady && webhooksReady && managedSummary.complianceReady;
+  const readyForLive = readyForTest && hasTestSmsSuccess && missedCallValidated;
+  const canSafelyMarkLive = readyForLive;
+
+  let state: OnboardingConfidenceState = 'in_setup';
+  if (isBusinessArchived(business)) {
+    state = 'archived';
+  } else if (business.provisioningStatus === BusinessProvisioningStatus.LIVE && (!canSafelyMarkLive || hasRecentFailures || managedSummary.attentionRequired)) {
+    state = 'live_with_warnings';
+  } else if (business.provisioningStatus === BusinessProvisioningStatus.LIVE && canSafelyMarkLive) {
+    state = 'live';
+  } else if (nextStep.tone === 'attention' || managedSummary.attentionRequired || business.provisioningStatus === BusinessProvisioningStatus.NEEDS_ATTENTION) {
+    state = 'needs_attention';
+  } else if (compliancePending) {
+    state = 'waiting_on_a2p';
+  } else if (readyForLive) {
+    state = 'ready_to_go_live';
+  } else if (readyForTest) {
+    state = 'ready_for_test';
+  } else if (!twilioSetupReady && !numberReady && !messagingServiceReady && !webhooksReady && !ownerConnected) {
+    state = 'draft';
+  }
+
+  const blockers: AdminOnboardingConfidence['blockers'] = [];
+  if (nextStep.tone === 'attention') {
+    blockers.push({ level: 'error', message: nextStep.detail });
+  }
+  if (managedSummary.attentionRequired && business.a2pFailureReason) {
+    blockers.push({ level: 'error', message: business.a2pFailureReason });
+  }
+  if (compliancePending) {
+    blockers.push({ level: 'warning', message: 'A2P review is still pending. No operator action is needed unless Twilio asks for changes.' });
+  }
+  if (readyForTest && !hasTestSmsSuccess) {
+    blockers.push({ level: 'warning', message: 'Run an admin test SMS from the business line before treating this onboarding as launch-ready.' });
+  }
+  if (readyForTest && hasTestSmsFailure) {
+    blockers.push({ level: 'error', message: 'The latest admin test SMS did not complete cleanly. Fix that before you go live.' });
+  }
+  if (readyForTest && !missedCallValidated) {
+    blockers.push({ level: 'warning', message: 'Run one real missed-call test and confirm the lead reaches the owner before marking this business live.' });
+  }
+
+  const milestones: OnboardingConfidenceMilestone[] = [
+    {
+      key: 'business_profile',
+      label: 'Business info complete',
+      complete: hasProfile,
+      variant: milestoneVariant({ complete: hasProfile, blocking: true }),
+      detail: hasProfile ? 'Business name and call-forwarding details are saved.' : 'Add the business name and forwarding number first.',
+    },
+    {
+      key: 'owner_connected',
+      label: 'Owner connected',
+      complete: ownerConnected,
+      variant: milestoneVariant({ complete: ownerConnected, blocking: true }),
+      detail: ownerConnected ? 'A Clerk owner is linked to this business.' : ownerEmail ? 'Owner invite or attachment still needs to finish.' : 'Add the owner email and connect the owner account.',
+    },
+    {
+      key: 'owner_alerts',
+      label: 'Owner alert route',
+      complete: ownerAlertsReady,
+      variant: milestoneVariant({ complete: ownerAlertsReady, blocking: true }),
+      detail: ownerAlertsReady ? 'Owner phone or email is saved for alerts.' : 'Save an owner phone or email before you rely on alerts.',
+    },
+    {
+      key: 'twilio_setup',
+      label: 'Twilio subaccount ready',
+      complete: twilioSetupReady,
+      variant: milestoneVariant({ complete: twilioSetupReady, blocking: true }),
+      detail: twilioSetupReady ? 'Managed Twilio subaccount is attached.' : 'Provisioning still needs to create or reconnect the subaccount.',
+    },
+    {
+      key: 'texting_number',
+      label: 'Number assigned',
+      complete: numberReady,
+      variant: milestoneVariant({ complete: numberReady, blocking: true }),
+      detail: numberReady ? 'The business texting number is attached.' : 'Assign a new number or attach the approved existing number.',
+    },
+    {
+      key: 'messaging_service',
+      label: 'Messaging Service ready',
+      complete: messagingServiceReady,
+      variant: milestoneVariant({ complete: messagingServiceReady, blocking: true }),
+      detail: messagingServiceReady ? 'Twilio Messaging Service is attached.' : 'Provisioning still needs to create or repair the Messaging Service.',
+    },
+    {
+      key: 'webhooks',
+      label: 'Webhooks synced',
+      complete: webhooksReady,
+      variant: milestoneVariant({ complete: webhooksReady, blocking: true }),
+      detail: webhooksReady ? 'Voice, SMS, and status callbacks have been synced.' : 'Run Re-sync webhooks before testing.',
+    },
+    {
+      key: 'a2p',
+      label: 'A2P / readiness acknowledged',
+      complete: managedSummary.complianceReady,
+      variant: milestoneVariant({ complete: managedSummary.complianceReady, blocking: managedSummary.attentionRequired }),
+      detail: managedSummary.complianceReady ? 'A2P approval is recorded.' : managedSummary.nextStep,
+    },
+    {
+      key: 'test_sms',
+      label: 'Test SMS run',
+      complete: hasTestSmsSuccess,
+      variant: milestoneVariant({ complete: hasTestSmsSuccess, blocking: readyForTest }),
+      detail: hasTestSmsSuccess ? 'Admin test SMS was accepted by Twilio from the business line.' : 'Run the admin test SMS once the business is ready for messaging.',
+    },
+    {
+      key: 'missed_call_validation',
+      label: 'Missed-call flow validated',
+      complete: missedCallValidated,
+      variant: milestoneVariant({ complete: missedCallValidated, blocking: readyForTest }),
+      detail: missedCallValidated ? 'At least one missed-call lead reached the owner flow for this business.' : 'Run one real missed-call test from start to finish before going live.',
+    },
+    {
+      key: 'live_gate',
+      label: 'Safe to mark live',
+      complete: canSafelyMarkLive,
+      variant: milestoneVariant({ complete: canSafelyMarkLive, blocking: business.provisioningStatus === BusinessProvisioningStatus.LIVE || readyForTest }),
+      detail: canSafelyMarkLive ? 'This business has passed the key operator checks for launch.' : 'Keep the business in onboarding until test SMS and a real missed-call validation are complete.',
+    },
+  ];
+
+  const stateMeta: Record<OnboardingConfidenceState, Pick<AdminOnboardingConfidence, 'stateLabel' | 'stateVariant' | 'readinessLabel' | 'readinessVariant' | 'nextAction' | 'summary'>> = {
+    draft: {
+      stateLabel: 'Draft',
+      stateVariant: 'outline',
+      readinessLabel: 'Not ready',
+      readinessVariant: 'outline',
+      nextAction: nextStep.title,
+      summary: 'Core onboarding details are still missing. Start with owner connection and Twilio setup.',
+    },
+    in_setup: {
+      stateLabel: 'In setup',
+      stateVariant: 'secondary',
+      readinessLabel: 'Not ready',
+      readinessVariant: 'outline',
+      nextAction: nextStep.title,
+      summary: 'Onboarding is in progress, but at least one blocking setup step still needs attention.',
+    },
+    needs_attention: {
+      stateLabel: 'Needs attention',
+      stateVariant: 'destructive',
+      readinessLabel: 'Not ready',
+      readinessVariant: 'destructive',
+      nextAction: nextStep.title,
+      summary: 'Something is broken or incomplete enough that the founder should stop and repair it before testing.',
+    },
+    waiting_on_a2p: {
+      stateLabel: 'Waiting on A2P',
+      stateVariant: 'secondary',
+      readinessLabel: 'Waiting on external approval',
+      readinessVariant: 'secondary',
+      nextAction: 'Wait for Twilio approval',
+      summary: 'Infrastructure is in place, but compliant messaging is still waiting on Twilio or carrier review.',
+    },
+    ready_for_test: {
+      stateLabel: 'Ready for test',
+      stateVariant: 'secondary',
+      readinessLabel: 'Ready for test',
+      readinessVariant: 'secondary',
+      nextAction: hasTestSmsSuccess ? 'Run a real missed-call test' : 'Send a test SMS',
+      summary: 'The business looks ready for operator-led validation. Run the checks before you mark it live.',
+    },
+    ready_to_go_live: {
+      stateLabel: 'Ready to go live',
+      stateVariant: 'success',
+      readinessLabel: 'Ready for live',
+      readinessVariant: 'success',
+      nextAction: 'Mark this business live',
+      summary: 'Setup, compliance, and operator validation checks are in place for a clean launch decision.',
+    },
+    live: {
+      stateLabel: 'Live',
+      stateVariant: 'success',
+      readinessLabel: 'Ready for live',
+      readinessVariant: 'success',
+      nextAction: 'Monitor normal activity',
+      summary: 'This business is live and the operator confidence checks are green.',
+    },
+    live_with_warnings: {
+      stateLabel: 'Live with warnings',
+      stateVariant: 'destructive',
+      readinessLabel: 'Live with warnings',
+      readinessVariant: 'destructive',
+      nextAction: nextStep.title,
+      summary: 'The business is live, but recent failures or missing validations mean the founder should review it closely.',
+    },
+    archived: {
+      stateLabel: 'Archived',
+      stateVariant: 'outline',
+      readinessLabel: 'Not ready',
+      readinessVariant: 'outline',
+      nextAction: 'Restore business if work should resume',
+      summary: 'Automation is paused because this business is archived.',
+    },
+  };
+
+  return {
+    state,
+    ...stateMeta[state],
+    blockers,
+    milestones,
+    readyForTest,
+    readyForLive,
+    canSafelyMarkLive,
+    hasRecentFailures,
+  } satisfies AdminOnboardingConfidence;
 }
 
 export function matchesAdminBoardFilter(

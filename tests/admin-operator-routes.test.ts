@@ -15,13 +15,13 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminHome, /Fast onboard/);
   assert.match(adminHome, /Business triage board/);
   assert.match(adminHome, /Open customer leads/);
-  assert.match(adminDetail, /What should I do next\?/);
+  assert.match(adminDetail, /Onboarding confidence/);
   assert.match(adminDetail, /Business info/);
   assert.match(adminDetail, /Provisioning health/);
   assert.match(adminDetail, /Messaging \/ A2P readiness/);
   assert.match(adminDetail, /Automation settings/);
   assert.match(adminDetail, /Account \/ commercial state/);
-  assert.match(adminDetail, /Recent events \/ troubleshooting/);
+  assert.match(adminDetail, /Recent activity/);
   assert.match(adminDetail, /Advanced \/ rare actions/);
   assert.match(adminDetail, /Send test SMS/);
   assert.match(supportWorkspace, /support mode workspace/);

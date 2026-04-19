@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
+import { formatPhoneDetail, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
@@ -147,6 +148,20 @@ export async function POST(request: Request) {
           parentCallSid: formField(formData, 'ParentCallSid') || undefined,
           rawPayload: payload,
         },
+      });
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'voice.inbound_call_received',
+        category: 'VOICE',
+        status: 'INFO',
+        summary: 'Inbound call received',
+        details: {
+          fromPhone: formatPhoneDetail(from || formField(formData, 'From')),
+          toPhone: formatPhoneDetail(to || formField(formData, 'To')),
+          callSid,
+        },
+        relatedEntityType: 'call',
+        relatedEntityId: callSid,
       });
 
       logTwilioInfo('voice', 'call_persisted', {
