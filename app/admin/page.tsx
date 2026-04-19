@@ -25,6 +25,7 @@ import { searchBusinessesForAdmin } from '@/lib/business';
 import { db } from '@/lib/db';
 import { formatDateTime, formatRelativeTime } from '@/lib/lead-presenters';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
+import { OperatorEventStatus } from '@prisma/client';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { cn } from '@/lib/utils';
 
@@ -81,7 +82,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const view = (getQueryValue(searchParams, 'view') as AdminBoardFilter | null) || 'all';
   const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
-  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, notificationFailures] = await Promise.all([
+  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, notificationFailures, operatorSignals] = await Promise.all([
     query
       ? searchBusinessesForAdmin(query)
       : db.business.findMany({
@@ -120,6 +121,17 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       },
       take: 200,
     }),
+    db.businessOperatorEvent.findMany({
+      where: {
+        status: { in: [OperatorEventStatus.FAILED, OperatorEventStatus.WARNING] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        businessId: true,
+        status: true,
+      },
+      take: 600,
+    }),
   ]);
 
   const leadCountMap = new Map(leadCounts.map((item) => [item.businessId, item._count._all]));
@@ -129,6 +141,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const callActivityMap = new Map(callActivity.map((item) => [item.businessId, item._max.createdAt]));
   const messageActivityMap = new Map(messageActivity.map((item) => [item.businessId, item._max.createdAt]));
   const notificationFailureMap = new Map<string, { status: string; error: string | null; createdAt: Date }>();
+  const operatorSignalMap = new Map<string, { failed: number; warning: number }>();
 
   for (const failure of notificationFailures) {
     if (!notificationFailureMap.has(failure.businessId)) {
@@ -136,10 +149,34 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
     }
   }
 
+  for (const signal of operatorSignals) {
+    const entry = operatorSignalMap.get(signal.businessId) || { failed: 0, warning: 0 };
+    if (signal.status === OperatorEventStatus.FAILED) {
+      entry.failed += 1;
+    } else {
+      entry.warning += 1;
+    }
+    operatorSignalMap.set(signal.businessId, entry);
+  }
+
   const businessRows = businesses.map((business) => {
     const managedSummary = getManagedTwilioStatusSummary(business);
     const ownerPending = isPendingOwnerClerkId(business.ownerClerkId);
     const ownerConnected = !ownerPending;
+    const ownerStatusLabel = !business.notificationSettings?.ownerEmail
+      ? 'Owner email missing'
+      : ownerPending
+        ? business.ownerInviteSentAt
+          ? 'Invite sent'
+          : 'Invite ready'
+        : 'Connected';
+    const ownerStatusVariant = !business.notificationSettings?.ownerEmail
+      ? ('destructive' as const)
+      : ownerPending
+        ? business.ownerInviteSentAt
+          ? ('outline' as const)
+          : ('secondary' as const)
+        : ('success' as const);
     const nextStep = buildAdminNextStep({
       business,
       notificationSettings: business.notificationSettings,
@@ -171,11 +208,13 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       : nextStep.tone === 'healthy'
         ? 'Healthy. No immediate operator action needed.'
         : compactCopy(`${nextStep.title}. ${nextStep.detail}`);
+    const operatorSignals = operatorSignalMap.get(business.id) || { failed: 0, warning: 0 };
 
     return {
       business,
-      ownerPending,
       ownerConnected,
+      ownerStatusLabel,
+      ownerStatusVariant,
       managedSummary,
       nextStep,
       leadCount: leadCountMap.get(business.id) ?? 0,
@@ -185,6 +224,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       overallStatus,
       a2pState,
       attentionSignal,
+      operatorSignals,
       canSendTestSms: Boolean(assignedNumber && (business.notificationSettings?.ownerPhone || business.notifyPhone)),
     };
   });
@@ -250,7 +290,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           <CardHeader>
             <CardTitle>Fast onboard</CardTitle>
             <CardDescription>
-              Start the business workspace with the minimum founder-needed inputs. Everything else can be tightened inside the business control panel.
+              Create the workspace, save owner contact info, and start the managed new-number Twilio path immediately. Owner invite and existing-owner connect stay explicit on the business page.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -284,6 +324,10 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                 <Label htmlFor="timezone">Timezone</Label>
                 <Input id="timezone" name="timezone" defaultValue="America/New_York" />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="areaCode">Preferred area code</Label>
+                <Input id="areaCode" name="areaCode" maxLength={3} placeholder="512" />
+              </div>
 
               <label className="md:col-span-2 flex items-start gap-2 rounded-xl border bg-background/80 p-3 text-sm">
                 <input name="isTestBusiness" type="checkbox" value="true" />
@@ -291,8 +335,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
               </label>
 
               <div className="md:col-span-2 flex flex-wrap items-center gap-3">
-                <Button type="submit">Create business workspace</Button>
-                <p className="text-sm text-muted-foreground">CallbackCloser will auto-connect an existing owner account or send an invite if needed.</p>
+                <Button type="submit">Create workspace and start provisioning</Button>
+                <p className="text-sm text-muted-foreground">This saves owner contact info and immediately starts managed Twilio provisioning. Owner invite and existing-owner connect are handled separately inside the business panel.</p>
               </div>
             </form>
           </CardContent>
@@ -405,7 +449,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
               {visibleRows.map(
                 ({
                   business,
-                  ownerPending,
+                  ownerStatusLabel,
+                  ownerStatusVariant,
                   managedSummary,
                   nextStep,
                   leadCount,
@@ -415,6 +460,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                   overallStatus,
                   a2pState,
                   attentionSignal,
+                  operatorSignals,
                   canSendTestSms,
                 }) => (
                   <div key={business.id} className="grid gap-4 border-t bg-background/80 px-5 py-4 first:border-t-0 xl:grid-cols-[1.7fr_1fr_1.15fr_0.95fr_1.3fr]">
@@ -435,6 +481,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                         <span>{business.id}</span>
                         <span>{leadCount} lead{leadCount === 1 ? '' : 's'}</span>
                         <span>{lastActivityAt ? `Last activity ${formatRelativeTime(lastActivityAt)}` : 'No activity yet'}</span>
+                        {operatorSignals.failed > 0 ? <span>{operatorSignals.failed} error{operatorSignals.failed === 1 ? '' : 's'}</span> : null}
+                        {operatorSignals.warning > 0 ? <span>{operatorSignals.warning} warning{operatorSignals.warning === 1 ? '' : 's'}</span> : null}
                       </div>
                     </div>
 
@@ -443,7 +491,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       <p>{business.ownerName || 'Owner name missing'}</p>
                       <p className="text-muted-foreground">{business.notificationSettings?.ownerEmail || 'Owner email missing'}</p>
                       <div className="flex flex-wrap gap-2">
-                        <Badge variant={ownerPending ? 'outline' : 'secondary'}>{ownerPending ? 'Invite pending' : 'Linked'}</Badge>
+                        <Badge variant={ownerStatusVariant}>{ownerStatusLabel}</Badge>
                         {business.notificationSettings?.ownerPhone || business.notifyPhone ? (
                           <Badge variant="outline">{formatPhoneForDisplay(business.notificationSettings?.ownerPhone || business.notifyPhone)}</Badge>
                         ) : null}

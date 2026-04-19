@@ -9,6 +9,7 @@ import {
   resolveManagedTwilioStatus,
   type ManagedTwilioSummary,
 } from '@/lib/managed-twilio-status';
+import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { logTwilioInfo } from '@/lib/twilio-logging';
 import { getTwilioWebhookConfig, syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
@@ -129,10 +130,38 @@ async function updateManagedTwilioFields(
 }
 
 export async function createSubaccountForBusiness(business: Pick<ManagedTwilioBusiness, 'id' | 'name'>, correlationId = 'n/a') {
+  const existing = await db.business.findUnique({
+    where: { id: business.id },
+    select: { twilioSubaccountSid: true },
+  });
+  if (existing?.twilioSubaccountSid) {
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.twilio_subaccount_reused',
+      category: 'PROVISIONING',
+      status: 'INFO',
+      summary: 'Twilio subaccount reused',
+      details: {
+        subaccountSid: maskSid(existing.twilioSubaccountSid),
+        correlationId,
+      },
+    });
+  }
   const subaccountSid = await ensureTwilioSubaccount(business.id, business.name, correlationId);
   await updateManagedTwilioStatus(business.id, ManagedTwilioStatus.PROVISIONING, {
     twilioSubaccountSid: subaccountSid,
     twilioProvisioningStartedAt: new Date(),
+  });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'provisioning.twilio_subaccount_ready',
+    category: 'PROVISIONING',
+    status: 'SUCCESS',
+    summary: 'Twilio subaccount ready',
+    details: {
+      subaccountSid: maskSid(subaccountSid),
+      correlationId,
+    },
   });
   return subaccountSid;
 }
@@ -142,6 +171,17 @@ export async function createMessagingServiceForBusiness(
   correlationId = 'n/a'
 ) {
   if (business.twilioMessagingServiceSid) {
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.messaging_service_reused',
+      category: 'PROVISIONING',
+      status: 'INFO',
+      summary: 'Messaging Service reused',
+      details: {
+        messagingServiceSid: maskSid(business.twilioMessagingServiceSid),
+        correlationId,
+      },
+    });
     return business.twilioMessagingServiceSid;
   }
 
@@ -156,6 +196,18 @@ export async function createMessagingServiceForBusiness(
     twilioSubaccountSid: subaccountSid,
     twilioMessagingServiceSid: service.sid,
     twilioProvisioningStartedAt: new Date(),
+  });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'provisioning.messaging_service_created',
+    category: 'PROVISIONING',
+    status: 'SUCCESS',
+    summary: 'Messaging Service created',
+    details: {
+      subaccountSid: maskSid(subaccountSid),
+      messagingServiceSid: maskSid(service.sid),
+      correlationId,
+    },
   });
 
   logTwilioInfo('provisioning', 'messaging_service_created', {
@@ -174,6 +226,18 @@ export async function buyOrProvisionPrimaryNumberForBusiness(
 ) {
   const correlationId = options.correlationId ?? 'n/a';
   if (business.twilioPrimaryNumberSid && business.twilioPrimaryPhoneNumber) {
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.number_reused',
+      category: 'PROVISIONING',
+      status: 'INFO',
+      summary: 'Business number reused',
+      details: {
+        phoneNumber: formatPhoneDetail(business.twilioPrimaryPhoneNumber),
+        phoneNumberSid: maskSid(business.twilioPrimaryNumberSid),
+        correlationId,
+      },
+    });
     return {
       phoneNumberSid: business.twilioPrimaryNumberSid,
       phoneNumber: business.twilioPrimaryPhoneNumber,
@@ -213,6 +277,19 @@ export async function buyOrProvisionPrimaryNumberForBusiness(
     twilioPhoneNumber: normalized,
     twilioWebhookSyncedAt: syncedAt,
     twilioProvisioningStartedAt: new Date(),
+  });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'provisioning.number_purchased',
+    category: 'PROVISIONING',
+    status: 'SUCCESS',
+    summary: 'Business number purchased',
+    details: {
+      phoneNumber: formatPhoneDetail(normalized),
+      phoneNumberSid: maskSid(number.sid),
+      areaCode: options.areaCode ?? null,
+      correlationId,
+    },
   });
 
   logTwilioInfo('provisioning', 'primary_number_provisioned', {
@@ -263,6 +340,19 @@ export async function syncManagedTwilioNumberWebhooks(
     twilioPhoneNumber: normalized,
     twilioWebhookSyncedAt: syncedAt,
   });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'webhooks.sync_succeeded',
+    category: 'WEBHOOKS',
+    status: 'SUCCESS',
+    summary: 'Webhook sync completed',
+    details: {
+      phoneNumber: formatPhoneDetail(normalized),
+      phoneNumberSid: maskSid(number.sid),
+      appBaseUrl: getTwilioWebhookConfig().appBaseUrl,
+      correlationId,
+    },
+  });
 
   logTwilioInfo('provisioning', 'number_webhooks_synced', {
     correlationId,
@@ -298,11 +388,35 @@ export async function attachNumberToMessagingService(
     await client.messaging.v1.services(messagingServiceSid).phoneNumbers.create({
       phoneNumberSid: primaryNumberSid,
     });
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.number_attached_to_messaging_service',
+      category: 'PROVISIONING',
+      status: 'SUCCESS',
+      summary: 'Number attached to Messaging Service',
+      details: {
+        messagingServiceSid: maskSid(messagingServiceSid),
+        phoneNumberSid: maskSid(primaryNumberSid),
+        correlationId,
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     if (!message.toLowerCase().includes('already')) {
       throw error;
     }
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.number_attachment_reused',
+      category: 'PROVISIONING',
+      status: 'INFO',
+      summary: 'Messaging Service already had the business number',
+      details: {
+        messagingServiceSid: maskSid(messagingServiceSid),
+        phoneNumberSid: maskSid(primaryNumberSid),
+        correlationId,
+      },
+    });
   }
 
   logTwilioInfo('provisioning', 'number_attached_to_messaging_service', {
@@ -347,6 +461,17 @@ export async function provisionManagedTwilioForBusiness(
   options: { areaCode?: AreaCodeInput; correlationId?: string } = {}
 ) {
   const correlationId = options.correlationId ?? 'n/a';
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'provisioning.started',
+    category: 'PROVISIONING',
+    status: 'PENDING',
+    summary: 'Provisioning started',
+    details: {
+      areaCode: options.areaCode ?? null,
+      correlationId,
+    },
+  });
   await updateManagedTwilioStatus(business.id, ManagedTwilioStatus.PROVISIONING, {
     twilioProvisioningStartedAt: new Date(),
   });
@@ -411,6 +536,21 @@ export async function provisionManagedTwilioForBusiness(
     twilioPhoneNumber: syncedNumber.phoneNumber,
     twilioWebhookSyncedAt: syncedNumber.syncedAt,
     twilioProvisionedAt: new Date(),
+  });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'provisioning.completed',
+    category: 'PROVISIONING',
+    status: 'SUCCESS',
+    summary: 'Provisioning completed',
+    details: {
+      subaccountSid: maskSid(subaccountSid),
+      messagingServiceSid: maskSid(messagingServiceSid),
+      phoneNumber: formatPhoneDetail(syncedNumber.phoneNumber),
+      phoneNumberSid: maskSid(syncedNumber.phoneNumberSid),
+      nextStatus,
+      correlationId,
+    },
   });
 
   return db.business.findUniqueOrThrow({ where: { id: business.id } });

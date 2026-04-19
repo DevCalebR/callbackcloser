@@ -2,8 +2,11 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { BusinessProvisioningStatus, ManagedTwilioStatus, type Business, type BusinessNotificationSettings } from '@prisma/client';
 
 import {
+  deriveAdminOwnerState,
   buildPendingOwnerClerkId,
   isPendingOwnerClerkId,
+  type AdminOwnerState,
+  type OwnerInvitationSnapshot,
   type TwilioWebhookSnapshot,
 } from '@/lib/admin-provisioning-presenters';
 import { ensureBusinessNotificationSettings } from '@/lib/business-notification-settings';
@@ -18,23 +21,16 @@ import {
   syncManagedTwilioNumberWebhooks,
   updateManagedTwilioStatus,
 } from '@/lib/managed-twilio';
+import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { getTwilioBusinessClient, hasTwilioClientEnv } from '@/lib/twilio-client';
 import { getTwilioWebhookConfig, syncTwilioIncomingPhoneNumberWebhooks, type TwilioWebhookSyncOptions } from '@/lib/twilio';
-
-export type AdminOwnerState = {
-  connected: boolean;
-  pending: boolean;
-  invitedAt: Date | null;
-  clerkUserId: string | null;
-  name: string | null;
-  email: string | null;
-};
 
 export {
   adminProvisioningStatusLabels,
   buildAdminProvisioningChecklist,
   buildPendingOwnerClerkId,
+  deriveAdminOwnerState,
   getAdminProvisioningStatusVariant,
   isPendingOwnerClerkId,
 } from '@/lib/admin-provisioning-presenters';
@@ -53,50 +49,80 @@ export async function findClerkUserByEmail(email: string) {
   return result.data[0] ?? null;
 }
 
+function invitationBelongsToBusiness(invitation: { publicMetadata: Record<string, unknown> | null }, businessId: string) {
+  return invitation.publicMetadata?.businessId === businessId;
+}
+
+async function listOwnerInvitations(businessId: string, ownerEmail: string) {
+  const normalizedEmail = ownerEmail.trim().toLowerCase();
+  if (!normalizedEmail) return [] as OwnerInvitationSnapshot[];
+
+  const client = await clerkClient();
+  const invitations = await client.invitations.getInvitationList({
+    query: normalizedEmail,
+    limit: 10,
+  });
+
+  return invitations.data
+    .filter((invitation) => invitation.emailAddress.trim().toLowerCase() === normalizedEmail)
+    .filter((invitation) => invitationBelongsToBusiness(invitation, businessId))
+    .map((invitation) => ({
+      id: invitation.id,
+      status: invitation.status,
+      createdAt: new Date(invitation.createdAt),
+    }))
+    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+}
+
 export async function getAdminOwnerState(
-  business: Pick<Business, 'ownerClerkId' | 'ownerName' | 'ownerInviteSentAt'>,
+  business: Pick<Business, 'id' | 'ownerClerkId' | 'ownerName' | 'ownerInviteSentAt'>,
   notificationSettings: Pick<BusinessNotificationSettings, 'ownerEmail'> | null
 ): Promise<AdminOwnerState> {
   const ownerEmail = notificationSettings?.ownerEmail?.trim().toLowerCase() || null;
+  const invitation = ownerEmail ? (await listOwnerInvitations(business.id, ownerEmail))[0] || null : null;
+  const existingUser = ownerEmail ? await findClerkUserByEmail(ownerEmail) : null;
 
-  if (isPendingOwnerClerkId(business.ownerClerkId)) {
-    return {
-      connected: false,
-      pending: true,
-      invitedAt: business.ownerInviteSentAt,
-      clerkUserId: null,
-      name: business.ownerName?.trim() || null,
-      email: ownerEmail,
-    };
+  if (!isPendingOwnerClerkId(business.ownerClerkId)) {
+    try {
+      const client = await clerkClient();
+      const user = await client.users.getUser(business.ownerClerkId);
+      const primaryEmail =
+        user.primaryEmailAddressId
+          ? user.emailAddresses.find((emailAddress) => emailAddress.id === user.primaryEmailAddressId)?.emailAddress
+          : user.emailAddresses[0]?.emailAddress;
+      const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || business.ownerName?.trim() || null;
+
+      return deriveAdminOwnerState({
+        ownerClerkId: business.ownerClerkId,
+        ownerName: business.ownerName,
+        ownerEmail,
+        ownerInviteSentAt: business.ownerInviteSentAt,
+        linkedUserId: user.id,
+        linkedUserName: fullName,
+        linkedUserEmail: primaryEmail || ownerEmail,
+        existingUserIdByEmail: existingUser?.id || null,
+        invitation,
+      });
+    } catch {
+      return deriveAdminOwnerState({
+        ownerClerkId: business.ownerClerkId,
+        ownerName: business.ownerName,
+        ownerEmail,
+        ownerInviteSentAt: business.ownerInviteSentAt,
+        existingUserIdByEmail: existingUser?.id || null,
+        invitation,
+      });
+    }
   }
 
-  try {
-    const client = await clerkClient();
-    const user = await client.users.getUser(business.ownerClerkId);
-    const primaryEmail =
-      user.primaryEmailAddressId
-        ? user.emailAddresses.find((emailAddress) => emailAddress.id === user.primaryEmailAddressId)?.emailAddress
-        : user.emailAddresses[0]?.emailAddress;
-    const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || business.ownerName?.trim() || null;
-
-    return {
-      connected: true,
-      pending: false,
-      invitedAt: business.ownerInviteSentAt,
-      clerkUserId: user.id,
-      name: fullName,
-      email: primaryEmail?.trim().toLowerCase() || ownerEmail,
-    };
-  } catch {
-    return {
-      connected: false,
-      pending: false,
-      invitedAt: business.ownerInviteSentAt,
-      clerkUserId: business.ownerClerkId,
-      name: business.ownerName?.trim() || null,
-      email: ownerEmail,
-    };
-  }
+  return deriveAdminOwnerState({
+    ownerClerkId: business.ownerClerkId,
+    ownerName: business.ownerName,
+    ownerEmail,
+    ownerInviteSentAt: business.ownerInviteSentAt,
+    existingUserIdByEmail: existingUser?.id || null,
+    invitation,
+  });
 }
 
 async function assertOwnerNotAttachedElsewhere(ownerClerkId: string, businessId: string) {
@@ -110,22 +136,21 @@ async function assertOwnerNotAttachedElsewhere(ownerClerkId: string, businessId:
   }
 }
 
-export async function connectOrInviteBusinessOwner(params: {
+export async function inviteBusinessOwner(params: {
   businessId: string;
   ownerEmail: string;
   ownerName?: string | null;
-  ownerClerkId?: string | null;
-  inviteIfMissing?: boolean;
 }) {
   const ownerEmail = params.ownerEmail.trim().toLowerCase();
   if (!ownerEmail) {
-    throw new Error('Owner email is required to connect or invite the business owner.');
+    throw new Error('Owner email is required before you can send an invite.');
   }
 
   const business = await db.business.findUnique({
     where: { id: params.businessId },
     select: {
       id: true,
+      name: true,
       ownerClerkId: true,
       ownerName: true,
       ownerInviteSentAt: true,
@@ -138,58 +163,38 @@ export async function connectOrInviteBusinessOwner(params: {
   }
 
   const client = await clerkClient();
-  let userId = params.ownerClerkId?.trim() || '';
-
-  if (!userId) {
-    const existingUser = await findClerkUserByEmail(ownerEmail);
-    userId = existingUser?.id || '';
-  }
-
-  if (userId) {
-    await assertOwnerNotAttachedElsewhere(userId, business.id);
-
-    await db.business.update({
-      where: { id: business.id },
-      data: {
-        ownerClerkId: userId,
-        ownerName: params.ownerName?.trim() || business.ownerName || null,
-        ownerInviteSentAt: null,
-      },
-    });
-
-    await ensureBusinessNotificationSettings(
-      {
-        id: business.id,
-        ownerClerkId: userId,
-        notifyPhone: business.notifyPhone,
-      },
-      {
-        ownerEmail,
-      }
-    );
-
-    return { state: 'connected' as const, ownerClerkId: userId };
-  }
-
-  if (!params.inviteIfMissing) {
-    throw new Error('No existing Clerk user was found for that email address.');
+  const existingUser = await findClerkUserByEmail(ownerEmail);
+  if (existingUser) {
+    if (business.ownerClerkId === existingUser.id) {
+      throw new Error('That owner is already connected to this business.');
+    }
+    throw new Error('A CallbackCloser account already exists for that email. Use Connect existing owner instead.');
   }
 
   const appBaseUrl = getConfiguredAppBaseUrl();
-  await client.invitations.createInvitation({
+  const priorInvitations = await listOwnerInvitations(business.id, ownerEmail);
+  for (const invitation of priorInvitations.filter((item) => item.status === 'pending')) {
+    await client.invitations.revokeInvitation(invitation.id);
+  }
+
+  const invitation = await client.invitations.createInvitation({
     emailAddress: ownerEmail,
     notify: true,
-    ignoreExisting: true,
+    publicMetadata: {
+      businessId: business.id,
+      businessName: business.name,
+    },
     ...(appBaseUrl ? { redirectUrl: `${appBaseUrl}/sign-up` } : {}),
   });
 
   const pendingOwnerId = isPendingOwnerClerkId(business.ownerClerkId) ? business.ownerClerkId : buildPendingOwnerClerkId();
+  const invitedAt = new Date();
   await db.business.update({
     where: { id: business.id },
     data: {
       ownerClerkId: pendingOwnerId,
       ownerName: params.ownerName?.trim() || business.ownerName || null,
-      ownerInviteSentAt: new Date(),
+      ownerInviteSentAt: invitedAt,
     },
   });
 
@@ -204,7 +209,106 @@ export async function connectOrInviteBusinessOwner(params: {
     }
   );
 
-  return { state: 'invited' as const, ownerClerkId: pendingOwnerId };
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: priorInvitations.some((item) => item.status === 'pending') ? 'onboarding.owner_invite_resent' : 'onboarding.owner_invited',
+    category: 'ONBOARDING',
+    status: 'PENDING',
+    summary: priorInvitations.some((item) => item.status === 'pending') ? 'Owner invite resent' : 'Owner invite sent',
+    details: {
+      ownerEmail,
+      inviteId: invitation.id,
+      inviteStatus: invitation.status,
+      inviteSentAt: invitedAt.toISOString(),
+    },
+  });
+
+  return {
+    state: priorInvitations.some((item) => item.status === 'pending') ? ('resent' as const) : ('invited' as const),
+    ownerClerkId: pendingOwnerId,
+    invitationId: invitation.id,
+  };
+}
+
+export async function connectExistingBusinessOwner(params: {
+  businessId: string;
+  ownerEmail: string;
+  ownerName?: string | null;
+  ownerClerkId?: string | null;
+}) {
+  const ownerEmail = params.ownerEmail.trim().toLowerCase();
+  if (!ownerEmail) {
+    throw new Error('Owner email is required before you can connect an existing owner.');
+  }
+
+  const business = await db.business.findUnique({
+    where: { id: params.businessId },
+    select: {
+      id: true,
+      ownerClerkId: true,
+      ownerName: true,
+      notifyPhone: true,
+    },
+  });
+
+  if (!business) {
+    throw new Error('Business not found.');
+  }
+
+  let userId = params.ownerClerkId?.trim() || '';
+  if (!userId) {
+    const existingUser = await findClerkUserByEmail(ownerEmail);
+    userId = existingUser?.id || '';
+  }
+
+  if (!userId) {
+    throw new Error('No existing CallbackCloser account was found for that email. Use Invite owner by email instead.');
+  }
+
+  await assertOwnerNotAttachedElsewhere(userId, business.id);
+
+  const invitations = await listOwnerInvitations(business.id, ownerEmail);
+  if (invitations.length > 0) {
+    const client = await clerkClient();
+    for (const invitation of invitations.filter((item) => item.status === 'pending')) {
+      await client.invitations.revokeInvitation(invitation.id);
+    }
+  }
+
+  await db.business.update({
+    where: { id: business.id },
+    data: {
+      ownerClerkId: userId,
+      ownerName: params.ownerName?.trim() || business.ownerName || null,
+      ownerInviteSentAt: null,
+    },
+  });
+
+  await ensureBusinessNotificationSettings(
+    {
+      id: business.id,
+      ownerClerkId: userId,
+      notifyPhone: business.notifyPhone,
+    },
+    {
+      ownerEmail,
+    }
+  );
+
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'onboarding.owner_connected',
+    category: 'ONBOARDING',
+    status: 'SUCCESS',
+    summary: 'Existing owner connected',
+    details: {
+      ownerEmail,
+      ownerClerkId: userId,
+      connectionMethod: params.ownerClerkId?.trim() ? 'clerk_user_id' : 'email_lookup',
+    },
+  });
+
+  return { state: 'connected' as const, ownerClerkId: userId };
 }
 
 export function sanitizeWebhookUrl(url: string | null | undefined) {
@@ -315,6 +419,19 @@ export async function syncBusinessTwilioWebhooks(
       provisioningError: null,
     },
   });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'webhooks.sync_succeeded',
+    category: 'WEBHOOKS',
+    status: 'SUCCESS',
+    summary: 'Webhook sync completed',
+    details: {
+      target: options,
+      phoneNumber: formatPhoneDetail(normalizedPhoneNumber),
+      phoneNumberSid: maskSid(number.sid),
+      syncedAt: syncedAt.toISOString(),
+    },
+  });
 
   return { number, syncedAt };
 }
@@ -401,6 +518,20 @@ export async function attachExistingNumberToBusiness(params: {
     twilioProvisionedAt: new Date(),
     twilioWebhookSyncedAt: syncedNumber.syncedAt,
   });
+  await recordBusinessOperatorEvent({
+    businessId: params.business.id,
+    type: 'provisioning.existing_number_attached',
+    category: 'PROVISIONING',
+    status: 'SUCCESS',
+    summary: 'Existing number attached',
+    details: {
+      phoneNumber: formatPhoneDetail(syncedNumber.phoneNumber),
+      phoneNumberSid: maskSid(syncedNumber.phoneNumberSid),
+      messagingServiceSid: maskSid(messagingServiceSid),
+      subaccountSid: maskSid(subaccountSid),
+      correlationId,
+    },
+  });
 
   return db.business.findUniqueOrThrow({ where: { id: params.business.id } });
 }
@@ -437,6 +568,18 @@ export async function runAdminProvisioning(params: {
       provisioningStatus: BusinessProvisioningStatus.ONBOARDING,
       provisioningLastRunAt: new Date(),
       provisioningError: null,
+    },
+  });
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'provisioning.started',
+    category: 'PROVISIONING',
+    status: 'PENDING',
+    summary: 'Provisioning started',
+    details: {
+      mode: params.mode,
+      areaCode: params.areaCode ?? null,
+      existingNumberSid: maskSid(params.existingNumberSid),
     },
   });
 
@@ -483,6 +626,16 @@ export async function runAdminProvisioning(params: {
         provisioningError: null,
       },
     });
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.run_completed',
+      category: 'PROVISIONING',
+      status: 'SUCCESS',
+      summary: 'Provisioning run completed',
+      details: {
+        mode: params.mode,
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Provisioning failed.';
     await db.business.update({
@@ -491,6 +644,17 @@ export async function runAdminProvisioning(params: {
         provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
         provisioningLastRunAt: new Date(),
         provisioningError: message,
+      },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.failed',
+      category: 'PROVISIONING',
+      status: 'FAILED',
+      summary: 'Provisioning failed',
+      details: {
+        mode: params.mode,
+        error: message,
       },
     });
     throw error;
@@ -502,7 +666,7 @@ export async function updateBusinessProvisioningStatus(
   status: BusinessProvisioningStatus,
   error: string | null = null
 ) {
-  return db.business.update({
+  const updated = await db.business.update({
     where: { id: businessId },
     data: {
       provisioningStatus: status,
@@ -510,4 +674,21 @@ export async function updateBusinessProvisioningStatus(
       provisioningError: error,
     },
   });
+  await recordBusinessOperatorEvent({
+    businessId,
+    type: 'admin.provisioning_status_updated',
+    category: 'ADMIN_ACTIONS',
+    status: status === BusinessProvisioningStatus.PAUSED ? 'WARNING' : 'INFO',
+    summary:
+      status === BusinessProvisioningStatus.PAUSED
+        ? 'Automation paused'
+        : status === BusinessProvisioningStatus.LIVE
+          ? 'Business marked live'
+          : `Provisioning state set to ${status.toLowerCase().replace(/_/g, ' ')}`,
+    details: {
+      provisioningStatus: status,
+      error,
+    },
+  });
+  return updated;
 }

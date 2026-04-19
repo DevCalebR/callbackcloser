@@ -42,6 +42,12 @@ export const adminBusinessDraftSchema = z.object({
   ownerName: z.string().trim().max(120).optional().or(z.literal('')),
   ownerEmail: z.string().trim().email(),
   ownerPhone: z.string().max(30).optional().or(z.literal('')),
+  areaCode: z
+    .string()
+    .trim()
+    .regex(/^\d{3}$/)
+    .optional()
+    .or(z.literal('')),
   isTestBusiness: z.coerce.boolean().optional().default(false),
   forwardingNumber: z.string().min(7).max(30),
   timezone: z.string().min(2).max(100).default('America/New_York'),
@@ -81,7 +87,13 @@ export const adminBusinessUpdateSchema = adminBusinessDraftSchema.extend({
   urgentOnly: z.coerce.boolean().optional().default(false),
 });
 
-export const adminConnectOwnerSchema = z.object({
+export const adminInviteOwnerSchema = z.object({
+  businessId: z.string().min(1),
+  ownerEmail: z.string().trim().email(),
+  ownerName: z.string().trim().max(120).optional().or(z.literal('')),
+});
+
+export const adminConnectExistingOwnerSchema = z.object({
   businessId: z.string().min(1),
   ownerEmail: z.string().trim().email(),
   ownerName: z.string().trim().max(120).optional().or(z.literal('')),

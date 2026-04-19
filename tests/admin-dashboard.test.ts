@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BusinessProvisioningStatus, ManagedTwilioStatus, SubscriptionStatus } from '@prisma/client';
+import { BusinessProvisioningStatus, ManagedTwilioStatus, OperatorEventStatus, SubscriptionStatus } from '@prisma/client';
 
 import {
+  buildAdminOnboardingConfidence,
   buildAdminBusinessEvents,
   buildAdminNextStep,
   canDeleteTestBusiness,
@@ -16,6 +17,7 @@ function createBusiness(overrides: Record<string, unknown> = {}) {
     name: 'Acme Plumbing',
     ownerClerkId: 'user_123',
     ownerName: 'Casey Owner',
+    ownerInviteSentAt: null,
     isTestBusiness: false,
     archivedAt: null,
     forwardingNumber: '+15557654321',
@@ -101,6 +103,24 @@ test('next-step guidance stays explicit for owner setup and pending A2P review',
   assert.equal(missingOwnerContact.title, 'Owner contact info is missing');
   assert.equal(missingOwnerContact.actionLabel, 'Save owner contact info');
 
+  const invitedOwner = buildAdminNextStep({
+    business: createBusiness({
+      ownerInviteSentAt: new Date('2026-04-16T00:00:00.000Z'),
+      twilioSubaccountSid: null,
+      twilioMessagingServiceSid: null,
+      twilioPrimaryNumberSid: null,
+      twilioPhoneNumberSid: null,
+      twilioPrimaryPhoneNumber: null,
+      twilioPhoneNumber: null,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: false,
+  });
+
+  assert.equal(invitedOwner.title, 'Owner invitation is still pending');
+  assert.equal(invitedOwner.actionLabel, 'Review owner setup');
+
   const pendingA2p = buildAdminNextStep({
     business: createBusiness({
       managedTwilioStatus: ManagedTwilioStatus.CAMPAIGN_SUBMITTED,
@@ -170,4 +190,81 @@ test('recent event synthesis prioritizes provisioning failures and owner alert f
   assert.equal(events[0]?.label, 'Provisioning');
   assert.equal(events.some((event) => event.label === 'Owner sms alert' && event.severity === 'error'), true);
   assert.equal(events.some((event) => event.label === 'Lead SMS' && event.severity === 'error'), true);
+});
+
+test('onboarding confidence distinguishes ready-for-test from ready-for-live', () => {
+  const readyForTest = buildAdminOnboardingConfidence({
+    business: createBusiness({
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 0,
+    operatorEvents: [],
+  });
+
+  assert.equal(readyForTest.state, 'ready_for_test');
+  assert.equal(readyForTest.readyForTest, true);
+  assert.equal(readyForTest.canSafelyMarkLive, false);
+  assert.match(readyForTest.nextAction, /test/i);
+
+  const readyForLive = buildAdminOnboardingConfidence({
+    business: createBusiness({
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 1,
+    operatorEvents: [
+      {
+        type: 'admin.test_sms_accepted',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+  });
+
+  assert.equal(readyForLive.state, 'ready_to_go_live');
+  assert.equal(readyForLive.canSafelyMarkLive, true);
+  assert.equal(readyForLive.readinessLabel, 'Ready for live');
+});
+
+test('onboarding confidence stays honest when A2P is pending or live has warnings', () => {
+  const waitingOnA2p = buildAdminOnboardingConfidence({
+    business: createBusiness({
+      managedTwilioStatus: ManagedTwilioStatus.CAMPAIGN_SUBMITTED,
+      a2pApprovedAt: null,
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 0,
+    operatorEvents: [],
+  });
+
+  assert.equal(waitingOnA2p.state, 'waiting_on_a2p');
+  assert.equal(waitingOnA2p.readinessLabel, 'Waiting on external approval');
+
+  const liveWithWarnings = buildAdminOnboardingConfidence({
+    business: createBusiness({
+      provisioningStatus: BusinessProvisioningStatus.LIVE,
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 0,
+    operatorEvents: [
+      {
+        type: 'admin.test_sms_failed',
+        status: OperatorEventStatus.FAILED,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+  });
+
+  assert.equal(liveWithWarnings.state, 'live_with_warnings');
+  assert.equal(liveWithWarnings.canSafelyMarkLive, false);
+  assert.equal(liveWithWarnings.readinessLabel, 'Live with warnings');
 });

@@ -4,6 +4,7 @@ import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
 import { startMissedCallRecovery } from '@/lib/missed-call-flow';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
+import { formatPhoneDetail, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import { RATE_LIMIT_TWILIO_AUTH_MAX, RATE_LIMIT_TWILIO_UNAUTH_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-limit-config';
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
@@ -252,6 +253,22 @@ export async function POST(request: Request) {
       return withCorrelation(xmlOk());
     }
 
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'voice.call_marked_missed',
+      category: 'VOICE',
+      status: 'WARNING',
+      summary: 'Call marked missed',
+      details: {
+        callSid,
+        dialCallSid,
+        fromPhone: formatPhoneDetail(from || formField(formData, 'From')),
+        toPhone: formatPhoneDetail(to),
+      },
+      relatedEntityType: 'call',
+      relatedEntityId: call.id,
+    });
+
     const callerPhone = from || formField(formData, 'From');
     const callerPhoneNormalized = normalizePhoneNumber(callerPhone) || callerPhone;
 
@@ -277,6 +294,19 @@ export async function POST(request: Request) {
         leadId: lead.id,
         decision: 'create_lead',
       });
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'voice.lead_created_from_call',
+        category: 'VOICE',
+        status: 'SUCCESS',
+        summary: 'Lead created from missed call',
+        details: {
+          callSid,
+          callerPhone: formatPhoneDetail(callerPhoneNormalized),
+        },
+        relatedEntityType: 'lead',
+        relatedEntityId: lead.id,
+      });
     } else {
       logTwilioInfo('status', 'lead_reused_for_retry', {
         callSid,
@@ -286,6 +316,19 @@ export async function POST(request: Request) {
         businessId: business.id,
         leadId: lead.id,
         decision: 'reuse_existing_lead',
+      });
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'voice.lead_updated_from_call',
+        category: 'VOICE',
+        status: 'INFO',
+        summary: 'Existing lead reused for missed call',
+        details: {
+          callSid,
+          callerPhone: formatPhoneDetail(callerPhoneNormalized),
+        },
+        relatedEntityType: 'lead',
+        relatedEntityId: lead.id,
       });
     }
 
@@ -446,6 +489,19 @@ export async function POST(request: Request) {
       });
 
       if (!recovery.started) {
+        await recordBusinessOperatorEvent({
+          businessId: business.id,
+          type: 'messaging.missed_call_sms_suppressed',
+          category: 'MESSAGING',
+          status: 'WARNING',
+          summary: 'Missed-call SMS did not start',
+          details: {
+            reason: recovery.reason ?? 'unknown',
+            callSid,
+          },
+          relatedEntityType: 'lead',
+          relatedEntityId: lead.id,
+        });
         logTwilioWarn('status', 'initial_missed_call_sms_suppressed', {
           callSid,
           dialCallSid,
@@ -458,6 +514,19 @@ export async function POST(request: Request) {
         return withCorrelation(xmlOk());
       }
 
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'messaging.missed_call_sms_started',
+        category: 'MESSAGING',
+        status: 'SUCCESS',
+        summary: 'Missed-call SMS flow started',
+        details: {
+          callSid,
+          leadId: recovery.lead.id,
+        },
+        relatedEntityType: 'lead',
+        relatedEntityId: recovery.lead.id,
+      });
       logTwilioInfo('status', 'initial_missed_call_sms_started', {
         callSid,
         dialCallSid,

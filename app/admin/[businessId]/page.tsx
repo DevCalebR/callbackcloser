@@ -3,8 +3,9 @@ import { notFound } from 'next/navigation';
 
 import {
   archiveBusinessAction,
-  connectBusinessOwnerAction,
+  connectExistingBusinessOwnerAction,
   deleteTestBusinessAction,
+  inviteBusinessOwnerAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
   restoreBusinessAction,
@@ -13,11 +14,11 @@ import {
   setBusinessProvisioningStatusAction,
 } from '@/app/admin/actions';
 import {
-  buildAdminBusinessEvents,
-  buildAdminNextStep,
+  buildAdminOnboardingConfidence,
   canDeleteTestBusiness,
   isBusinessArchived,
 } from '@/lib/admin-dashboard';
+import { CopyValueButton } from '@/components/copy-value-button';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,6 +46,14 @@ import {
   leadStatusLabels,
 } from '@/lib/lead-presenters';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary, managedTwilioStatusLabels } from '@/lib/managed-twilio-status';
+import {
+  businessTimelineFilterOptions,
+  countTimelineFilters,
+  matchesTimelineFilter,
+  operatorEventCategoryLabels,
+  operatorEventStatusLabels,
+  type BusinessTimelineFilter,
+} from '@/lib/operator-events';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getAdminBusinessStatus, getCustomerSystemStatus } from '@/lib/system-status';
@@ -129,11 +138,52 @@ function getQueryValue(searchParams: Record<string, string | string[] | undefine
   return typeof value === 'string' ? value : null;
 }
 
-function getNextStepBadgeVariant(tone: 'healthy' | 'pending' | 'attention' | 'paused') {
-  if (tone === 'healthy') return 'success' as const;
-  if (tone === 'attention') return 'destructive' as const;
-  if (tone === 'paused') return 'outline' as const;
+function getTimelineFilter(searchParams: Record<string, string | string[] | undefined> | undefined): BusinessTimelineFilter {
+  const value = getQueryValue(searchParams, 'activity');
+  return businessTimelineFilterOptions.some((option) => option.key === value) ? (value as BusinessTimelineFilter) : 'all';
+}
+
+function getOperatorEventBadgeVariant(status: keyof typeof operatorEventStatusLabels) {
+  if (status === 'FAILED') return 'destructive' as const;
+  if (status === 'WARNING') return 'outline' as const;
+  if (status === 'SUCCESS') return 'success' as const;
   return 'secondary' as const;
+}
+
+function getConfidenceMilestoneBadgeVariant(variant: 'success' | 'warning' | 'pending') {
+  if (variant === 'success') return 'success' as const;
+  if (variant === 'warning') return 'outline' as const;
+  return 'secondary' as const;
+}
+
+function formatOperatorEventDetailValue(value: unknown): string {
+  if (value === null || value === undefined) return '-';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map((item) => formatOperatorEventDetailValue(item)).join(', ');
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, nested]) => `${key}: ${formatOperatorEventDetailValue(nested)}`)
+      .join(' | ');
+  }
+  return String(value);
+}
+
+function getOperatorEventDetails(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>).map(([key, detail]) => ({
+    key,
+    label: key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' '),
+    value: formatOperatorEventDetailValue(detail),
+  }));
+}
+
+function buildOperatorEventRelatedHref(businessId: string, relatedEntityType: string | null, relatedEntityId: string | null) {
+  if (!relatedEntityType || !relatedEntityId) return null;
+  if (relatedEntityType === 'lead') return `/admin/${businessId}/workspace#recent-leads`;
+  if (relatedEntityType === 'message') return `/admin/${businessId}/workspace#recent-activity`;
+  if (relatedEntityType === 'call') return `/admin/${businessId}/workspace#call-flow-snapshot`;
+  return null;
 }
 
 function HiddenAdminBusinessFields({
@@ -240,8 +290,9 @@ export default async function AdminBusinessDetailPage({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   await requireAdmin();
+  const activityFilter = getTimelineFilter(searchParams);
 
-  const [business, successfulLeadCount, leadCount, callCount, messageCount, recentLeads, recentCalls, recentMessages, recentOwnerNotifications] =
+  const [business, successfulLeadCount, leadCount, callCount, messageCount, recentLeads, recentCalls, recentMessages, recentOwnerNotifications, operatorEvents] =
     await Promise.all([
       db.business.findUnique({
         where: { id: params.businessId },
@@ -315,6 +366,22 @@ export default async function AdminBusinessDetailPage({
           destination: true,
         },
       }),
+      db.businessOperatorEvent.findMany({
+        where: { businessId: params.businessId },
+        orderBy: { createdAt: 'desc' },
+        take: 120,
+        select: {
+          id: true,
+          type: true,
+          category: true,
+          status: true,
+          summary: true,
+          detailsJson: true,
+          relatedEntityType: true,
+          relatedEntityId: true,
+          createdAt: true,
+        },
+      }),
     ]);
 
   if (!business) notFound();
@@ -335,22 +402,23 @@ export default async function AdminBusinessDetailPage({
     ownerConnected: ownerState.connected,
     webhookSnapshot,
   });
-  const nextStep = buildAdminNextStep({
+  const onboardingConfidence = buildAdminOnboardingConfidence({
     business,
     notificationSettings: business.notificationSettings,
     ownerConnected: ownerState.connected,
+    successfulLeadCount,
+    operatorEvents: operatorEvents.map((event) => ({
+      type: event.type,
+      status: event.status,
+      createdAt: event.createdAt,
+    })),
   });
-  const recentEvents = buildAdminBusinessEvents({
-    business,
-    messages: recentMessages,
-    ownerNotifications: recentOwnerNotifications,
-    leads: recentLeads,
-    calls: recentCalls,
-  }).slice(0, 8);
+  const timelineFilterCounts = countTimelineFilters(operatorEvents);
+  const visibleTimelineEvents = operatorEvents.filter((event) => {
+    return matchesTimelineFilter(event, activityFilter);
+  });
   const assignedNumber = getManagedTextingNumber(business);
   const defaults = buildAdminFormDefaults(business);
-  const pendingChecklist = checklist.filter((item) => !item.complete);
-  const completedChecklistCount = checklist.filter((item) => item.complete).length;
   const webhooksNeedAttention = Boolean(
     assignedNumber &&
       (!business.twilioWebhookSyncedAt ||
@@ -372,17 +440,22 @@ export default async function AdminBusinessDetailPage({
         ? 'Needs attention'
         : 'Pending'
     : 'Not started';
-  const latestProvisioningEvent = recentEvents.find((event) => event.label === 'Provisioning') || null;
+  const latestProvisioningEvent = operatorEvents.find((event) => event.category === 'PROVISIONING') || null;
   const latestWebhookEvent =
-    recentEvents.find((event) => event.label === 'Webhook sync') ||
+    operatorEvents.find((event) => event.category === 'WEBHOOKS') ||
     (webhooksNeedAttention
       ? {
           id: 'webhook-attention',
-          at: business.updatedAt,
-          severity: 'warning' as const,
-          label: 'Webhook sync',
+          createdAt: business.updatedAt,
+          status: 'WARNING' as const,
+          category: 'WEBHOOKS' as const,
           summary: 'Webhook mismatch detected',
-          detail: webhookSnapshot?.error || 'Voice, SMS, or status callback sync still needs attention.',
+          detailsJson: {
+            detail: webhookSnapshot?.error || 'Voice, SMS, or status callback sync still needs attention.',
+          },
+          relatedEntityType: null,
+          relatedEntityId: null,
+          type: 'webhooks.mismatch_detected',
         }
       : null);
   const latestOutboundSms = recentMessages[0] || null;
@@ -390,7 +463,7 @@ export default async function AdminBusinessDetailPage({
 
   const created = getQueryValue(searchParams, 'created') === '1';
   const saved = getQueryValue(searchParams, 'saved') === '1';
-  const ownerStateMessage = getQueryValue(searchParams, 'ownerState');
+  const ownerAction = getQueryValue(searchParams, 'ownerAction');
   const provisioned = getQueryValue(searchParams, 'provisioned') === '1';
   const synced = getQueryValue(searchParams, 'synced');
   const statusSaved = getQueryValue(searchParams, 'statusSaved');
@@ -439,23 +512,26 @@ export default async function AdminBusinessDetailPage({
           </Badge>
           <Badge variant={rolloutStatus.badgeVariant}>{rolloutStatus.label}</Badge>
           <Badge variant={customerStatus.badgeVariant}>{customerStatus.label}</Badge>
-          <Badge variant={getNextStepBadgeVariant(nextStep.tone)}>{nextStep.title}</Badge>
+          <Badge variant={onboardingConfidence.stateVariant}>{onboardingConfidence.stateLabel}</Badge>
+          <Badge variant={onboardingConfidence.readinessVariant}>{onboardingConfidence.readinessLabel}</Badge>
         </div>
       </div>
 
-      {created ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business workspace created and ready for provisioning.</div> : null}
+      {created ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business workspace created. Review owner setup and provisioning health below.</div> : null}
       {saved ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           Business details saved{changed.length > 0 ? `: ${changed.join(', ')}.` : '.'}
         </div>
       ) : null}
-      {ownerStateMessage ? (
+      {ownerAction ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
-          {ownerStateMessage === 'connected'
-            ? 'Owner account connected.'
-            : ownerStateMessage === 'invited'
-              ? 'Owner invite sent. Re-run owner connection after the invite is accepted.'
-              : 'Owner state updated.'}
+          {ownerAction === 'connected'
+            ? 'Existing owner connected.'
+            : ownerAction === 'invited'
+              ? 'Owner invitation sent.'
+              : ownerAction === 'resent'
+                ? 'Owner invitation resent.'
+                : 'Owner state updated.'}
         </div>
       ) : null}
       {provisioned ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning finished. Review the health cards below.</div> : null}
@@ -469,20 +545,22 @@ export default async function AdminBusinessDetailPage({
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader>
-            <CardTitle>What should I do next?</CardTitle>
-            <CardDescription>Plain-English operator guidance with the fastest next action at the top.</CardDescription>
+            <CardTitle>Onboarding confidence</CardTitle>
+            <CardDescription>Current state, blockers, next action, and the exact gate between setup, testing, and launch.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-xl border bg-background/80 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-lg font-semibold">{nextStep.title}</p>
-                    <Badge variant={getNextStepBadgeVariant(nextStep.tone)}>{nextStep.actionLabel}</Badge>
+                    <p className="text-lg font-semibold">{onboardingConfidence.stateLabel}</p>
+                    <Badge variant={onboardingConfidence.stateVariant}>{onboardingConfidence.readinessLabel}</Badge>
                   </div>
-                  <p className="max-w-3xl text-sm text-muted-foreground">{nextStep.detail}</p>
+                  <p className="max-w-3xl text-sm text-muted-foreground">{onboardingConfidence.summary}</p>
+                  <p className="text-sm font-medium">Next action: {onboardingConfidence.nextAction}</p>
                   <p className="text-xs text-muted-foreground">
-                    Setup progress: {completedChecklistCount} / {checklist.length} steps done
+                    Confidence checklist: {onboardingConfidence.milestones.filter((item) => item.complete).length} /{' '}
+                    {onboardingConfidence.milestones.length} signals complete
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -496,7 +574,7 @@ export default async function AdminBusinessDetailPage({
                     </Link>
                   ) : !ownerState.connected ? (
                     <Link className={buttonVariants({ size: 'sm' })} href="#business-info">
-                      Connect owner
+                      Review owner setup
                     </Link>
                   ) : !(business.notificationSettings?.ownerPhone || business.notifyPhone) ? (
                     <Link className={buttonVariants({ size: 'sm' })} href="#automation-settings">
@@ -513,7 +591,12 @@ export default async function AdminBusinessDetailPage({
                   ) : webhooksNeedAttention ? (
                     <WebhookResyncButton businessId={business.id} label="Re-sync webhooks" target="ALL" variant="default" />
                   ) : managedSummary.messagingReady && business.provisioningStatus !== 'LIVE' ? (
-                    <StatusButton businessId={business.id} label="Mark live" status="LIVE" variant="default" />
+                    <StatusButton
+                      businessId={business.id}
+                      label={onboardingConfidence.canSafelyMarkLive ? 'Mark live' : 'Mark live with warnings'}
+                      status="LIVE"
+                      variant={onboardingConfidence.canSafelyMarkLive ? 'default' : 'outline'}
+                    />
                   ) : (
                     <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${business.id}/workspace`}>
                       Open support workspace
@@ -534,18 +617,37 @@ export default async function AdminBusinessDetailPage({
               </div>
             </div>
 
-            {pendingChecklist.length > 0 ? (
+            {onboardingConfidence.blockers.length > 0 ? (
+              <div className="grid gap-3">
+                {onboardingConfidence.blockers.map((blocker, index) => (
+                  <div
+                    key={`${blocker.message}-${index}`}
+                    className={cn(
+                      'rounded-xl border p-4 text-sm',
+                      blocker.level === 'error' ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'bg-background/80'
+                    )}
+                  >
+                    {blocker.message}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {onboardingConfidence.milestones.length > 0 ? (
               <div className="grid gap-3 md:grid-cols-2">
-                {pendingChecklist.slice(0, 4).map((item) => (
+                {onboardingConfidence.milestones.map((item) => (
                   <div key={item.key} className="rounded-xl border bg-background/80 p-4 text-sm">
-                    <p className="font-medium">{item.label}</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium">{item.label}</p>
+                      <Badge variant={getConfidenceMilestoneBadgeVariant(item.variant)}>{item.complete ? 'Done' : 'Next'}</Badge>
+                    </div>
                     <p className="mt-2 text-muted-foreground">{item.detail}</p>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
-                Setup checklist is complete. This business should only need normal monitoring and support-mode shortcuts.
+                No onboarding milestones are available for this business yet.
               </div>
             )}
 
@@ -598,10 +700,12 @@ export default async function AdminBusinessDetailPage({
                   placeholder="+1 555 123 4567"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Sends a short admin verification message from the assigned business line to the destination above.
+                  {assignedNumber
+                    ? 'Sends a short admin verification message from the assigned business line to the destination above.'
+                    : 'Assign the business number first. Test SMS stays unavailable until the business line is ready.'}
                 </p>
               </div>
-              <Button className="mt-3" size="sm" type="submit" variant="outline">
+              <Button className="mt-3" disabled={!assignedNumber} size="sm" type="submit" variant="outline">
                 Send test SMS
               </Button>
             </form>
@@ -653,40 +757,78 @@ export default async function AdminBusinessDetailPage({
               <Button type="submit">Save business info</Button>
             </form>
 
-            <div className="rounded-xl border bg-background/80 p-4">
+            <div className="rounded-xl border bg-background/80 p-4" id="owner-setup">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium">{ownerState.name || business.ownerName || 'Owner not named yet'}</p>
-                <Badge variant={ownerState.connected ? 'success' : ownerState.pending ? 'outline' : 'destructive'}>
-                  {ownerState.connected ? 'Connected' : ownerState.pending ? 'Pending invite' : 'Needs connection'}
-                </Badge>
+                <Badge variant={ownerState.badgeVariant}>{ownerState.statusLabel}</Badge>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
                 {ownerState.email || business.notificationSettings?.ownerEmail || 'Owner email missing'}
               </p>
+              <p className="mt-2 text-sm text-muted-foreground">{ownerState.detail}</p>
               {ownerState.clerkUserId ? <p className="mt-2 text-xs text-muted-foreground">{ownerState.clerkUserId}</p> : null}
+              {ownerState.matchedUserId && !ownerState.connected ? (
+                <p className="mt-2 text-xs text-muted-foreground">Matching Clerk user: {ownerState.matchedUserId}</p>
+              ) : null}
               {ownerState.invitedAt ? <p className="mt-2 text-xs text-muted-foreground">Invite sent {formatDateTime(ownerState.invitedAt)}</p> : null}
             </div>
 
-            <form action={connectBusinessOwnerAction} className="grid gap-4 md:grid-cols-2 rounded-xl border bg-background/80 p-4">
-              <input type="hidden" name="businessId" value={business.id} />
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="connectOwnerEmail">Owner email</Label>
-                <Input id="connectOwnerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="connectOwnerName">Owner name</Label>
-                <Input id="connectOwnerName" name="ownerName" defaultValue={business.ownerName || ''} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ownerClerkId">Existing Clerk user ID</Label>
-                <Input id="ownerClerkId" name="ownerClerkId" defaultValue={ownerState.connected ? ownerState.clerkUserId || '' : ''} />
-              </div>
-              <div className="md:col-span-2">
-                <Button type="submit" variant="outline">
-                  Connect or invite owner
+            <div className="grid gap-4 md:grid-cols-2">
+              <form action={inviteBusinessOwnerAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+                <input type="hidden" name="businessId" value={business.id} />
+                <div className="space-y-1">
+                  <p className="font-medium">Invite owner by email</p>
+                  <p className="text-xs text-muted-foreground">Use this when the owner still needs a CallbackCloser account.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inviteOwnerEmail">Owner email</Label>
+                  <Input id="inviteOwnerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inviteOwnerName">Owner name</Label>
+                  <Input id="inviteOwnerName" name="ownerName" defaultValue={business.ownerName || ''} />
+                </div>
+                <Button
+                  disabled={ownerState.connected || Boolean(ownerState.matchedUserId)}
+                  type="submit"
+                  variant="outline"
+                >
+                  {ownerState.connected
+                    ? 'Owner already connected'
+                    : ownerState.matchedUserId
+                      ? 'Use Connect existing owner'
+                      : ownerState.status === 'invitation_pending'
+                        ? 'Resend invite'
+                        : 'Invite owner by email'}
                 </Button>
-              </div>
-            </form>
+              </form>
+
+              <form action={connectExistingBusinessOwnerAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+                <input type="hidden" name="businessId" value={business.id} />
+                <div className="space-y-1">
+                  <p className="font-medium">Connect existing owner</p>
+                  <p className="text-xs text-muted-foreground">Use this when the owner already has a CallbackCloser account, or after they accept the invite and finish sign-up.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="connectOwnerEmail">Owner email</Label>
+                  <Input id="connectOwnerEmail" name="ownerEmail" type="email" defaultValue={business.notificationSettings?.ownerEmail || ''} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="connectOwnerName">Owner name</Label>
+                  <Input id="connectOwnerName" name="ownerName" defaultValue={business.ownerName || ''} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ownerClerkId">Existing Clerk user ID (optional)</Label>
+                  <Input
+                    id="ownerClerkId"
+                    name="ownerClerkId"
+                    defaultValue={ownerState.connected ? ownerState.clerkUserId || '' : ownerState.matchedUserId || ''}
+                    placeholder="user_..."
+                  />
+                </div>
+                <Button type="submit">Connect existing owner</Button>
+              </form>
+            </div>
           </CardContent>
         </Card>
 
@@ -722,7 +864,7 @@ export default async function AdminBusinessDetailPage({
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="submit">{assignedNumber ? 'Continue setup' : 'Provision business'}</Button>
-                  <WebhookResyncButton businessId={business.id} label="Re-sync all webhooks" target="ALL" />
+                  {assignedNumber ? <WebhookResyncButton businessId={business.id} label="Re-sync all webhooks" target="ALL" /> : null}
                 </div>
               </form>
             </div>
@@ -805,7 +947,12 @@ export default async function AdminBusinessDetailPage({
               {assignedNumber ? <WebhookResyncButton businessId={business.id} label="Re-sync voice" target="VOICE" /> : null}
               {assignedNumber ? <WebhookResyncButton businessId={business.id} label="Re-sync SMS" target="SMS" /> : null}
               {managedSummary.messagingReady && business.provisioningStatus !== 'LIVE' ? (
-                <StatusButton businessId={business.id} label="Mark live" status="LIVE" variant="secondary" />
+                <StatusButton
+                  businessId={business.id}
+                  label={onboardingConfidence.canSafelyMarkLive ? 'Mark live' : 'Mark live with warnings'}
+                  status="LIVE"
+                  variant={onboardingConfidence.canSafelyMarkLive ? 'secondary' : 'outline'}
+                />
               ) : null}
             </div>
           </CardContent>
@@ -978,7 +1125,12 @@ export default async function AdminBusinessDetailPage({
               <div className="flex flex-wrap gap-2">
                 <Button type="submit">Save automation settings</Button>
                 {business.provisioningStatus !== 'LIVE' ? (
-                  <StatusButton businessId={business.id} label="Mark live" status="LIVE" variant="secondary" />
+                  <StatusButton
+                    businessId={business.id}
+                    label={onboardingConfidence.canSafelyMarkLive ? 'Mark live' : 'Mark live with warnings'}
+                    status="LIVE"
+                    variant={onboardingConfidence.canSafelyMarkLive ? 'secondary' : 'outline'}
+                  />
                 ) : (
                   <StatusButton businessId={business.id} label="Back to onboarding" status="ONBOARDING" variant="outline" />
                 )}
@@ -1023,8 +1175,8 @@ export default async function AdminBusinessDetailPage({
 
       <Card className="bg-card/90" id="recent-events">
         <CardHeader>
-          <CardTitle>Recent events / troubleshooting</CardTitle>
-          <CardDescription>Short operator summaries first, then the supporting event history.</CardDescription>
+          <CardTitle>Recent activity</CardTitle>
+          <CardDescription>Business-scoped operator timeline with plain-English summaries first and details on demand.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
@@ -1032,14 +1184,18 @@ export default async function AdminBusinessDetailPage({
               <p className="font-medium">Latest provisioning attempt</p>
               <p className="mt-2">{latestProvisioningEvent?.summary || 'No provisioning run recorded'}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                {latestProvisioningEvent ? latestProvisioningEvent.detail : 'Run provisioning from the top of this page when setup should continue.'}
+                {latestProvisioningEvent
+                  ? getOperatorEventDetails(latestProvisioningEvent.detailsJson)[0]?.value || 'Open the timeline below for full provisioning detail.'
+                  : 'Run provisioning from the top of this page when setup should continue.'}
               </p>
             </div>
             <div className="rounded-xl border bg-background/80 p-4">
               <p className="font-medium">Latest webhook issue</p>
               <p className="mt-2">{latestWebhookEvent?.summary || 'No webhook issue recorded'}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                {latestWebhookEvent?.detail || 'Webhook sync looks healthy.'}
+                {latestWebhookEvent
+                  ? getOperatorEventDetails(latestWebhookEvent.detailsJson)[0]?.value || 'Webhook sync looks healthy.'
+                  : 'Webhook sync looks healthy.'}
               </p>
             </div>
             <div className="rounded-xl border bg-background/80 p-4">
@@ -1062,29 +1218,74 @@ export default async function AdminBusinessDetailPage({
             </div>
           </div>
 
-          {recentEvents.length === 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {businessTimelineFilterOptions.map((option) => {
+              const href = option.key === 'all' ? `/admin/${business.id}#recent-events` : `/admin/${business.id}?activity=${option.key}#recent-events`;
+              return (
+                <Link
+                  key={option.key}
+                  className={cn(
+                    buttonVariants({ variant: option.key === activityFilter ? 'default' : 'outline', size: 'sm' }),
+                    option.key === activityFilter && 'pointer-events-none'
+                  )}
+                  href={href}
+                >
+                  {option.label} ({timelineFilterCounts.get(option.key) ?? 0})
+                </Link>
+              );
+            })}
+          </div>
+
+          {visibleTimelineEvents.length === 0 ? (
             <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">No recent operator events are recorded for this business yet.</div>
           ) : (
             <div className="grid gap-3">
-              {recentEvents.map((event) => (
+              {visibleTimelineEvents.map((event) => {
+                const details = getOperatorEventDetails(event.detailsJson);
+                const relatedHref = buildOperatorEventRelatedHref(business.id, event.relatedEntityType, event.relatedEntityId);
+                return (
                 <details key={event.id} className="rounded-xl border bg-background/80 p-4 text-sm">
                   <summary className="cursor-pointer list-none">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={event.severity === 'error' ? 'destructive' : event.severity === 'warning' ? 'outline' : 'secondary'}>
-                            {event.label}
+                          <Badge variant={getOperatorEventBadgeVariant(event.status)}>
+                            {operatorEventStatusLabels[event.status]}
                           </Badge>
+                          <Badge variant="outline">{operatorEventCategoryLabels[event.category]}</Badge>
                           <span className="font-medium">{event.summary}</span>
                         </div>
-                        <p className="mt-2 text-xs text-muted-foreground">{formatDateTime(event.at)}</p>
+                        <p className="mt-2 text-xs text-muted-foreground">{formatDateTime(event.createdAt)}</p>
                       </div>
                       <span className="text-xs text-muted-foreground">Show detail</span>
                     </div>
                   </summary>
-                  <p className="mt-3 text-muted-foreground">{event.detail}</p>
+                  <div className="mt-3 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{event.id}</code>
+                      <CopyValueButton value={event.id} label="Copy event ID" />
+                      {relatedHref ? (
+                        <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={relatedHref}>
+                          Open related view
+                        </Link>
+                      ) : null}
+                    </div>
+                    {details.length > 0 ? (
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {details.map((detail) => (
+                          <div key={detail.key} className="rounded-lg border bg-background/70 p-3">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{detail.label}</p>
+                            <p className="mt-1 text-muted-foreground">{detail.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No extra detail recorded.</p>
+                    )}
+                  </div>
                 </details>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

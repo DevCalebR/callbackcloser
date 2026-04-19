@@ -55,6 +55,7 @@ model Business {
   leads                       Lead[]
   messages                    Message[]
   ownerNotifications          OwnerNotification[]
+  operatorEvents              BusinessOperatorEvent[]
   notificationSettings        BusinessNotificationSettings?
   simulatorRuns               SimulatorRun[]
   smsConsents                 SmsConsent[]
@@ -190,6 +191,24 @@ model OwnerNotification {
   @@index([leadId, status])
 }
 
+model BusinessOperatorEvent {
+  id                String                @id @default(cuid())
+  businessId        String
+  type              String
+  category          OperatorEventCategory
+  status            OperatorEventStatus
+  summary           String
+  detailsJson       Json?
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdAt         DateTime              @default(now())
+  business          Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([businessId, category, createdAt])
+  @@index([businessId, status, createdAt])
+}
+
 model BusinessNotificationSettings {
   id          String   @id @default(cuid())
   businessId  String   @unique
@@ -297,6 +316,25 @@ enum OwnerNotificationStatus {
   SENT
   FAILED
   SKIPPED
+}
+
+enum OperatorEventCategory {
+  PROVISIONING
+  MESSAGING
+  VOICE
+  WEBHOOKS
+  OWNER_ALERTS
+  ADMIN_ACTIONS
+  ONBOARDING
+  ERRORS
+}
+
+enum OperatorEventStatus {
+  SUCCESS
+  PENDING
+  WARNING
+  FAILED
+  INFO
 }
 
 enum SimulatorRunStatus {
