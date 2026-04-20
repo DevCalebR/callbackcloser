@@ -1,12 +1,13 @@
-import { ManagedTwilioStatus, Prisma, MessageParticipant } from '@prisma/client';
+import { ManagedTwilioStatus, MessageParticipant, Prisma } from '@prisma/client';
 
 import { db } from '@/lib/db';
 import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
+import { type OutboundMessageContext } from '@/lib/outbound-message-events';
 import { formatPhoneDetail, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
-import { getTwilioBusinessClient } from '@/lib/twilio';
+import { getTwilioBusinessClient, getTwilioMessageStatusCallbackUrl } from '@/lib/twilio';
 
 export async function persistInboundMessage(params: {
   businessId: string;
@@ -77,6 +78,7 @@ export async function sendAndPersistOutboundMessage(params: {
   toPhone: string;
   body: string;
   participant?: MessageParticipant;
+  context?: OutboundMessageContext;
   twilioSubaccountSid?: string | null;
   messagingServiceSid?: string | null;
   managedTwilioStatus?: ManagedTwilioStatus | null;
@@ -86,6 +88,8 @@ export async function sendAndPersistOutboundMessage(params: {
   const from = normalizePhoneNumber(params.fromPhone) || params.fromPhone;
   const to = normalizePhoneNumber(params.toPhone) || params.toPhone;
   const participant = params.participant ?? 'LEAD';
+  const context =
+    params.context ?? (!params.leadId && participant === 'OWNER' && params.body.startsWith('CallbackCloser admin test:') ? 'admin_test' : participant === 'OWNER' ? 'owner_alert' : 'lead_recovery');
   const recipientLabel = participant === 'OWNER' ? 'owner SMS' : 'lead SMS';
 
   if (await isSmsRecipientOptedOut({ businessId: params.businessId, phone: to })) {
@@ -193,11 +197,13 @@ export async function sendAndPersistOutboundMessage(params: {
           messagingServiceSid: params.messagingServiceSid,
           to,
           body: params.body,
+          statusCallback: getTwilioMessageStatusCallbackUrl(),
         }
       : {
           from,
           to,
           body: params.body,
+          statusCallback: getTwilioMessageStatusCallbackUrl(),
         }
   );
 
@@ -210,6 +216,10 @@ export async function sendAndPersistOutboundMessage(params: {
     participant,
     twilioSid: sent.sid,
     status: sent.status,
+    rawPayload: {
+      source: 'twilio_api',
+      context,
+    },
     twilioCreatedAt: sent.dateCreated ?? undefined,
   });
   await recordBusinessOperatorEvent({

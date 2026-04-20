@@ -233,6 +233,7 @@ export async function sendOwnerLeadSms(leadId: string) {
       toPhone: destination,
       body,
       participant: 'OWNER',
+      context: 'owner_alert',
       twilioSubaccountSid: lead.business.twilioSubaccountSid,
       messagingServiceSid: lead.business.twilioMessagingServiceSid,
       managedTwilioStatus: lead.business.managedTwilioStatus,
