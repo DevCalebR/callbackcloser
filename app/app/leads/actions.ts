@@ -35,6 +35,7 @@ export async function updateLeadStatusAction(formData: FormData) {
   }
 
   revalidatePath('/app/leads');
+  revalidatePath('/app');
   revalidatePath('/app/conversations');
   revalidatePath(`/app/leads/${lead.id}`);
   redirect(`${redirectTo}${redirectTo.includes('?') ? '&' : '?'}saved=1`);

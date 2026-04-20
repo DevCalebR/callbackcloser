@@ -2,11 +2,13 @@ import Link from 'next/link';
 import { LeadReadiness, LeadStatus } from '@prisma/client';
 
 import { CustomerLeadRow } from '@/components/customer-lead-row';
+import { LeadConversionSummaryCard } from '@/components/lead-conversion-summary-card';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
 import { listAllDashboardLeadsForBusiness } from '@/lib/business-access';
+import { getLeadOutcomeSummary } from '@/lib/lead-outcomes';
 import { getLeadLastActivityAt, isLeadOpenStatus, leadStatusLabels } from '@/lib/lead-presenters';
 import { getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { cn } from '@/lib/utils';
@@ -110,6 +112,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
   const view = statusFilter ? 'all' : parseInboxView(typeof searchParams?.view === 'string' ? searchParams.view : undefined);
   const allLeads = demoMode ? getPortfolioDemoLeads(null) : await listAllDashboardLeadsForBusiness(business.id);
   const hasLeads = allLeads.length > 0;
+  const outcomeSummary = getLeadOutcomeSummary(allLeads);
 
   const filteredLeads = statusFilter
     ? allLeads.filter((lead) => lead.status === statusFilter)
@@ -138,7 +141,7 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
     },
     {
       key: 'booked' as const,
-      label: 'Booked',
+      label: 'Closed',
       href: buildLeadsHref('booked'),
       count: allLeads.filter((lead) => lead.status === LeadStatus.BOOKED).length,
       active: !statusFilter && view === 'booked',
@@ -155,8 +158,8 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
   const listDescription = statusFilter
     ? `Showing ${leadStatusLabels[statusFilter].toLowerCase()} leads. Open a lead to act on it.`
     : view === 'attention'
-      ? 'Showing leads that still need action. Open one to call back or update the outcome.'
-      : 'Open any lead to review the conversation and update the outcome from the detail page.';
+      ? 'Showing leads that still need action. Open one to call back or mark the final outcome.'
+      : 'Open any lead to review the conversation and mark it closed or lost from the detail page.';
 
   return (
     <div className="space-y-6">
@@ -172,6 +175,11 @@ export default async function LeadsPage({ searchParams }: { searchParams?: Searc
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead updated.</div> : null}
+
+      <LeadConversionSummaryCard
+        description="Keep the win/loss numbers obvious so you can see whether missed calls are turning into booked jobs."
+        summary={outcomeSummary}
+      />
 
       {!hasLeads ? (
         <Card className="border-primary/20 bg-primary/5">

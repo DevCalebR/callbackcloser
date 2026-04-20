@@ -1,5 +1,7 @@
 import { LeadReadiness, LeadStatus, SmsConversationState, type Lead } from '@prisma/client';
 
+import { isLeadClosedWonStatus, isLeadLostStatus } from '@/lib/lead-outcomes';
+
 export const leadStatusOrder: LeadStatus[] = [
   LeadStatus.NEW,
   LeadStatus.QUALIFIED,
@@ -14,7 +16,7 @@ export const leadStatusLabels: Record<LeadStatus, string> = {
   QUALIFIED: 'Qualified',
   NOTIFIED: 'Notified',
   CONTACTED: 'Contacted',
-  BOOKED: 'Booked',
+  BOOKED: 'Closed (Won)',
   LOST: 'Lost',
 };
 
@@ -81,20 +83,20 @@ export function formatRelativeTime(value: Date | null | undefined, now: Date = n
 }
 
 export function getLeadStatusBadgeVariant(status: LeadStatus) {
-  if (status === LeadStatus.BOOKED) return 'success';
-  if (status === LeadStatus.LOST) return 'destructive';
+  if (isLeadClosedWonStatus(status)) return 'success';
+  if (isLeadLostStatus(status)) return 'destructive';
   if (status === LeadStatus.NEW) return 'outline';
   if (status === LeadStatus.NOTIFIED) return 'success';
   return 'secondary';
 }
 
 export function isLeadOpenStatus(status: LeadStatus) {
-  return status !== LeadStatus.BOOKED && status !== LeadStatus.LOST;
+  return !isLeadClosedWonStatus(status) && !isLeadLostStatus(status);
 }
 
 export function getLeadNextStepLabel(status: LeadStatus) {
-  if (status === LeadStatus.BOOKED) return 'Booked';
-  if (status === LeadStatus.LOST) return 'Closed lost';
+  if (isLeadClosedWonStatus(status)) return 'Closed won';
+  if (isLeadLostStatus(status)) return 'Closed lost';
   if (status === LeadStatus.CONTACTED) return 'Follow up again';
   return 'Needs follow-up';
 }
@@ -108,8 +110,8 @@ export function getLeadLastActivityAt(lead: LeadActivityInput) {
 type LeadCallbackStateInput = Pick<Lead, 'status' | 'billingRequired' | 'smsState' | 'ownerNotifiedAt' | 'notifiedAt'>;
 
 export function getLeadCallbackState(lead: LeadCallbackStateInput) {
-  if (lead.status === LeadStatus.BOOKED) return 'Booked';
-  if (lead.status === LeadStatus.LOST) return 'Lost';
+  if (isLeadClosedWonStatus(lead.status)) return 'Closed won';
+  if (isLeadLostStatus(lead.status)) return 'Lost';
   if (lead.status === LeadStatus.CONTACTED) return 'Contacted';
   if (lead.billingRequired) return 'Billing paused';
   if (lead.status === LeadStatus.NOTIFIED || lead.notifiedAt || lead.ownerNotifiedAt || lead.smsState === SmsConversationState.COMPLETED) {
