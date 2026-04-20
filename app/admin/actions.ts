@@ -12,8 +12,9 @@ import {
   syncBusinessTwilioWebhooks,
   updateBusinessProvisioningStatus,
 } from '@/lib/admin-provisioning';
+import { deleteDeletableTestBusiness } from '@/lib/admin-business-lifecycle';
 import { requireAdmin } from '@/lib/admin';
-import { canDeleteTestBusiness } from '@/lib/admin-dashboard';
+import { canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
 import { logAuditEvent } from '@/lib/audit-log';
 import { db } from '@/lib/db';
 import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
@@ -40,6 +41,50 @@ const DEFAULT_DEMO_FORWARDING_NUMBER = '+15005550001';
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function getAdminReturnPath(returnTo: string | null | undefined) {
+  const trimmed = returnTo?.trim() || '';
+  if (!trimmed.startsWith('/admin')) return null;
+  return trimmed;
+}
+
+function appendParamsToAdminPath(
+  path: string | null | undefined,
+  params: Record<string, string | number | boolean | null | undefined>,
+  fallback: string
+) {
+  const base = getAdminReturnPath(path);
+  if (!base) return fallback;
+
+  const url = new URL(base, 'http://callbackcloser.local');
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === '') continue;
+    url.searchParams.set(key, String(value));
+  }
+
+  const query = url.searchParams.toString();
+  return query ? `${url.pathname}?${query}` : url.pathname;
+}
+
+function clearBusinessSelectionFromReturnPath(
+  path: string | null | undefined,
+  params: Record<string, string | number | boolean | null | undefined>,
+  fallback: string
+) {
+  const base = getAdminReturnPath(path);
+  if (!base) return fallback;
+
+  const url = new URL(base, 'http://callbackcloser.local');
+  url.searchParams.delete('businessId');
+  url.searchParams.delete('q');
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === '') continue;
+    url.searchParams.set(key, String(value));
+  }
+
+  const query = url.searchParams.toString();
+  return query ? `${url.pathname}?${query}` : url.pathname;
 }
 
 function buildAdminBusinessRedirectPath(
@@ -183,7 +228,7 @@ export async function createDemoBusinessAction(formData: FormData) {
   });
 
   await revalidateAdminPaths(business.id);
-  redirect(`/admin?createdDemo=1&businessId=${encodeURIComponent(business.id)}`);
+  redirect(`/admin?createdDemo=1&createdBusinessId=${encodeURIComponent(business.id)}`);
 }
 
 export async function createAdminBusinessAction(formData: FormData) {
@@ -823,11 +868,17 @@ export async function archiveBusinessAction(formData: FormData) {
 
   const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
   if (!business) {
-    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+    redirect(appendParamsToAdminPath(parsed.data.returnTo, { error: 'Business not found.' }, `/admin?error=${encodeURIComponent('Business not found.')}`));
   }
 
   if (parsed.data.confirmationName !== business.name) {
-    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to archive it.' }));
+    redirect(
+      appendParamsToAdminPath(
+        parsed.data.returnTo,
+        { error: 'Type the exact business name to archive it.' },
+        buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to archive it.' })
+      )
+    );
   }
 
   await db.business.update({
@@ -866,7 +917,9 @@ export async function archiveBusinessAction(formData: FormData) {
   });
 
   await revalidateAdminPaths(business.id);
-  redirect(buildAdminBusinessRedirectPath(business.id, { archived: 1 }));
+  redirect(
+    appendParamsToAdminPath(parsed.data.returnTo, { archived: 1 }, buildAdminBusinessRedirectPath(business.id, { archived: 1 }))
+  );
 }
 
 export async function restoreBusinessAction(formData: FormData) {
@@ -879,11 +932,17 @@ export async function restoreBusinessAction(formData: FormData) {
 
   const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
   if (!business) {
-    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+    redirect(appendParamsToAdminPath(parsed.data.returnTo, { error: 'Business not found.' }, `/admin?error=${encodeURIComponent('Business not found.')}`));
   }
 
   if (parsed.data.confirmationName !== business.name) {
-    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to restore it.' }));
+    redirect(
+      appendParamsToAdminPath(
+        parsed.data.returnTo,
+        { error: 'Type the exact business name to restore it.' },
+        buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to restore it.' })
+      )
+    );
   }
 
   await db.business.update({
@@ -920,7 +979,9 @@ export async function restoreBusinessAction(formData: FormData) {
   });
 
   await revalidateAdminPaths(business.id);
-  redirect(buildAdminBusinessRedirectPath(business.id, { restored: 1 }));
+  redirect(
+    appendParamsToAdminPath(parsed.data.returnTo, { restored: 1 }, buildAdminBusinessRedirectPath(business.id, { restored: 1 }))
+  );
 }
 
 export async function deleteTestBusinessAction(formData: FormData) {
@@ -933,22 +994,33 @@ export async function deleteTestBusinessAction(formData: FormData) {
 
   const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
   if (!business) {
-    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+    redirect(appendParamsToAdminPath(parsed.data.returnTo, { error: 'Business not found.' }, `/admin?error=${encodeURIComponent('Business not found.')}`));
   }
 
   if (parsed.data.confirmationName !== business.name) {
-    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to delete it.' }));
-  }
-
-  if (!canDeleteTestBusiness(business)) {
     redirect(
-      buildAdminBusinessRedirectPath(business.id, {
-        error: 'Only archived test or demo businesses can be deleted from admin.',
-      })
+      appendParamsToAdminPath(
+        parsed.data.returnTo,
+        { error: 'Type the exact business name to delete it.' },
+        buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to delete it.' })
+      )
     );
   }
 
-  await db.business.delete({ where: { id: business.id } });
+  const deleteBlockedReason = getDeleteTestBusinessBlockedReason(business);
+  if (deleteBlockedReason || !canDeleteTestBusiness(business)) {
+    redirect(
+      appendParamsToAdminPath(
+        parsed.data.returnTo,
+        { error: deleteBlockedReason || 'Only archived demo/test businesses can be deleted.' },
+        buildAdminBusinessRedirectPath(business.id, {
+          error: deleteBlockedReason || 'Only archived demo/test businesses can be deleted.',
+        })
+      )
+    );
+  }
+
+  await deleteDeletableTestBusiness(business.id);
 
   logAuditEvent({
     event: 'admin_test_business_deleted',
@@ -965,5 +1037,5 @@ export async function deleteTestBusinessAction(formData: FormData) {
   });
 
   revalidatePath('/admin');
-  redirect('/admin?deleted=1');
+  redirect(clearBusinessSelectionFromReturnPath(parsed.data.returnTo, { deleted: 1 }, '/admin?deleted=1'));
 }

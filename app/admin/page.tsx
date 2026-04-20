@@ -1,19 +1,26 @@
 import Link from 'next/link';
 
 import {
+  archiveBusinessAction,
   createAdminBusinessAction,
   createDemoBusinessAction,
+  deleteTestBusinessAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
+  restoreBusinessAction,
   sendBusinessTestSmsAction,
 } from '@/app/admin/actions';
 import {
   adminBoardFilterOptions,
+  buildAdminBusinessPickerLabel,
   buildAdminNextStep,
+  canDeleteTestBusiness,
+  getDeleteTestBusinessBlockedReason,
   isBusinessArchived,
   matchesAdminBoardFilter,
   type AdminBoardFilter,
 } from '@/lib/admin-dashboard';
+import { AdminBusinessPicker } from '@/components/admin-business-picker';
 import { requireAdmin } from '@/lib/admin';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -72,17 +79,43 @@ function compactCopy(value: string, maxLength = 110) {
   return `${trimmed.slice(0, maxLength - 1)}…`;
 }
 
+function buildAdminBoardReturnPath(params: {
+  view: AdminBoardFilter;
+  selectedBusinessId?: string | null;
+  query?: string | null;
+}) {
+  const search = new URLSearchParams();
+
+  if (params.view && params.view !== 'all') {
+    search.set('view', params.view);
+  }
+
+  if (params.query) {
+    search.set('q', params.query);
+  }
+
+  if (params.selectedBusinessId) {
+    search.set('businessId', params.selectedBusinessId);
+  }
+
+  const query = search.toString();
+  return query ? `/admin?${query}` : '/admin';
+}
+
 export default async function AdminPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const admin = await requireAdmin();
   const createdDemo = getQueryValue(searchParams, 'createdDemo') === '1';
-  const createdBusinessId = getQueryValue(searchParams, 'businessId');
+  const createdBusinessId = getQueryValue(searchParams, 'createdBusinessId');
+  const selectedBusinessId = getQueryValue(searchParams, 'businessId');
+  const archived = getQueryValue(searchParams, 'archived') === '1';
   const deleted = getQueryValue(searchParams, 'deleted') === '1';
   const error = getQueryValue(searchParams, 'error');
   const query = getQueryValue(searchParams, 'q')?.trim() || '';
+  const restored = getQueryValue(searchParams, 'restored') === '1';
   const view = (getQueryValue(searchParams, 'view') as AdminBoardFilter | null) || 'all';
   const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
-  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, notificationFailures, operatorSignals] = await Promise.all([
+  const [businesses, businessPickerOptions, leadCounts, leadActivity, callActivity, messageActivity, notificationFailures, operatorSignals] = await Promise.all([
     query
       ? searchBusinessesForAdmin(query)
       : db.business.findMany({
@@ -91,6 +124,22 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
             notificationSettings: true,
           },
         }),
+    db.business.findMany({
+      orderBy: [{ archivedAt: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        isTestBusiness: true,
+        archivedAt: true,
+        twilioPrimaryPhoneNumber: true,
+        twilioPhoneNumber: true,
+        notificationSettings: {
+          select: {
+            ownerEmail: true,
+          },
+        },
+      },
+    }),
     db.lead.groupBy({
       by: ['businessId'],
       _count: { _all: true },
@@ -239,8 +288,26 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   );
 
   const visibleRows = businessRows.filter((item) =>
-    matchesAdminBoardFilter(item.business, item.business.notificationSettings, item.ownerConnected, view)
+    selectedBusinessId
+      ? item.business.id === selectedBusinessId
+      : matchesAdminBoardFilter(item.business, item.business.notificationSettings, item.ownerConnected, view)
   );
+  const pickerOptions = businessPickerOptions.map((business) => ({
+    id: business.id,
+    label: buildAdminBusinessPickerLabel({
+      business,
+      notificationSettings: business.notificationSettings,
+    }),
+  }));
+  const selectedBusinessRow = selectedBusinessId ? businessRows.find((item) => item.business.id === selectedBusinessId) || null : null;
+  const selectedBusinessDeleteBlockedReason = selectedBusinessRow
+    ? getDeleteTestBusinessBlockedReason(selectedBusinessRow.business)
+    : null;
+  const boardReturnTo = buildAdminBoardReturnPath({
+    view,
+    selectedBusinessId,
+    query: selectedBusinessId ? null : query,
+  });
 
   const summaryStats = [
     { label: 'Needs attention', value: filterCounts.get('needs_attention') ?? 0 },
@@ -277,7 +344,9 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
-      {deleted ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Archived test business deleted.</div> : null}
+      {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived. Permanent delete stays locked until the workspace is clearly demo/test.</div> : null}
+      {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored to active triage.</div> : null}
+      {deleted ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Demo/test business deleted permanently.</div> : null}
       {createdDemo && createdBusinessId ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           Demo business ready. Use <code className="rounded bg-background px-1 py-0.5">{createdBusinessId}</code> as `SIMULATOR_BUSINESS_ID`, or open the
@@ -402,29 +471,43 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           <CardDescription>Compact rows with status, readiness, one clear attention signal, and the fastest next actions.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-            <Input
-              aria-label="Search businesses"
-              defaultValue={query}
-              name="q"
-              placeholder="Search business, owner email, business ID, Twilio number, or Twilio SID"
-            />
-            <input type="hidden" name="view" value={view} />
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-            {query ? (
-              <Link className={buttonVariants({ variant: 'ghost' })} href={`/admin?view=${encodeURIComponent(view)}`}>
-                Clear
-              </Link>
-            ) : null}
-          </form>
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+            <div className="rounded-xl border bg-background/80 p-4">
+              <AdminBusinessPicker options={pickerOptions} query={query || null} selectedBusinessId={selectedBusinessId} view={view} />
+            </div>
+            <form className="space-y-3 rounded-xl border border-dashed bg-background/80 p-4">
+              <div className="space-y-2">
+                <Label htmlFor="businessSearch">Search fallback</Label>
+                <Input
+                  aria-label="Search businesses"
+                  defaultValue={query}
+                  id="businessSearch"
+                  name="q"
+                  placeholder="Search business, owner email, business ID, Twilio number, or Twilio SID"
+                />
+              </div>
+              <input type="hidden" name="view" value={view} />
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" variant="outline">
+                  Search
+                </Button>
+                {query ? (
+                  <Link className={buttonVariants({ variant: 'ghost' })} href={buildAdminBoardReturnPath({ view })}>
+                    Clear search
+                  </Link>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">Use search only when you need an exact email, ID, Twilio number, or SID lookup.</p>
+            </form>
+          </div>
 
           <div className="flex flex-wrap gap-2">
             {adminBoardFilterOptions.map((option) => {
-              const href = query
-                ? `/admin?view=${encodeURIComponent(option.key)}&q=${encodeURIComponent(query)}`
-                : `/admin?view=${encodeURIComponent(option.key)}`;
+              const href = buildAdminBoardReturnPath({
+                view: option.key,
+                query: selectedBusinessId ? null : query,
+                selectedBusinessId,
+              });
               return (
                 <Link
                   key={option.key}
@@ -440,9 +523,117 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
             })}
           </div>
 
+          {selectedBusinessRow ? (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="gap-2">
+                <CardTitle className="text-xl">Selected business actions</CardTitle>
+                <CardDescription>
+                  Focused from the business picker. Archive stays the normal lifecycle action. Permanent delete only unlocks for archived demo/test
+                  workspaces.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className="space-y-4 rounded-xl border bg-background/80 p-4 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-base font-semibold">{selectedBusinessRow.business.name}</p>
+                    <Badge variant={selectedBusinessRow.overallStatus.variant}>{selectedBusinessRow.overallStatus.label}</Badge>
+                    {selectedBusinessRow.business.isTestBusiness ? <Badge variant="outline">Test</Badge> : null}
+                    {isBusinessArchived(selectedBusinessRow.business) ? <Badge variant="outline">Archived</Badge> : null}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="font-medium">Owner</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {selectedBusinessRow.business.notificationSettings?.ownerEmail || selectedBusinessRow.business.ownerName || 'Owner details missing'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Assigned number</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {selectedBusinessRow.assignedNumber ? formatPhoneForDisplay(selectedBusinessRow.assignedNumber) : 'Not assigned yet'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Latest attention signal</p>
+                      <p className="mt-1 text-muted-foreground">{selectedBusinessRow.attentionSignal}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Current next step</p>
+                      <p className="mt-1 text-muted-foreground">{selectedBusinessRow.nextStep.actionLabel}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}`}>
+                      Open business
+                    </Link>
+                    <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}/workspace`}>
+                      Open workspace
+                    </Link>
+                    <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}#advanced`}>
+                      Open full advanced controls
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {isBusinessArchived(selectedBusinessRow.business) ? (
+                    <form action={restoreBusinessAction} className="rounded-xl border bg-background/80 p-4 text-sm">
+                      <input type="hidden" name="businessId" value={selectedBusinessRow.business.id} />
+                      <input type="hidden" name="returnTo" value={boardReturnTo} />
+                      <div className="space-y-2">
+                        <Label htmlFor="restoreBusinessName">Type business name to restore</Label>
+                        <Input id="restoreBusinessName" name="confirmationName" placeholder={selectedBusinessRow.business.name} />
+                      </div>
+                      <Button className="mt-3" type="submit">
+                        Restore business
+                      </Button>
+                    </form>
+                  ) : (
+                    <form action={archiveBusinessAction} className="rounded-xl border bg-background/80 p-4 text-sm">
+                      <input type="hidden" name="businessId" value={selectedBusinessRow.business.id} />
+                      <input type="hidden" name="returnTo" value={boardReturnTo} />
+                      <div className="space-y-2">
+                        <Label htmlFor="archiveBusinessName">Type business name to archive</Label>
+                        <Input id="archiveBusinessName" name="confirmationName" placeholder={selectedBusinessRow.business.name} />
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">Archive is the normal lifecycle control for real customer businesses and the first safety step for demo/test cleanup.</p>
+                      <Button className="mt-3" type="submit" variant="outline">
+                        Archive business safely
+                      </Button>
+                    </form>
+                  )}
+
+                  {canDeleteTestBusiness(selectedBusinessRow.business) ? (
+                    <form action={deleteTestBusinessAction} className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                      <input type="hidden" name="businessId" value={selectedBusinessRow.business.id} />
+                      <input type="hidden" name="returnTo" value={boardReturnTo} />
+                      <div className="space-y-2">
+                        <Label htmlFor="deleteBusinessName">Type business name to permanently delete</Label>
+                        <Input id="deleteBusinessName" name="confirmationName" placeholder={selectedBusinessRow.business.name} />
+                      </div>
+                      <p className="mt-2 text-xs text-destructive">
+                        Permanent delete removes the business plus its leads, calls, messages, notification settings, owner notifications, operator
+                        events, simulator runs, and SMS consent records.
+                      </p>
+                      <Button className="mt-3" type="submit" variant="destructive">
+                        Delete demo/test business permanently
+                      </Button>
+                    </form>
+                  ) : (
+                    <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+                      {selectedBusinessDeleteBlockedReason || 'Delete stays unavailable for this business.'}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
           {visibleRows.length === 0 ? (
             <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-              No businesses matched this view. Try a different filter or search for the exact business ID, owner email, or Twilio number.
+              {selectedBusinessId
+                ? 'That business is no longer available on the board. Clear the selection and pick another workspace.'
+                : 'No businesses matched this view. Try a different filter or search for the exact business ID, owner email, or Twilio number.'}
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border">

@@ -160,6 +160,36 @@ export function canDeleteTestBusiness(
   return isBusinessArchived(business) && (business.isTestBusiness || business.ownerClerkId === DEMO_OWNER_CLERK_ID);
 }
 
+export function getDeleteTestBusinessBlockedReason(
+  business: Pick<DashboardBusiness, 'isTestBusiness' | 'ownerClerkId' | 'archivedAt'>
+) {
+  if (!business.isTestBusiness && business.ownerClerkId !== DEMO_OWNER_CLERK_ID) {
+    return 'Only demo/test businesses can be deleted. Archive this business instead.';
+  }
+
+  if (!isBusinessArchived(business)) {
+    return 'Archive this business instead. Permanent delete only unlocks after archive.';
+  }
+
+  return null;
+}
+
+export function buildAdminBusinessPickerLabel(params: {
+  business: Pick<
+    DashboardBusiness,
+    'id' | 'name' | 'isTestBusiness' | 'archivedAt' | 'twilioPrimaryPhoneNumber' | 'twilioPhoneNumber'
+  >;
+  notificationSettings: Pick<DashboardNotificationSettings, 'ownerEmail'> | null;
+}) {
+  const secondaryLabel =
+    params.notificationSettings?.ownerEmail?.trim() || getManagedTextingNumber(params.business) || `ID ${params.business.id.slice(-6)}`;
+  const stateLabels = [params.business.isTestBusiness ? 'test' : null, isBusinessArchived(params.business) ? 'archived' : null].filter(Boolean);
+
+  return stateLabels.length > 0
+    ? `${params.business.name} - ${secondaryLabel} (${stateLabels.join(', ')})`
+    : `${params.business.name} - ${secondaryLabel}`;
+}
+
 export function getBusinessLifecycleLabel(
   business: Pick<DashboardBusiness, 'archivedAt' | 'provisioningStatus'>
 ) {
