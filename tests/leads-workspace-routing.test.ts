@@ -14,14 +14,18 @@ test('lead inbox stays list-only while lead detail is the main action workspace'
   const conversationsPage = read('app/app/conversations/page.tsx');
 
   assert.match(appHomePage, /Who needs follow-up right now\?/);
+  assert.match(appHomePage, /LeadConversionSummaryCard/);
+  assert.match(appHomePage, /getLeadOutcomeSummary/);
   assert.match(appHomePage, /Leads needing attention first/);
   assert.match(appHomePage, /Recent leads/);
-  assert.match(appHomePage, /Missed calls today/);
   assert.match(appHomePage, /return `\/app\/leads\/\$\{leadId\}\?from=%2Fapp`/);
 
   assert.match(leadsPage, /Lead inbox/);
+  assert.match(leadsPage, /LeadConversionSummaryCard/);
+  assert.match(leadsPage, /getLeadOutcomeSummary/);
   assert.match(leadsPage, /This page is only for scanning/i);
   assert.match(leadsPage, /Needs follow-up/);
+  assert.match(leadsPage, /Closed/);
   assert.doesNotMatch(leadsPage, /selectedLeadId/);
   assert.doesNotMatch(leadsPage, /Lead detail panel/);
   assert.doesNotMatch(leadsPage, /Quick actions/);
@@ -30,8 +34,9 @@ test('lead inbox stays list-only while lead detail is the main action workspace'
   assert.match(leadDetailPage, /Lead details/);
   assert.match(leadDetailPage, /Call now/);
   assert.match(leadDetailPage, /Mark contacted/);
-  assert.match(leadDetailPage, /Mark booked/);
-  assert.match(leadDetailPage, /Mark lost/);
+  assert.match(leadDetailPage, /Mark as Closed \(Won\)/);
+  assert.match(leadDetailPage, /Mark as Lost/);
+  assert.match(leadDetailPage, /Did this lead turn into a real job\?/);
   assert.match(leadDetailPage, /Conversation history/);
   assert.match(leadDetailPage, /Qualification info/);
   assert.match(leadDetailPage, /Missed call details/);

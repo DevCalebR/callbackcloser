@@ -2,72 +2,20 @@ import Link from 'next/link';
 import { LeadReadiness, LeadStatus } from '@prisma/client';
 
 import { CustomerLeadRow } from '@/components/customer-lead-row';
+import { LeadConversionSummaryCard } from '@/components/lead-conversion-summary-card';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
 import { listAllDashboardLeadsForBusiness } from '@/lib/business-access';
 import { db } from '@/lib/db';
+import { getLeadOutcomeSummary } from '@/lib/lead-outcomes';
 import { getLeadLastActivityAt, isLeadOpenStatus } from '@/lib/lead-presenters';
 import { getPortfolioDemoBusiness, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getCustomerSystemStatus } from '@/lib/system-status';
 
 function buildLeadDetailHref(leadId: string) {
   return `/app/leads/${leadId}?from=%2Fapp`;
-}
-
-function parseTimeZoneOffsetMinutes(value: string) {
-  const match = value.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
-  if (!match) return 0;
-
-  const sign = match[1] === '+' ? 1 : -1;
-  const hours = Number(match[2]);
-  const minutes = Number(match[3] || '0');
-  return sign * (hours * 60 + minutes);
-}
-
-function getTimeZoneOffsetMinutes(date: Date, timeZone: string) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    timeZoneName: 'shortOffset',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).formatToParts(date);
-
-  const label = parts.find((part) => part.type === 'timeZoneName')?.value || 'GMT';
-  return parseTimeZoneOffsetMinutes(label);
-}
-
-function getTodayRangeForTimeZone(timeZone: string) {
-  try {
-    const now = new Date();
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(now);
-
-    const year = Number(parts.find((part) => part.type === 'year')?.value || now.getUTCFullYear());
-    const month = Number(parts.find((part) => part.type === 'month')?.value || now.getUTCMonth() + 1);
-    const day = Number(parts.find((part) => part.type === 'day')?.value || now.getUTCDate());
-
-    const startGuess = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
-    const endGuess = new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0));
-
-    return {
-      start: new Date(startGuess.getTime() - getTimeZoneOffsetMinutes(startGuess, timeZone) * 60_000),
-      end: new Date(endGuess.getTime() - getTimeZoneOffsetMinutes(endGuess, timeZone) * 60_000),
-    };
-  } catch {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-
-    return { start, end };
-  }
 }
 
 function getAttentionPriority(lead: {
@@ -102,30 +50,19 @@ function getAttentionPriority(lead: {
 export default async function AppHomePage() {
   const demoMode = isPortfolioDemoMode();
   const business = demoMode ? getPortfolioDemoBusiness() : await requireBusiness();
-  const { start, end } = getTodayRangeForTimeZone(business.timezone || 'America/New_York');
 
-  const [allLeads, notificationSettings, missedCallsToday] = demoMode
+  const [allLeads, notificationSettings] = demoMode
     ? [
         getPortfolioDemoLeads(null),
         null,
-        getPortfolioDemoLeads(null).filter((lead) => lead.createdAt >= start && lead.createdAt < end).length,
       ]
     : await Promise.all([
         listAllDashboardLeadsForBusiness(business.id),
         db.businessNotificationSettings.findUnique({ where: { businessId: business.id } }),
-        db.call.count({
-          where: {
-            businessId: business.id,
-            missed: true,
-            createdAt: {
-              gte: start,
-              lt: end,
-            },
-          },
-        }),
       ]);
 
   const successfulLeadCount = allLeads.filter((lead) => lead.ownerNotifiedAt || lead.notifiedAt).length;
+  const outcomeSummary = getLeadOutcomeSummary(allLeads);
   const systemStatus = getCustomerSystemStatus(business, successfulLeadCount);
   const attentionLeads = allLeads
     .filter((lead) => isLeadOpenStatus(lead.status))
@@ -154,29 +91,6 @@ export default async function AppHomePage() {
       (notificationSettings?.notifySms && notificationSettings.ownerPhone) ||
       (notificationSettings?.notifyEmail && notificationSettings.ownerEmail),
   );
-
-  const summaryCards = [
-    {
-      label: 'New leads',
-      value: allLeads.filter((lead) => lead.status === LeadStatus.NEW).length,
-      href: '/app/leads?status=new',
-    },
-    {
-      label: 'Needs follow-up',
-      value: allLeads.filter((lead) => isLeadOpenStatus(lead.status)).length,
-      href: '/app/leads?view=attention',
-    },
-    {
-      label: 'Booked',
-      value: allLeads.filter((lead) => lead.status === LeadStatus.BOOKED).length,
-      href: '/app/leads?status=booked',
-    },
-    {
-      label: 'Missed calls today',
-      value: missedCallsToday,
-      href: '/app/leads?view=attention',
-    },
-  ];
 
   const healthItems = [
     {
@@ -213,14 +127,10 @@ export default async function AppHomePage() {
         </Link>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {summaryCards.map((card) => (
-          <Link key={card.label} href={card.href} className="rounded-2xl border bg-card p-5 transition-colors hover:bg-muted/20">
-            <p className="text-sm text-muted-foreground">{card.label}</p>
-            <p className="mt-3 text-3xl font-semibold tracking-tight">{card.value}</p>
-          </Link>
-        ))}
-      </section>
+      <LeadConversionSummaryCard
+        description="Keep the win/loss numbers obvious without opening a separate analytics dashboard."
+        summary={outcomeSummary}
+      />
 
       <section className="grid gap-6 xl:grid-cols-[1.4fr_0.85fr]">
         <Card className="bg-card/95">

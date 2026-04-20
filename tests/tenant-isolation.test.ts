@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { LeadStatus } from '@prisma/client';
 
+import { getLeadOutcomeSummary } from '../lib/lead-outcomes.ts';
 import {
   getBillingUsageSnapshotForBusiness,
   getBusinessForOwnerClerkId,
@@ -32,6 +33,13 @@ test('tenant-scoped helpers block cross-business reads and writes while preservi
 
     const allDashboardA = await listAllDashboardLeadsForBusiness(fixtures.businessA.id);
     assert.deepEqual(allDashboardA.map((lead) => lead.id), [fixtures.leadA.id]);
+    assert.deepEqual(getLeadOutcomeSummary(allDashboardA), {
+      totalLeads: 1,
+      closedLeads: 0,
+      lostLeads: 0,
+      openLeads: 1,
+      conversionRate: 0,
+    });
 
     const leadDetailA = await getLeadDetailForBusiness(fixtures.businessA.id, fixtures.leadA.id);
     assert.equal(leadDetailA?.id, fixtures.leadA.id);
@@ -69,7 +77,7 @@ test('tenant-scoped helpers block cross-business reads and writes while preservi
     const blockedUpdate = await updateLeadStatusForBusiness({
       businessId: fixtures.businessA.id,
       leadId: fixtures.leadB.id,
-      status: LeadStatus.BOOKED,
+      status: LeadStatus.LOST,
     });
     assert.equal(blockedUpdate, null);
 
@@ -79,9 +87,18 @@ test('tenant-scoped helpers block cross-business reads and writes while preservi
     const allowedUpdate = await updateLeadStatusForBusiness({
       businessId: fixtures.businessA.id,
       leadId: fixtures.leadA.id,
-      status: LeadStatus.CONTACTED,
+      status: LeadStatus.BOOKED,
     });
-    assert.equal(allowedUpdate?.status, LeadStatus.CONTACTED);
+    assert.equal(allowedUpdate?.status, LeadStatus.BOOKED);
+
+    const allDashboardAAfterUpdate = await listAllDashboardLeadsForBusiness(fixtures.businessA.id);
+    assert.deepEqual(getLeadOutcomeSummary(allDashboardAAfterUpdate), {
+      totalLeads: 1,
+      closedLeads: 1,
+      lostLeads: 0,
+      openLeads: 0,
+      conversionRate: 100,
+    });
 
     const ownRecording = await getLeadRecordingForOwnerClerkId({
       leadId: fixtures.leadA.id,
