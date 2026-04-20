@@ -13,6 +13,7 @@ import {
   sendBusinessTestSmsAction,
   setBusinessProvisioningStatusAction,
 } from '@/app/admin/actions';
+import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
 import {
   buildAdminOnboardingConfidence,
   canDeleteTestBusiness,
@@ -180,9 +181,9 @@ function getOperatorEventDetails(value: unknown) {
 
 function buildOperatorEventRelatedHref(businessId: string, relatedEntityType: string | null, relatedEntityId: string | null) {
   if (!relatedEntityType || !relatedEntityId) return null;
-  if (relatedEntityType === 'lead') return `/admin/${businessId}/workspace#recent-leads`;
+  if (relatedEntityType === 'lead') return buildAdminCustomerOpenHref(businessId, `/app/leads/${relatedEntityId}`);
   if (relatedEntityType === 'message') return `/admin/${businessId}/workspace#recent-activity`;
-  if (relatedEntityType === 'call') return `/admin/${businessId}/workspace#call-flow-snapshot`;
+  if (relatedEntityType === 'call') return buildAdminCustomerOpenHref(businessId, '/app/call-flow');
   return null;
 }
 
@@ -495,11 +496,14 @@ export default async function AdminBusinessDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link className={buttonVariants({ variant: 'default' })} href={`/admin/${business.id}/workspace`}>
+            <Link className={buttonVariants({ variant: 'default' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
               Open customer workspace
             </Link>
-            <Link className={buttonVariants({ variant: 'outline' })} href={`/admin/${business.id}/workspace#recent-leads`}>
+            <Link className={buttonVariants({ variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app/leads?view=attention')}>
               Open customer leads
+            </Link>
+            <Link className={buttonVariants({ variant: 'outline' })} href={`/admin/${business.id}/workspace`}>
+              View support workspace snapshot
             </Link>
             <Link className={buttonVariants({ variant: 'outline' })} href="/admin">
               Back to board
@@ -670,21 +674,24 @@ export default async function AdminBusinessDetailPage({
         <Card className="bg-card/90">
           <CardHeader>
             <CardTitle>Support mode shortcuts</CardTitle>
-            <CardDescription>Safe customer-side entry points without impersonation or tenant bleed.</CardDescription>
+            <CardDescription>Open the real customer pages for this business, or choose the snapshot view when you only need read-only context.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-2">
-              <Link className={buttonVariants({ variant: 'default', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
+              <Link className={buttonVariants({ variant: 'default', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
                 Open customer workspace
               </Link>
-              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace#recent-leads`}>
+              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app/leads?view=attention')}>
                 Open customer leads
               </Link>
-              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace#settings-snapshot`}>
+              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app/settings')}>
                 Open customer settings
               </Link>
-              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace#call-flow-snapshot`}>
+              <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app/call-flow')}>
                 Open customer call flow
+              </Link>
+              <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
+                View support workspace snapshot
               </Link>
             </div>
 
@@ -711,7 +718,7 @@ export default async function AdminBusinessDetailPage({
             </form>
 
             <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
-              Support mode stays read-only. Use it to inspect leads, settings, and call flow quickly without weakening business isolation.
+              Support workspace snapshots stay read-only. The buttons above open the real customer pages in an admin-scoped customer mode so you can act without impersonation.
             </div>
           </CardContent>
         </Card>

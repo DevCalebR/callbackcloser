@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
 import { buildAdminNextStep } from '@/lib/admin-dashboard';
 import { requireAdmin } from '@/lib/admin';
 import { getAdminOwnerState } from '@/lib/admin-provisioning';
@@ -79,7 +80,7 @@ export default async function AdminBusinessWorkspacePage({ params }: { params: {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">{business.name} support mode workspace</h1>
             <p className="text-sm text-muted-foreground">
-              Read-only customer context so the founder can inspect leads, settings, and call flow without impersonation.
+              Read-only customer snapshot for fast inspection. Use the customer-mode buttons below when you need the real editable customer pages.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -96,7 +97,7 @@ export default async function AdminBusinessWorkspacePage({ params }: { params: {
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <CardTitle>Support snapshot</CardTitle>
-          <CardDescription>Immediate health signal plus quick jumps into the customer context that matter most.</CardDescription>
+          <CardDescription>Immediate health signal plus clear separation between real customer pages and read-only snapshot sections.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
@@ -122,17 +123,32 @@ export default async function AdminBusinessWorkspacePage({ params }: { params: {
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href="#recent-leads">
+            <Link className={buttonVariants({ variant: 'default', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
+              Open customer workspace
+            </Link>
+            <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app/leads?view=attention')}>
               Open customer leads
             </Link>
-            <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href="#settings-snapshot">
+            <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app/settings')}>
               Open customer settings
             </Link>
-            <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href="#call-flow-snapshot">
+            <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app/call-flow')}>
               Open customer call flow
             </Link>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href="#recent-leads">
+              View leads snapshot
+            </Link>
+            <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href="#settings-snapshot">
+              View settings snapshot
+            </Link>
+            <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href="#call-flow-snapshot">
+              View call flow snapshot
+            </Link>
             <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href="#recent-activity">
-              Open recent activity
+              View recent activity snapshot
             </Link>
           </div>
         </CardContent>
