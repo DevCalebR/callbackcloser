@@ -1,12 +1,12 @@
 'use server';
 
-import { auth, currentUser } from '@clerk/nextjs/server';
+import { currentUser } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { requireAdmin } from '@/lib/admin';
 import { logAuditEvent } from '@/lib/audit-log';
-import { getBusinessForOwnerClerkId } from '@/lib/business-access';
+import { requireBusiness } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import { getTwilioBusinessClient } from '@/lib/twilio-client';
@@ -16,11 +16,7 @@ import { syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
 import { businessSettingsSchema, businessTwilioAdminOverrideSchema, buyNumberSchema } from '@/lib/validators';
 
 async function getBusinessForOwner() {
-  const { userId } = await auth();
-  if (!userId) redirect('/sign-in');
-  const business = await getBusinessForOwnerClerkId(userId);
-  if (!business) redirect('/app/onboarding');
-  return business;
+  return requireBusiness();
 }
 
 async function saveBusinessTwilioNumber(businessId: string, params: { phoneNumber: string | null; phoneNumberSid: string; syncedAt: Date }) {

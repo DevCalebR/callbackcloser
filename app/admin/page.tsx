@@ -10,6 +10,7 @@ import {
   restoreBusinessAction,
   sendBusinessTestSmsAction,
 } from '@/app/admin/actions';
+import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
 import {
   adminBoardFilterOptions,
   buildAdminBusinessPickerLabel,
@@ -566,11 +567,23 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                     <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}`}>
                       Open business
                     </Link>
-                    <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}/workspace`}>
-                      Open workspace
+                    <Link
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      href={buildAdminCustomerOpenHref(selectedBusinessRow.business.id, '/app')}
+                    >
+                      Open customer workspace
+                    </Link>
+                    <Link
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      href={buildAdminCustomerOpenHref(selectedBusinessRow.business.id, '/app/settings')}
+                    >
+                      Open customer settings
                     </Link>
                     <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}#advanced`}>
                       Open full advanced controls
+                    </Link>
+                    <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}/workspace`}>
+                      View support workspace snapshot
                     </Link>
                   </div>
                 </div>
@@ -723,11 +736,17 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${business.id}`}>
                         Open business
                       </Link>
-                      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
-                        Open workspace
+                      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
+                        Open customer workspace
                       </Link>
-                      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace#recent-leads`}>
+                      <Link
+                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                        href={buildAdminCustomerOpenHref(business.id, '/app/leads?view=attention')}
+                      >
                         Open customer leads
+                      </Link>
+                      <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
+                        View support workspace snapshot
                       </Link>
                       {!isBusinessArchived(business) ? (
                         <form action={provisionBusinessAction}>
