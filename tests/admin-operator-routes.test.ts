@@ -10,12 +10,17 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   const adminHome = read('app/admin/page.tsx');
   const adminDetail = read('app/admin/[businessId]/page.tsx');
   const supportWorkspace = read('app/admin/[businessId]/workspace/page.tsx');
+  const businessPicker = read('components/admin-business-picker.tsx');
 
   assert.match(adminHome, /Operator control panel/);
   assert.match(adminHome, /Fast onboard/);
   assert.match(adminHome, /Create workspace and start provisioning/);
   assert.match(adminHome, /Business triage board/);
+  assert.match(adminHome, /Delete demo\/test business permanently/);
+  assert.match(adminHome, /Type business name to permanently delete/);
   assert.match(adminHome, /Open customer leads/);
+  assert.match(businessPicker, /Jump to business/);
+  assert.match(businessPicker, /Clear selection/);
   assert.match(adminDetail, /Onboarding confidence/);
   assert.match(adminDetail, /Business info/);
   assert.match(adminDetail, /Provisioning health/);

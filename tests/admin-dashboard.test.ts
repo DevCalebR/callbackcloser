@@ -4,10 +4,12 @@ import test from 'node:test';
 import { BusinessProvisioningStatus, ManagedTwilioStatus, OperatorEventStatus, SubscriptionStatus } from '@prisma/client';
 
 import {
+  buildAdminBusinessPickerLabel,
   buildAdminOnboardingConfidence,
   buildAdminBusinessEvents,
   buildAdminNextStep,
   canDeleteTestBusiness,
+  getDeleteTestBusinessBlockedReason,
   matchesAdminBoardFilter,
 } from '../lib/admin-dashboard.ts';
 
@@ -153,6 +155,42 @@ test('board filters and delete guard stay conservative', () => {
     canDeleteTestBusiness(createBusiness({ isTestBusiness: false, archivedAt: new Date('2026-04-16T00:00:00.000Z') })),
     false
   );
+  assert.equal(
+    getDeleteTestBusinessBlockedReason(createBusiness({ isTestBusiness: false, archivedAt: new Date('2026-04-16T00:00:00.000Z') })),
+    'Only demo/test businesses can be deleted. Archive this business instead.'
+  );
+  assert.equal(
+    getDeleteTestBusinessBlockedReason(createBusiness({ isTestBusiness: true })),
+    'Archive this business instead. Permanent delete only unlocks after archive.'
+  );
+});
+
+test('business picker labels keep the name primary and add a fast secondary identifier', () => {
+  const labelWithEmail = buildAdminBusinessPickerLabel({
+    business: createBusiness({
+      name: 'Search HVAC',
+    }),
+    notificationSettings: createNotificationSettings({
+      ownerEmail: 'owner@example.com',
+    }),
+  });
+
+  const labelWithFallbackId = buildAdminBusinessPickerLabel({
+    business: createBusiness({
+      id: 'biz_picker_123456',
+      name: 'Fallback Electric',
+      twilioPhoneNumber: null,
+      twilioPrimaryPhoneNumber: null,
+      isTestBusiness: true,
+      archivedAt: new Date('2026-04-16T00:00:00.000Z'),
+    }),
+    notificationSettings: createNotificationSettings({
+      ownerEmail: '',
+    }),
+  });
+
+  assert.equal(labelWithEmail, 'Search HVAC - owner@example.com');
+  assert.equal(labelWithFallbackId, 'Fallback Electric - ID 123456 (test, archived)');
 });
 
 test('recent event synthesis prioritizes provisioning failures and owner alert failures', () => {
