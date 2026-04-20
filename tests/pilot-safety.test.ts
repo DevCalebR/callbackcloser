@@ -26,7 +26,9 @@ test('landing page product promise stays aligned to missed-call recovery workflo
 
 test('message delivery issue helpers flag failed and fallback statuses', () => {
   assert.equal(isMessageDeliveryIssueStatus('failed'), true);
+  assert.equal(isMessageDeliveryIssueStatus('undelivered'), true);
   assert.equal(isMessageDeliveryIssueStatus('fallback_webhook_response'), true);
   assert.equal(isMessageDeliveryIssueStatus('delivered'), false);
+  assert.equal(formatMessageStatus('undelivered'), 'Undelivered');
   assert.equal(formatMessageStatus('fallback_webhook_response'), 'Sent via webhook fallback');
 });

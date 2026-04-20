@@ -15,6 +15,7 @@ import {
 import {
   buildAdminOnboardingConfidence,
   canDeleteTestBusiness,
+  getAdminTestSmsConfidenceState,
   isBusinessArchived,
 } from '@/lib/admin-dashboard';
 import { CopyValueButton } from '@/components/copy-value-button';
@@ -37,7 +38,6 @@ import {
 import { db } from '@/lib/db';
 import {
   formatDateTime,
-  formatMessageStatus,
   formatRelativeTime,
   getLeadCallbackState,
   getLeadStatusBadgeVariant,
@@ -153,6 +153,22 @@ function getConfidenceMilestoneBadgeVariant(variant: 'success' | 'warning' | 'pe
   if (variant === 'success') return 'success' as const;
   if (variant === 'warning') return 'outline' as const;
   return 'secondary' as const;
+}
+
+function getTestSmsConfidenceSummary(state: ReturnType<typeof getAdminTestSmsConfidenceState>) {
+  if (state === 'delivered') {
+    return 'Delivered';
+  }
+
+  if (state === 'pending_delivery') {
+    return 'Pending delivery';
+  }
+
+  if (state === 'failed') {
+    return 'Failed';
+  }
+
+  return 'Not run';
 }
 
 function formatOperatorEventDetailValue(value: unknown): string {
@@ -291,7 +307,7 @@ export default async function AdminBusinessDetailPage({
   await requireAdmin();
   const activityFilter = getTimelineFilter(searchParams);
 
-  const [business, successfulLeadCount, leadCount, callCount, messageCount, recentLeads, recentCalls, recentMessages, recentOwnerNotifications, operatorEvents] =
+  const [business, successfulLeadCount, leadCount, callCount, messageCount, recentLeads, recentOwnerNotifications, operatorEvents] =
     await Promise.all([
       db.business.findUnique({
         where: { id: params.businessId },
@@ -323,33 +339,6 @@ export default async function AdminBusinessDetailPage({
           ownerNotifiedAt: true,
           createdAt: true,
           lastInteractionAt: true,
-        },
-      }),
-      db.call.findMany({
-        where: { businessId: params.businessId },
-        orderBy: { createdAt: 'desc' },
-        take: 6,
-        select: {
-          id: true,
-          status: true,
-          missed: true,
-          answered: true,
-          dialCallStatus: true,
-          createdAt: true,
-        },
-      }),
-      db.message.findMany({
-        where: { businessId: params.businessId, direction: 'OUTBOUND' },
-        orderBy: { createdAt: 'desc' },
-        take: 8,
-        select: {
-          id: true,
-          leadId: true,
-          participant: true,
-          direction: true,
-          status: true,
-          body: true,
-          createdAt: true,
         },
       }),
       db.ownerNotification.findMany({
@@ -412,6 +401,13 @@ export default async function AdminBusinessDetailPage({
       createdAt: event.createdAt,
     })),
   });
+  const testSmsConfidenceState = getAdminTestSmsConfidenceState(
+    operatorEvents.map((event) => ({
+      type: event.type,
+      status: event.status,
+      createdAt: event.createdAt,
+    }))
+  );
   const timelineFilterCounts = countTimelineFilters(operatorEvents);
   const visibleTimelineEvents = operatorEvents.filter((event) => {
     return matchesTimelineFilter(event, activityFilter);
@@ -457,7 +453,7 @@ export default async function AdminBusinessDetailPage({
           type: 'webhooks.mismatch_detected',
         }
       : null);
-  const latestOutboundSms = recentMessages[0] || null;
+  const latestTestSmsEvent = operatorEvents.find((event) => event.type.startsWith('admin.test_sms_')) || null;
   const latestOwnerAlert = recentOwnerNotifications[0] || null;
 
   const created = getQueryValue(searchParams, 'created') === '1';
@@ -534,7 +530,11 @@ export default async function AdminBusinessDetailPage({
       {provisioned ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning finished. Review the health cards below.</div> : null}
       {synced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Webhook sync complete for {synced.toLowerCase()}.</div> : null}
       {statusSaved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business status updated to {statusSaved.replace(/_/g, ' ')}.</div> : null}
-      {testSms ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Admin test SMS sent.</div> : null}
+      {testSms ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          Admin test SMS requested. Watch recent activity for delivery confirmation before you go live.
+        </div>
+      ) : null}
       {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived safely. Automation is paused.</div> : null}
       {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored and ready for review.</div> : null}
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
@@ -648,12 +648,13 @@ export default async function AdminBusinessDetailPage({
               </div>
             )}
 
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-5">
               {[
                 { label: 'Leads', value: leadCount },
                 { label: 'Calls', value: callCount },
                 { label: 'Messages', value: messageCount },
                 { label: 'Qualified alerts', value: successfulLeadCount },
+                { label: 'Test SMS', value: getTestSmsConfidenceSummary(testSmsConfidenceState) },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl border bg-background/80 p-4">
                   <p className="text-sm text-muted-foreground">{item.label}</p>
@@ -1156,13 +1157,15 @@ export default async function AdminBusinessDetailPage({
               </p>
             </div>
             <div className="rounded-xl border bg-background/80 p-4">
-              <p className="font-medium">Latest outbound SMS</p>
+              <p className="font-medium">Latest test SMS</p>
               <p className="mt-2">
-                {latestOutboundSms
-                  ? `${latestOutboundSms.participant === 'OWNER' ? 'Owner SMS' : 'Lead SMS'}${latestOutboundSms.status ? ` · ${formatMessageStatus(latestOutboundSms.status)}` : ''}`
-                  : 'No outbound SMS yet'}
+                {latestTestSmsEvent?.summary || 'No test SMS recorded'}
               </p>
-              <p className="mt-2 text-xs text-muted-foreground">{latestOutboundSms?.body || 'No outbound SMS has been recorded yet.'}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {latestTestSmsEvent
+                  ? getOperatorEventDetails(latestTestSmsEvent.detailsJson)[0]?.value || 'Open the timeline below for full test delivery detail.'
+                  : 'Run the admin test SMS before you treat onboarding as ready for launch.'}
+              </p>
             </div>
             <div className="rounded-xl border bg-background/80 p-4">
               <p className="font-medium">Latest owner alert</p>

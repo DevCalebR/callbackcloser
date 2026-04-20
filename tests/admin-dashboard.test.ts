@@ -8,6 +8,7 @@ import {
   buildAdminBusinessEvents,
   buildAdminNextStep,
   canDeleteTestBusiness,
+  getAdminTestSmsConfidenceState,
   matchesAdminBoardFilter,
 } from '../lib/admin-dashboard.ts';
 
@@ -200,7 +201,7 @@ test('onboarding confidence distinguishes ready-for-test from ready-for-live', (
     successfulLeadCount: 1,
     operatorEvents: [
       {
-        type: 'admin.test_sms_accepted',
+        type: 'admin.test_sms_delivered',
         status: OperatorEventStatus.SUCCESS,
         createdAt: new Date('2026-04-17T12:00:00.000Z'),
       },
@@ -210,6 +211,51 @@ test('onboarding confidence distinguishes ready-for-test from ready-for-live', (
   assert.equal(readyForLive.state, 'ready_to_go_live');
   assert.equal(readyForLive.canSafelyMarkLive, true);
   assert.equal(readyForLive.readinessLabel, 'Ready for live');
+});
+
+test('admin test SMS confidence waits for delivery confirmation', () => {
+  assert.equal(
+    getAdminTestSmsConfidenceState([
+      {
+        type: 'admin.test_sms_accepted',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ]),
+    'pending_delivery'
+  );
+
+  assert.equal(
+    getAdminTestSmsConfidenceState([
+      {
+        type: 'admin.test_sms_accepted',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+      {
+        type: 'admin.test_sms_delivered',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:01:00.000Z'),
+      },
+    ]),
+    'delivered'
+  );
+
+  assert.equal(
+    getAdminTestSmsConfidenceState([
+      {
+        type: 'admin.test_sms_delivered',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+      {
+        type: 'admin.test_sms_delivery_failed',
+        status: OperatorEventStatus.FAILED,
+        createdAt: new Date('2026-04-17T12:02:00.000Z'),
+      },
+    ]),
+    'failed'
+  );
 });
 
 test('onboarding confidence stays honest when A2P is pending or live has warnings', () => {

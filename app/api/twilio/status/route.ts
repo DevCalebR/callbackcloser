@@ -257,7 +257,7 @@ export async function POST(request: Request) {
       businessId: business.id,
       type: 'voice.call_marked_missed',
       category: 'VOICE',
-      status: 'WARNING',
+      status: 'INFO',
       summary: 'Call marked missed',
       details: {
         callSid,

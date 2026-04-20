@@ -712,6 +712,7 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
       toPhone: destinationPhone!,
       body: `CallbackCloser admin test: ${business.name} is using ${fromPhone} for live support verification.`,
       participant: 'OWNER',
+      context: 'admin_test',
       twilioSubaccountSid: business.twilioSubaccountSid,
       messagingServiceSid: business.twilioMessagingServiceSid,
       managedTwilioStatus: business.managedTwilioStatus,

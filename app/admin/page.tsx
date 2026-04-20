@@ -82,7 +82,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const view = (getQueryValue(searchParams, 'view') as AdminBoardFilter | null) || 'all';
   const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
-  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, notificationFailures, operatorSignals] = await Promise.all([
+  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, operatorSignals] = await Promise.all([
     query
       ? searchBusinessesForAdmin(query)
       : db.business.findMany({
@@ -108,19 +108,6 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       by: ['businessId'],
       _max: { createdAt: true },
     }),
-    db.ownerNotification.findMany({
-      where: {
-        status: { in: ['FAILED', 'SKIPPED'] },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        businessId: true,
-        status: true,
-        error: true,
-        createdAt: true,
-      },
-      take: 200,
-    }),
     db.businessOperatorEvent.findMany({
       where: {
         status: { in: [OperatorEventStatus.FAILED, OperatorEventStatus.WARNING] },
@@ -129,6 +116,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       select: {
         businessId: true,
         status: true,
+        summary: true,
+        createdAt: true,
       },
       take: 600,
     }),
@@ -140,16 +129,16 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   );
   const callActivityMap = new Map(callActivity.map((item) => [item.businessId, item._max.createdAt]));
   const messageActivityMap = new Map(messageActivity.map((item) => [item.businessId, item._max.createdAt]));
-  const notificationFailureMap = new Map<string, { status: string; error: string | null; createdAt: Date }>();
+  const latestOperatorSignalMap = new Map<string, { summary: string; createdAt: Date }>();
   const operatorSignalMap = new Map<string, { failed: number; warning: number }>();
 
-  for (const failure of notificationFailures) {
-    if (!notificationFailureMap.has(failure.businessId)) {
-      notificationFailureMap.set(failure.businessId, failure);
-    }
-  }
-
   for (const signal of operatorSignals) {
+    if (!latestOperatorSignalMap.has(signal.businessId)) {
+      latestOperatorSignalMap.set(signal.businessId, {
+        summary: signal.summary,
+        createdAt: signal.createdAt,
+      });
+    }
     const entry = operatorSignalMap.get(signal.businessId) || { failed: 0, warning: 0 };
     if (signal.status === OperatorEventStatus.FAILED) {
       entry.failed += 1;
@@ -174,7 +163,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       callActivityMap.get(business.id),
       messageActivityMap.get(business.id)
     );
-    const latestFailure = notificationFailureMap.get(business.id);
+    const latestFailure = latestOperatorSignalMap.get(business.id);
     const assignedNumber = getManagedTextingNumber(business);
     const archived = isBusinessArchived(business);
     const paused = !archived && business.provisioningStatus === 'PAUSED';
@@ -190,7 +179,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       complianceStarted: managedSummary.complianceStarted,
     });
     const attentionSignal = latestFailure
-      ? compactCopy(`${latestFailure.error || `${latestFailure.status.toLowerCase()} owner notification`} on ${formatDateTime(latestFailure.createdAt)}.`)
+      ? compactCopy(`${latestFailure.summary} on ${formatDateTime(latestFailure.createdAt)}.`)
       : nextStep.tone === 'healthy'
         ? 'Healthy. No immediate operator action needed.'
         : compactCopy(`${nextStep.title}. ${nextStep.detail}`);

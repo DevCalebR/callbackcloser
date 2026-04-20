@@ -36,7 +36,7 @@ export const smsStateLabels: Record<SmsConversationState, string> = {
 
 export function isMessageDeliveryIssueStatus(status: string | null | undefined) {
   const normalized = status?.trim().toLowerCase();
-  return normalized === 'failed' || normalized === 'fallback_webhook_response';
+  return normalized === 'failed' || normalized === 'undelivered' || normalized === 'fallback_webhook_response';
 }
 
 export function formatMessageStatus(status: string | null | undefined) {
@@ -47,6 +47,7 @@ export function formatMessageStatus(status: string | null | undefined) {
   if (normalized === 'sent') return 'Sent';
   if (normalized === 'queued') return 'Queued';
   if (normalized === 'failed') return 'Failed';
+  if (normalized === 'undelivered') return 'Undelivered';
   if (normalized === 'fallback_webhook_response') return 'Sent via webhook fallback';
 
   return normalized.replace(/_/g, ' ');
