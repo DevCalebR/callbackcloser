@@ -6,13 +6,16 @@ import { redirect } from 'next/navigation';
 
 import {
   buildPendingOwnerClerkId,
-  connectOrInviteBusinessOwner,
+  connectExistingBusinessOwner,
+  findClerkUserByEmail,
+  inviteBusinessOwner,
   runAdminProvisioning,
   syncBusinessTwilioWebhooks,
   updateBusinessProvisioningStatus,
 } from '@/lib/admin-provisioning';
+import { deleteDeletableTestBusiness } from '@/lib/admin-business-lifecycle';
 import { requireAdmin } from '@/lib/admin';
-import { canDeleteTestBusiness } from '@/lib/admin-dashboard';
+import { canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
 import {
   bulkDeleteTestDemoBusinesses,
   BULK_TEST_DATA_RESET_CONFIRMATION,
@@ -27,11 +30,12 @@ import {
   adminArchiveBusinessSchema,
   adminBulkDeleteTestBusinessesSchema,
   adminBusinessDraftSchema,
-  adminTwilioSetupSchema,
+  adminConnectExistingOwnerSchema,
   adminDeleteBusinessSchema,
+  adminInviteOwnerSchema,
   adminSendTestSmsSchema,
+  adminTwilioSetupSchema,
   adminBusinessUpdateSchema,
-  adminConnectOwnerSchema,
   adminProvisionBusinessSchema,
   adminProvisioningStatusSchema,
   adminWebhookSyncSchema,
@@ -44,6 +48,50 @@ const DEFAULT_DEMO_FORWARDING_NUMBER = '+15005550001';
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function getAdminReturnPath(returnTo: string | null | undefined) {
+  const trimmed = returnTo?.trim() || '';
+  if (!trimmed.startsWith('/admin')) return null;
+  return trimmed;
+}
+
+function appendParamsToAdminPath(
+  path: string | null | undefined,
+  params: Record<string, string | number | boolean | null | undefined>,
+  fallback: string
+) {
+  const base = getAdminReturnPath(path);
+  if (!base) return fallback;
+
+  const url = new URL(base, 'http://callbackcloser.local');
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === '') continue;
+    url.searchParams.set(key, String(value));
+  }
+
+  const query = url.searchParams.toString();
+  return query ? `${url.pathname}?${query}` : url.pathname;
+}
+
+function clearBusinessSelectionFromReturnPath(
+  path: string | null | undefined,
+  params: Record<string, string | number | boolean | null | undefined>,
+  fallback: string
+) {
+  const base = getAdminReturnPath(path);
+  if (!base) return fallback;
+
+  const url = new URL(base, 'http://callbackcloser.local');
+  url.searchParams.delete('businessId');
+  url.searchParams.delete('q');
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === '') continue;
+    url.searchParams.set(key, String(value));
+  }
+
+  const query = url.searchParams.toString();
+  return query ? `${url.pathname}?${query}` : url.pathname;
 }
 
 function buildAdminBusinessRedirectPath(
@@ -187,7 +235,7 @@ export async function createDemoBusinessAction(formData: FormData) {
   });
 
   await revalidateAdminPaths(business.id);
-  redirect(`/admin?createdDemo=1&businessId=${encodeURIComponent(business.id)}`);
+  redirect(`/admin?createdDemo=1&createdBusinessId=${encodeURIComponent(business.id)}`);
 }
 
 export async function createAdminBusinessAction(formData: FormData) {
@@ -257,20 +305,33 @@ export async function createAdminBusinessAction(formData: FormData) {
 
   let redirectPath: string;
   try {
-    const ownerResult = await connectOrInviteBusinessOwner({
-      businessId: business.id,
-      ownerEmail: data.ownerEmail,
-      ownerName: data.ownerName || null,
-      inviteIfMissing: true,
-    });
+    const existingOwner = await findClerkUserByEmail(data.ownerEmail);
+    if (existingOwner) {
+      await connectExistingBusinessOwner({
+        businessId: business.id,
+        ownerEmail: data.ownerEmail,
+        ownerName: data.ownerName || null,
+        ownerClerkId: existingOwner.id,
+      });
 
-    redirectPath = buildAdminBusinessRedirectPath(business.id, {
-      created: 1,
-      ownerState: ownerResult.state,
-    });
+      redirectPath = buildAdminBusinessRedirectPath(business.id, {
+        created: 1,
+        ownerAction: 'connected',
+      });
+    } else {
+      const inviteResult = await inviteBusinessOwner({
+        businessId: business.id,
+        ownerEmail: data.ownerEmail,
+        ownerName: data.ownerName || null,
+      });
+
+      redirectPath = buildAdminBusinessRedirectPath(business.id, {
+        created: 1,
+        ownerAction: inviteResult.state,
+      });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Business created, but owner setup failed.';
-
     await db.business.update({
       where: { id: business.id },
       data: {
@@ -289,7 +350,10 @@ export async function createAdminBusinessAction(formData: FormData) {
       },
     });
 
-    redirectPath = buildAdminBusinessRedirectPath(business.id, { created: 1, error: message });
+    redirectPath = buildAdminBusinessRedirectPath(business.id, {
+      created: 1,
+      error: message,
+    });
   }
 
   await revalidateAdminPaths(business.id);
@@ -726,27 +790,70 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   );
 }
 
-export async function connectBusinessOwnerAction(formData: FormData) {
+export async function inviteBusinessOwnerAction(formData: FormData) {
   await requireAdmin();
 
-  const parsed = adminConnectOwnerSchema.safeParse(Object.fromEntries(formData));
+  const parsed = adminInviteOwnerSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid owner invite request.')}`);
+  }
+
+  let redirectPath: string;
+  try {
+    const result = await inviteBusinessOwner({
+      businessId: parsed.data.businessId,
+      ownerEmail: parsed.data.ownerEmail,
+      ownerName: parsed.data.ownerName || null,
+    });
+
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerAction: result.state });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Owner invite failed.';
+    await db.business.update({
+      where: { id: parsed.data.businessId },
+      data: {
+        provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
+        provisioningError: message,
+      },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: parsed.data.businessId,
+      type: 'onboarding.owner_invite_failed',
+      category: 'ONBOARDING',
+      status: 'FAILED',
+      summary: 'Owner invite failed',
+      details: {
+        error: message,
+      },
+    });
+
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { error: message });
+  }
+
+  await revalidateAdminPaths(parsed.data.businessId);
+  redirect(redirectPath);
+}
+
+export async function connectExistingBusinessOwnerAction(formData: FormData) {
+  await requireAdmin();
+
+  const parsed = adminConnectExistingOwnerSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid owner connection request.')}`);
   }
 
   let redirectPath: string;
   try {
-    const result = await connectOrInviteBusinessOwner({
+    await connectExistingBusinessOwner({
       businessId: parsed.data.businessId,
       ownerEmail: parsed.data.ownerEmail,
       ownerName: parsed.data.ownerName || null,
       ownerClerkId: parsed.data.ownerClerkId || null,
-      inviteIfMissing: true,
     });
 
-    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerState: result.state });
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerAction: 'connected' });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Owner setup failed.';
+    const message = error instanceof Error ? error.message : 'Owner connection failed.';
     await db.business.update({
       where: { id: parsed.data.businessId },
       data: {
@@ -921,7 +1028,7 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
       body: `CallbackCloser admin test: ${business.name} is using ${fromPhone} for live support verification.`,
       participant: 'OWNER',
       context: 'admin_test',
-      twilioSubaccountSid: business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : business.twilioSubaccountSid,
+      twilioSubaccountSid: business.twilioAccountMode === TwilioAccountMode.MAIN_ACCOUNT ? null : business.twilioSubaccountSid,
       messagingServiceSid: business.twilioMessagingServiceSid,
       managedTwilioStatus: business.managedTwilioStatus,
       a2pFailureReason: business.a2pFailureReason,
@@ -1004,11 +1111,17 @@ export async function archiveBusinessAction(formData: FormData) {
 
   const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
   if (!business) {
-    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+    redirect(appendParamsToAdminPath(parsed.data.returnTo, { error: 'Business not found.' }, `/admin?error=${encodeURIComponent('Business not found.')}`));
   }
 
   if (parsed.data.confirmationName !== business.name) {
-    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to archive it.' }));
+    redirect(
+      appendParamsToAdminPath(
+        parsed.data.returnTo,
+        { error: 'Type the exact business name to archive it.' },
+        buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to archive it.' })
+      )
+    );
   }
 
   await db.business.update({
@@ -1047,7 +1160,9 @@ export async function archiveBusinessAction(formData: FormData) {
   });
 
   await revalidateAdminPaths(business.id);
-  redirect(buildAdminBusinessRedirectPath(business.id, { archived: 1 }));
+  redirect(
+    appendParamsToAdminPath(parsed.data.returnTo, { archived: 1 }, buildAdminBusinessRedirectPath(business.id, { archived: 1 }))
+  );
 }
 
 export async function restoreBusinessAction(formData: FormData) {
@@ -1060,11 +1175,17 @@ export async function restoreBusinessAction(formData: FormData) {
 
   const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
   if (!business) {
-    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+    redirect(appendParamsToAdminPath(parsed.data.returnTo, { error: 'Business not found.' }, `/admin?error=${encodeURIComponent('Business not found.')}`));
   }
 
   if (parsed.data.confirmationName !== business.name) {
-    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to restore it.' }));
+    redirect(
+      appendParamsToAdminPath(
+        parsed.data.returnTo,
+        { error: 'Type the exact business name to restore it.' },
+        buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to restore it.' })
+      )
+    );
   }
 
   await db.business.update({
@@ -1101,7 +1222,9 @@ export async function restoreBusinessAction(formData: FormData) {
   });
 
   await revalidateAdminPaths(business.id);
-  redirect(buildAdminBusinessRedirectPath(business.id, { restored: 1 }));
+  redirect(
+    appendParamsToAdminPath(parsed.data.returnTo, { restored: 1 }, buildAdminBusinessRedirectPath(business.id, { restored: 1 }))
+  );
 }
 
 export async function deleteTestBusinessAction(formData: FormData) {
@@ -1114,22 +1237,33 @@ export async function deleteTestBusinessAction(formData: FormData) {
 
   const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
   if (!business) {
-    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+    redirect(appendParamsToAdminPath(parsed.data.returnTo, { error: 'Business not found.' }, `/admin?error=${encodeURIComponent('Business not found.')}`));
   }
 
   if (parsed.data.confirmationName !== business.name) {
-    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to delete it.' }));
-  }
-
-  if (!canDeleteTestBusiness(business)) {
     redirect(
-      buildAdminBusinessRedirectPath(business.id, {
-        error: 'Only archived test or demo businesses can be deleted from admin.',
-      })
+      appendParamsToAdminPath(
+        parsed.data.returnTo,
+        { error: 'Type the exact business name to delete it.' },
+        buildAdminBusinessRedirectPath(business.id, { error: 'Type the exact business name to delete it.' })
+      )
     );
   }
 
-  await db.business.delete({ where: { id: business.id } });
+  const deleteBlockedReason = getDeleteTestBusinessBlockedReason(business);
+  if (deleteBlockedReason || !canDeleteTestBusiness(business)) {
+    redirect(
+      appendParamsToAdminPath(
+        parsed.data.returnTo,
+        { error: deleteBlockedReason || 'Only archived demo/test businesses can be deleted.' },
+        buildAdminBusinessRedirectPath(business.id, {
+          error: deleteBlockedReason || 'Only archived demo/test businesses can be deleted.',
+        })
+      )
+    );
+  }
+
+  await deleteDeletableTestBusiness(business.id);
 
   logAuditEvent({
     event: 'admin_test_business_deleted',
@@ -1146,7 +1280,7 @@ export async function deleteTestBusinessAction(formData: FormData) {
   });
 
   revalidatePath('/admin');
-  redirect('/admin?deleted=1');
+  redirect(clearBusinessSelectionFromReturnPath(parsed.data.returnTo, { deleted: 1 }, '/admin?deleted=1'));
 }
 
 export async function bulkDeleteTestBusinessesAction(formData: FormData) {

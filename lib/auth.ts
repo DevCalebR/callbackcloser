@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
+import { getAdminCustomerActingContext } from '@/lib/admin-customer-context';
 import { getBusinessForOwnerClerkId } from '@/lib/business-access';
 import { getPortfolioDemoAuth, getPortfolioDemoBusiness, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
@@ -21,6 +22,11 @@ export async function getCurrentBusiness() {
     return getPortfolioDemoBusiness();
   }
 
+  const adminCustomerContext = await getAdminCustomerActingContext();
+  if (adminCustomerContext) {
+    return adminCustomerContext.business;
+  }
+
   const { userId } = await auth();
   if (!userId) return null;
 
@@ -30,6 +36,11 @@ export async function getCurrentBusiness() {
 export async function requireBusiness() {
   if (isPortfolioDemoMode()) {
     return getPortfolioDemoBusiness();
+  }
+
+  const adminCustomerContext = await getAdminCustomerActingContext();
+  if (adminCustomerContext) {
+    return adminCustomerContext.business;
   }
 
   const { userId } = await requireAuth();

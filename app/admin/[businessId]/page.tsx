@@ -3,8 +3,9 @@ import { notFound } from 'next/navigation';
 
 import {
   archiveBusinessAction,
-  connectBusinessOwnerAction,
+  connectExistingBusinessOwnerAction,
   deleteTestBusinessAction,
+  inviteBusinessOwnerAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
   restoreBusinessAction,
@@ -19,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
 import { getAdminTestSmsConfidenceState, isBusinessArchived } from '@/lib/admin-dashboard';
 import { getAdminOwnerState, getTwilioWebhookSnapshot, listAdminTwilioNumbers } from '@/lib/admin-provisioning';
 import { requireAdmin } from '@/lib/admin';
@@ -145,7 +147,7 @@ export default async function AdminBusinessDetailPage({
 
   const created = getQueryValue(searchParams, 'created') === '1';
   const saved = getQueryValue(searchParams, 'saved') === '1';
-  const ownerStateMessage = getQueryValue(searchParams, 'ownerState');
+  const ownerAction = getQueryValue(searchParams, 'ownerAction');
   const provisioned = getQueryValue(searchParams, 'provisioned') === '1';
   const synced = getQueryValue(searchParams, 'synced');
   const testSms = getQueryValue(searchParams, 'testSms') === '1';
@@ -200,34 +202,78 @@ export default async function AdminBusinessDetailPage({
       return {
         ...step,
         body: ownerState.connected ? (
-          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground" id="owner-step">
-            <Badge variant="success">Connected</Badge>
-            <span>{ownerState.email || business.notificationSettings?.ownerEmail || 'Owner email not recorded'}</span>
+          <div className="space-y-3 text-sm text-muted-foreground" id="owner-step">
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant="success">{ownerState.statusLabel}</Badge>
+              <span>{ownerState.email || business.notificationSettings?.ownerEmail || 'Owner email not recorded'}</span>
+            </div>
+            <p>{ownerState.detail}</p>
           </div>
         ) : (
-          <form action={connectBusinessOwnerAction} className="grid gap-4 md:grid-cols-2" id="owner-step">
-            <input type="hidden" name="businessId" value={business.id} />
-            <div className="space-y-2">
-              <Label htmlFor="ownerConnectName">Owner name</Label>
-              <Input id="ownerConnectName" name="ownerName" defaultValue={business.ownerName || ''} />
+          <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]" id="owner-step">
+            <div className="rounded-xl border bg-background/80 p-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={ownerState.badgeVariant}>{ownerState.statusLabel}</Badge>
+                {ownerState.matchedUserId ? <Badge variant="outline">Existing account found</Badge> : null}
+              </div>
+              <p className="mt-3 text-muted-foreground">{ownerState.detail}</p>
+              {ownerState.email ? <p className="mt-2 text-xs text-muted-foreground">Owner email: {ownerState.email}</p> : null}
+              {ownerState.matchedUserId ? (
+                <p className="mt-2 text-xs text-muted-foreground">Matched Clerk user: {ownerState.matchedUserId}</p>
+              ) : null}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="ownerConnectEmail">Owner email</Label>
-              <Input
-                id="ownerConnectEmail"
-                name="ownerEmail"
-                type="email"
-                defaultValue={business.notificationSettings?.ownerEmail || ''}
-                placeholder="owner@business.com"
-                required
-              />
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <form action={inviteBusinessOwnerAction} className="rounded-xl border bg-background/80 p-4">
+                <input type="hidden" name="businessId" value={business.id} />
+                <div className="space-y-2">
+                  <Label htmlFor="ownerInviteName">Owner name</Label>
+                  <Input id="ownerInviteName" name="ownerName" defaultValue={business.ownerName || ''} />
+                </div>
+                <div className="mt-4 space-y-2">
+                  <Label htmlFor="ownerInviteEmail">Owner email</Label>
+                  <Input
+                    id="ownerInviteEmail"
+                    name="ownerEmail"
+                    type="email"
+                    defaultValue={business.notificationSettings?.ownerEmail || ''}
+                    placeholder="owner@business.com"
+                    required
+                  />
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">Use this when the owner does not already have a CallbackCloser login.</p>
+                <Button className="mt-4" size="sm" type="submit" variant="outline">
+                  {ownerState.status === 'invitation_pending' ? 'Resend owner invite' : 'Invite owner by email'}
+                </Button>
+              </form>
+
+              <form action={connectExistingBusinessOwnerAction} className="rounded-xl border bg-background/80 p-4">
+                <input type="hidden" name="businessId" value={business.id} />
+                {ownerState.matchedUserId ? <input type="hidden" name="ownerClerkId" value={ownerState.matchedUserId} /> : null}
+                <div className="space-y-2">
+                  <Label htmlFor="ownerConnectName">Owner name</Label>
+                  <Input id="ownerConnectName" name="ownerName" defaultValue={business.ownerName || ''} />
+                </div>
+                <div className="mt-4 space-y-2">
+                  <Label htmlFor="ownerConnectEmail">Owner email</Label>
+                  <Input
+                    id="ownerConnectEmail"
+                    name="ownerEmail"
+                    type="email"
+                    defaultValue={business.notificationSettings?.ownerEmail || ''}
+                    placeholder="owner@business.com"
+                    required
+                  />
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Use this when the owner already has a CallbackCloser account and should be linked immediately.
+                </p>
+                <Button className="mt-4" size="sm" type="submit">
+                  Connect existing owner
+                </Button>
+              </form>
             </div>
-            <div className="md:col-span-2">
-              <Button size="sm" type="submit">
-                Connect or invite owner
-              </Button>
-            </div>
-          </form>
+          </div>
         ),
       };
     }
@@ -509,11 +555,11 @@ export default async function AdminBusinessDetailPage({
       return {
         ...step,
         body: (
-          <div className="flex flex-wrap gap-3">
-            <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${business.id}/workspace`}>
+            <div className="flex flex-wrap gap-3">
+            <Link className={buttonVariants({ size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
               Open customer workspace
             </Link>
-            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={`/admin/${business.id}/workspace#call-flow-snapshot`}>
+            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app/call-flow')}>
               Open customer call flow
             </Link>
           </div>
@@ -566,10 +612,19 @@ export default async function AdminBusinessDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link className={buttonVariants({ variant: 'outline' })} href={`/admin/${business.id}/workspace`}>
+            <Link className={buttonVariants({ variant: 'default' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
               Open customer workspace
             </Link>
-            <Link className={buttonVariants({ variant: 'outline' })} href={`/admin/${business.id}/workspace#recent-leads`}>
+            <Link className={buttonVariants({ variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app/settings')}>
+              Open customer settings
+            </Link>
+            <Link className={buttonVariants({ variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app/call-flow')}>
+              Open customer call flow
+            </Link>
+            <Link className={buttonVariants({ variant: 'outline' })} href={`/admin/${business.id}/workspace`}>
+              View support workspace snapshot
+            </Link>
+            <Link className={buttonVariants({ variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app/leads?view=attention')}>
               Open customer leads
             </Link>
           </div>
@@ -578,7 +633,17 @@ export default async function AdminBusinessDetailPage({
 
       {created ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business workspace created and ready for the Twilio setup flow.</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Setup state saved.</div> : null}
-      {ownerStateMessage ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Owner state updated: {ownerStateMessage}.</div> : null}
+      {ownerAction ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          {ownerAction === 'connected'
+            ? 'Existing owner connected.'
+            : ownerAction === 'invited'
+              ? 'Owner invitation sent.'
+              : ownerAction === 'resent'
+                ? 'Owner invitation resent.'
+                : 'Owner state updated.'}
+        </div>
+      ) : null}
       {provisioned ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning run finished. Review the checklist below before moving on.</div> : null}
       {synced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Webhook sync complete for {synced.toLowerCase()}.</div> : null}
       {testSms ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Test SMS requested. Wait for delivery before treating this business as launch-ready.</div> : null}
@@ -594,7 +659,7 @@ export default async function AdminBusinessDetailPage({
           bannerAction={bannerAction}
           steps={setupSteps}
           advanced={
-            <Card className="bg-card/90">
+            <Card className="bg-card/90" id="advanced">
               <CardHeader>
                 <CardTitle>Advanced</CardTitle>
                 <CardDescription>Rare lifecycle actions stay out of the main setup path.</CardDescription>

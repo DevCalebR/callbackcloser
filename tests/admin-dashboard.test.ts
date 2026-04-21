@@ -11,11 +11,13 @@ import {
 } from '@prisma/client';
 
 import {
+  buildAdminBusinessPickerLabel,
   buildAdminOnboardingConfidence,
   buildAdminBusinessEvents,
   buildAdminNextStep,
   canDeleteTestBusiness,
   getAdminTestSmsConfidenceState,
+  getDeleteTestBusinessBlockedReason,
   matchesAdminBoardFilter,
 } from '../lib/admin-dashboard.ts';
 
@@ -25,6 +27,7 @@ function createBusiness(overrides: Record<string, unknown> = {}) {
     name: 'Acme Plumbing',
     ownerClerkId: 'user_123',
     ownerName: 'Casey Owner',
+    ownerInviteSentAt: null,
     isTestBusiness: false,
     archivedAt: null,
     forwardingNumber: '+15557654321',
@@ -112,6 +115,24 @@ test('next-step guidance stays explicit for owner setup and pending A2P review',
   assert.equal(missingOwnerContact.title, 'Owner contact info is missing');
   assert.equal(missingOwnerContact.actionLabel, 'Save owner contact info');
 
+  const invitedOwner = buildAdminNextStep({
+    business: createBusiness({
+      ownerInviteSentAt: new Date('2026-04-16T00:00:00.000Z'),
+      twilioSubaccountSid: null,
+      twilioMessagingServiceSid: null,
+      twilioPrimaryNumberSid: null,
+      twilioPhoneNumberSid: null,
+      twilioPrimaryPhoneNumber: null,
+      twilioPhoneNumber: null,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: false,
+  });
+
+  assert.equal(invitedOwner.title, 'Owner invitation is still pending');
+  assert.equal(invitedOwner.actionLabel, 'Review owner setup');
+
   const pendingA2p = buildAdminNextStep({
     business: createBusiness({
       managedTwilioStatus: ManagedTwilioStatus.CAMPAIGN_SUBMITTED,
@@ -144,6 +165,42 @@ test('board filters and delete guard stay conservative', () => {
     canDeleteTestBusiness(createBusiness({ isTestBusiness: false, archivedAt: new Date('2026-04-16T00:00:00.000Z') })),
     false
   );
+  assert.equal(
+    getDeleteTestBusinessBlockedReason(createBusiness({ isTestBusiness: false, archivedAt: new Date('2026-04-16T00:00:00.000Z') })),
+    'Only demo/test businesses can be deleted. Archive this business instead.'
+  );
+  assert.equal(
+    getDeleteTestBusinessBlockedReason(createBusiness({ isTestBusiness: true })),
+    'Archive this business instead. Permanent delete only unlocks after archive.'
+  );
+});
+
+test('business picker labels keep the name primary and add a fast secondary identifier', () => {
+  const labelWithEmail = buildAdminBusinessPickerLabel({
+    business: createBusiness({
+      name: 'Search HVAC',
+    }),
+    notificationSettings: createNotificationSettings({
+      ownerEmail: 'owner@example.com',
+    }),
+  });
+
+  const labelWithFallbackId = buildAdminBusinessPickerLabel({
+    business: createBusiness({
+      id: 'biz_picker_123456',
+      name: 'Fallback Electric',
+      twilioPhoneNumber: null,
+      twilioPrimaryPhoneNumber: null,
+      isTestBusiness: true,
+      archivedAt: new Date('2026-04-16T00:00:00.000Z'),
+    }),
+    notificationSettings: createNotificationSettings({
+      ownerEmail: '',
+    }),
+  });
+
+  assert.equal(labelWithEmail, 'Search HVAC - owner@example.com');
+  assert.equal(labelWithFallbackId, 'Fallback Electric - ID 123456 (test, archived)');
 });
 
 test('recent event synthesis prioritizes provisioning failures and owner alert failures', () => {

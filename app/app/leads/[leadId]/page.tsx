@@ -8,6 +8,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
 import { getLeadDetailForBusiness } from '@/lib/business-access';
+import { isLeadClosedWonStatus, isLeadLostStatus } from '@/lib/lead-outcomes';
 import {
   formatDateTime,
   formatRelativeTime,
@@ -32,11 +33,11 @@ function resolveSafeReturnPath(value: string | null | undefined) {
 }
 
 function getLeadActionSummary(status: LeadStatus) {
-  if (status === LeadStatus.BOOKED) {
-    return 'This lead is marked booked. Keep the details here for reference.';
+  if (isLeadClosedWonStatus(status)) {
+    return 'This lead is marked Closed (Won). Keep the details here for reference.';
   }
 
-  if (status === LeadStatus.LOST) {
+  if (isLeadLostStatus(status)) {
     return 'This lead is marked lost. You can still review the call and message history here.';
   }
 
@@ -44,7 +45,7 @@ function getLeadActionSummary(status: LeadStatus) {
     return 'You have already made contact. Update the final outcome when the customer decides.';
   }
 
-  return 'Call this lead back, then update the outcome so your inbox stays clear.';
+  return 'Call this lead back, then mark it Closed (Won) or Lost so your conversion summary stays accurate.';
 }
 
 function LeadStatusActionForm({
@@ -137,6 +138,11 @@ export default async function LeadDetailPage({
                 {lead.notifiedAt || lead.ownerNotifiedAt ? <Badge variant="secondary">Owner alerted</Badge> : null}
               </div>
               <p className="max-w-2xl text-sm text-muted-foreground">{getLeadActionSummary(lead.status)}</p>
+              {isOpenLead ? (
+                <div className="rounded-2xl border bg-background/90 px-4 py-3 text-sm text-muted-foreground">
+                  Did this lead turn into a real job? Mark the outcome here after the call so CallbackCloser can show the value clearly.
+                </div>
+              ) : null}
             </div>
 
             <div className="grid w-full gap-3 xl:max-w-2xl xl:grid-cols-[minmax(0,1.35fr)_repeat(3,minmax(0,1fr))]">
@@ -144,8 +150,8 @@ export default async function LeadDetailPage({
                 Call now
               </Link>
               <LeadStatusActionForm leadId={lead.id} status="CONTACTED" redirectTo={redirectTo} label="Mark contacted" variant="outline" />
-              <LeadStatusActionForm leadId={lead.id} status="BOOKED" redirectTo={redirectTo} label="Mark booked" />
-              <LeadStatusActionForm leadId={lead.id} status="LOST" redirectTo={redirectTo} label="Mark lost" variant="destructive" />
+              <LeadStatusActionForm leadId={lead.id} status="BOOKED" redirectTo={redirectTo} label="Mark as Closed (Won)" />
+              <LeadStatusActionForm leadId={lead.id} status="LOST" redirectTo={redirectTo} label="Mark as Lost" variant="destructive" />
             </div>
           </div>
         </CardHeader>

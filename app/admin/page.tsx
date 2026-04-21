@@ -1,24 +1,29 @@
 import Link from 'next/link';
 
 import {
+  archiveBusinessAction,
   bulkDeleteTestBusinessesAction,
   createAdminBusinessAction,
   createDemoBusinessAction,
+  deleteTestBusinessAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
+  restoreBusinessAction,
   sendBusinessTestSmsAction,
 } from '@/app/admin/actions';
-import {
-  BULK_TEST_DATA_RESET_CONFIRMATION,
-  listTestDemoBusinessesForReset,
-} from '@/lib/admin-test-data-reset';
+import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
+import { BULK_TEST_DATA_RESET_CONFIRMATION, listTestDemoBusinessesForReset } from '@/lib/admin-test-data-reset';
 import {
   adminBoardFilterOptions,
+  buildAdminBusinessPickerLabel,
   buildAdminNextStep,
+  canDeleteTestBusiness,
+  getDeleteTestBusinessBlockedReason,
   isBusinessArchived,
   matchesAdminBoardFilter,
   type AdminBoardFilter,
 } from '@/lib/admin-dashboard';
+import { AdminBusinessPicker } from '@/components/admin-business-picker';
 import { requireAdmin } from '@/lib/admin';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -77,19 +82,45 @@ function compactCopy(value: string, maxLength = 110) {
   return `${trimmed.slice(0, maxLength - 1)}…`;
 }
 
+function buildAdminBoardReturnPath(params: {
+  view: AdminBoardFilter;
+  selectedBusinessId?: string | null;
+  query?: string | null;
+}) {
+  const search = new URLSearchParams();
+
+  if (params.view && params.view !== 'all') {
+    search.set('view', params.view);
+  }
+
+  if (params.query) {
+    search.set('q', params.query);
+  }
+
+  if (params.selectedBusinessId) {
+    search.set('businessId', params.selectedBusinessId);
+  }
+
+  const query = search.toString();
+  return query ? `/admin?${query}` : '/admin';
+}
+
 export default async function AdminPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const admin = await requireAdmin();
   const createdDemo = getQueryValue(searchParams, 'createdDemo') === '1';
-  const createdBusinessId = getQueryValue(searchParams, 'businessId');
+  const createdBusinessId = getQueryValue(searchParams, 'createdBusinessId');
+  const selectedBusinessId = getQueryValue(searchParams, 'businessId');
+  const archived = getQueryValue(searchParams, 'archived') === '1';
   const deleted = getQueryValue(searchParams, 'deleted') === '1';
-  const resetResult = getQueryValue(searchParams, 'resetResult');
-  const resetDeleted = Number(getQueryValue(searchParams, 'resetDeleted') || '0');
   const error = getQueryValue(searchParams, 'error');
   const query = getQueryValue(searchParams, 'q')?.trim() || '';
+  const resetResult = getQueryValue(searchParams, 'resetResult');
+  const resetDeleted = Number(getQueryValue(searchParams, 'resetDeleted') || '0');
+  const restored = getQueryValue(searchParams, 'restored') === '1';
   const view = (getQueryValue(searchParams, 'view') as AdminBoardFilter | null) || 'all';
   const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
-  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, operatorSignals, resettableBusinesses] = await Promise.all([
+  const [businesses, businessPickerOptions, leadCounts, leadActivity, callActivity, messageActivity, notificationFailures, operatorSignals, resettableBusinesses] = await Promise.all([
     query
       ? searchBusinessesForAdmin(query)
       : db.business.findMany({
@@ -98,6 +129,22 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
             notificationSettings: true,
           },
         }),
+    db.business.findMany({
+      orderBy: [{ archivedAt: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        isTestBusiness: true,
+        archivedAt: true,
+        twilioPrimaryPhoneNumber: true,
+        twilioPhoneNumber: true,
+        notificationSettings: {
+          select: {
+            ownerEmail: true,
+          },
+        },
+      },
+    }),
     db.lead.groupBy({
       by: ['businessId'],
       _count: { _all: true },
@@ -115,6 +162,19 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       by: ['businessId'],
       _max: { createdAt: true },
     }),
+    db.ownerNotification.findMany({
+      where: {
+        status: { in: ['FAILED', 'SKIPPED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        businessId: true,
+        status: true,
+        error: true,
+        createdAt: true,
+      },
+      take: 200,
+    }),
     db.businessOperatorEvent.findMany({
       where: {
         status: { in: [OperatorEventStatus.FAILED, OperatorEventStatus.WARNING] },
@@ -123,8 +183,6 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       select: {
         businessId: true,
         status: true,
-        summary: true,
-        createdAt: true,
       },
       take: 600,
     }),
@@ -137,16 +195,16 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   );
   const callActivityMap = new Map(callActivity.map((item) => [item.businessId, item._max.createdAt]));
   const messageActivityMap = new Map(messageActivity.map((item) => [item.businessId, item._max.createdAt]));
-  const latestOperatorSignalMap = new Map<string, { summary: string; createdAt: Date }>();
+  const notificationFailureMap = new Map<string, { status: string; error: string | null; createdAt: Date }>();
   const operatorSignalMap = new Map<string, { failed: number; warning: number }>();
 
-  for (const signal of operatorSignals) {
-    if (!latestOperatorSignalMap.has(signal.businessId)) {
-      latestOperatorSignalMap.set(signal.businessId, {
-        summary: signal.summary,
-        createdAt: signal.createdAt,
-      });
+  for (const failure of notificationFailures) {
+    if (!notificationFailureMap.has(failure.businessId)) {
+      notificationFailureMap.set(failure.businessId, failure);
     }
+  }
+
+  for (const signal of operatorSignals) {
     const entry = operatorSignalMap.get(signal.businessId) || { failed: 0, warning: 0 };
     if (signal.status === OperatorEventStatus.FAILED) {
       entry.failed += 1;
@@ -160,6 +218,20 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
     const managedSummary = getManagedTwilioStatusSummary(business);
     const ownerPending = isPendingOwnerClerkId(business.ownerClerkId);
     const ownerConnected = !ownerPending;
+    const ownerStatusLabel = !business.notificationSettings?.ownerEmail
+      ? 'Owner email missing'
+      : ownerPending
+        ? business.ownerInviteSentAt
+          ? 'Invite sent'
+          : 'Invite ready'
+        : 'Connected';
+    const ownerStatusVariant = !business.notificationSettings?.ownerEmail
+      ? ('destructive' as const)
+      : ownerPending
+        ? business.ownerInviteSentAt
+          ? ('outline' as const)
+          : ('secondary' as const)
+        : ('success' as const);
     const nextStep = buildAdminNextStep({
       business,
       notificationSettings: business.notificationSettings,
@@ -171,7 +243,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       callActivityMap.get(business.id),
       messageActivityMap.get(business.id)
     );
-    const latestFailure = latestOperatorSignalMap.get(business.id);
+    const latestFailure = notificationFailureMap.get(business.id);
     const assignedNumber = getManagedTextingNumber(business);
     const archived = isBusinessArchived(business);
     const paused = !archived && business.provisioningStatus === 'PAUSED';
@@ -187,7 +259,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       complianceStarted: managedSummary.complianceStarted,
     });
     const attentionSignal = latestFailure
-      ? compactCopy(`${latestFailure.summary} on ${formatDateTime(latestFailure.createdAt)}.`)
+      ? compactCopy(`${latestFailure.error || `${latestFailure.status.toLowerCase()} owner notification`} on ${formatDateTime(latestFailure.createdAt)}.`)
       : nextStep.tone === 'healthy'
         ? 'Healthy. No immediate operator action needed.'
         : compactCopy(`${nextStep.title}. ${nextStep.detail}`);
@@ -195,8 +267,9 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
     return {
       business,
-      ownerPending,
       ownerConnected,
+      ownerStatusLabel,
+      ownerStatusVariant,
       managedSummary,
       nextStep,
       leadCount: leadCountMap.get(business.id) ?? 0,
@@ -221,8 +294,26 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   );
 
   const visibleRows = businessRows.filter((item) =>
-    matchesAdminBoardFilter(item.business, item.business.notificationSettings, item.ownerConnected, view)
+    selectedBusinessId
+      ? item.business.id === selectedBusinessId
+      : matchesAdminBoardFilter(item.business, item.business.notificationSettings, item.ownerConnected, view)
   );
+  const pickerOptions = businessPickerOptions.map((business) => ({
+    id: business.id,
+    label: buildAdminBusinessPickerLabel({
+      business,
+      notificationSettings: business.notificationSettings,
+    }),
+  }));
+  const selectedBusinessRow = selectedBusinessId ? businessRows.find((item) => item.business.id === selectedBusinessId) || null : null;
+  const selectedBusinessDeleteBlockedReason = selectedBusinessRow
+    ? getDeleteTestBusinessBlockedReason(selectedBusinessRow.business)
+    : null;
+  const boardReturnTo = buildAdminBoardReturnPath({
+    view,
+    selectedBusinessId,
+    query: selectedBusinessId ? null : query,
+  });
 
   const summaryStats = [
     { label: 'Needs attention', value: filterCounts.get('needs_attention') ?? 0 },
@@ -260,16 +351,16 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
-      {deleted ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Archived test business deleted.</div> : null}
+      {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived. Permanent delete stays locked until the workspace is clearly demo/test.</div> : null}
+      {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored to active triage.</div> : null}
+      {deleted ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Demo/test business deleted permanently.</div> : null}
       {resetResult === 'deleted' && Number.isFinite(resetDeleted) ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           Deleted {resetDeleted} test/demo {resetDeleted === 1 ? 'business' : 'businesses'}.
         </div>
       ) : null}
       {resetResult === 'noop' ? (
-        <div className="rounded-md border bg-background/80 p-3 text-sm text-muted-foreground">
-          No test/demo businesses were eligible for deletion.
-        </div>
+        <div className="rounded-md border bg-background/80 p-3 text-sm text-muted-foreground">No test/demo businesses were eligible for deletion.</div>
       ) : null}
       {createdDemo && createdBusinessId ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
@@ -283,7 +374,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           <CardHeader>
             <CardTitle>Fast onboard</CardTitle>
             <CardDescription>
-              Start the business workspace with the minimum founder-needed inputs. Everything else can be tightened inside the business control panel.
+              Create the workspace with the minimum founder-needed inputs. The guided Twilio flow, explicit account-mode choice, and owner decision stay inside the business setup panel.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -325,7 +416,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
               <div className="md:col-span-2 flex flex-wrap items-center gap-3">
                 <Button type="submit">Create business workspace</Button>
-                <p className="text-sm text-muted-foreground">CallbackCloser will auto-connect an existing owner account or send an invite if needed.</p>
+                <p className="text-sm text-muted-foreground">CallbackCloser will auto-connect an existing owner account or send an invite if needed. Twilio account mode and number setup stay explicit on the next screen.</p>
               </div>
             </form>
           </CardContent>
@@ -413,12 +504,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           <form action={bulkDeleteTestBusinessesAction} className="rounded-xl border border-destructive/30 bg-background/80 p-4">
             <div className="space-y-2">
               <Label htmlFor="confirmationText">Type {BULK_TEST_DATA_RESET_CONFIRMATION}</Label>
-              <Input
-                id="confirmationText"
-                name="confirmationText"
-                autoComplete="off"
-                placeholder={BULK_TEST_DATA_RESET_CONFIRMATION}
-              />
+              <Input id="confirmationText" name="confirmationText" autoComplete="off" placeholder={BULK_TEST_DATA_RESET_CONFIRMATION} />
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
               This is irreversible. Deleting a business also removes its business-scoped leads, calls, messages, notifications, operator events, settings, and related demo data through the existing schema cascades.
@@ -436,29 +522,43 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           <CardDescription>Compact rows with status, readiness, one clear attention signal, and the fastest next actions.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-            <Input
-              aria-label="Search businesses"
-              defaultValue={query}
-              name="q"
-              placeholder="Search business, owner email, business ID, Twilio number, or Twilio SID"
-            />
-            <input type="hidden" name="view" value={view} />
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-            {query ? (
-              <Link className={buttonVariants({ variant: 'ghost' })} href={`/admin?view=${encodeURIComponent(view)}`}>
-                Clear
-              </Link>
-            ) : null}
-          </form>
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+            <div className="rounded-xl border bg-background/80 p-4">
+              <AdminBusinessPicker options={pickerOptions} query={query || null} selectedBusinessId={selectedBusinessId} view={view} />
+            </div>
+            <form className="space-y-3 rounded-xl border border-dashed bg-background/80 p-4">
+              <div className="space-y-2">
+                <Label htmlFor="businessSearch">Search fallback</Label>
+                <Input
+                  aria-label="Search businesses"
+                  defaultValue={query}
+                  id="businessSearch"
+                  name="q"
+                  placeholder="Search business, owner email, business ID, Twilio number, or Twilio SID"
+                />
+              </div>
+              <input type="hidden" name="view" value={view} />
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" variant="outline">
+                  Search
+                </Button>
+                {query ? (
+                  <Link className={buttonVariants({ variant: 'ghost' })} href={buildAdminBoardReturnPath({ view })}>
+                    Clear search
+                  </Link>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">Use search only when you need an exact email, ID, Twilio number, or SID lookup.</p>
+            </form>
+          </div>
 
           <div className="flex flex-wrap gap-2">
             {adminBoardFilterOptions.map((option) => {
-              const href = query
-                ? `/admin?view=${encodeURIComponent(option.key)}&q=${encodeURIComponent(query)}`
-                : `/admin?view=${encodeURIComponent(option.key)}`;
+              const href = buildAdminBoardReturnPath({
+                view: option.key,
+                query: selectedBusinessId ? null : query,
+                selectedBusinessId,
+              });
               return (
                 <Link
                   key={option.key}
@@ -474,16 +574,137 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
             })}
           </div>
 
+          {selectedBusinessRow ? (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="gap-2">
+                <CardTitle className="text-xl">Selected business actions</CardTitle>
+                <CardDescription>
+                  Focused from the business picker. Archive stays the normal lifecycle action. Permanent delete only unlocks for archived demo/test
+                  workspaces.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className="space-y-4 rounded-xl border bg-background/80 p-4 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-base font-semibold">{selectedBusinessRow.business.name}</p>
+                    <Badge variant={selectedBusinessRow.overallStatus.variant}>{selectedBusinessRow.overallStatus.label}</Badge>
+                    {selectedBusinessRow.business.isTestBusiness ? <Badge variant="outline">Test</Badge> : null}
+                    {isBusinessArchived(selectedBusinessRow.business) ? <Badge variant="outline">Archived</Badge> : null}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="font-medium">Owner</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {selectedBusinessRow.business.notificationSettings?.ownerEmail || selectedBusinessRow.business.ownerName || 'Owner details missing'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Assigned number</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {selectedBusinessRow.assignedNumber ? formatPhoneForDisplay(selectedBusinessRow.assignedNumber) : 'Not assigned yet'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Latest attention signal</p>
+                      <p className="mt-1 text-muted-foreground">{selectedBusinessRow.attentionSignal}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Current next step</p>
+                      <p className="mt-1 text-muted-foreground">{selectedBusinessRow.nextStep.actionLabel}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}`}>
+                      Open business
+                    </Link>
+                    <Link
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      href={buildAdminCustomerOpenHref(selectedBusinessRow.business.id, '/app')}
+                    >
+                      Open customer workspace
+                    </Link>
+                    <Link
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      href={buildAdminCustomerOpenHref(selectedBusinessRow.business.id, '/app/settings')}
+                    >
+                      Open customer settings
+                    </Link>
+                    <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}#advanced`}>
+                      Open full advanced controls
+                    </Link>
+                    <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}/workspace`}>
+                      View support workspace snapshot
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {isBusinessArchived(selectedBusinessRow.business) ? (
+                    <form action={restoreBusinessAction} className="rounded-xl border bg-background/80 p-4 text-sm">
+                      <input type="hidden" name="businessId" value={selectedBusinessRow.business.id} />
+                      <input type="hidden" name="returnTo" value={boardReturnTo} />
+                      <div className="space-y-2">
+                        <Label htmlFor="restoreBusinessName">Type business name to restore</Label>
+                        <Input id="restoreBusinessName" name="confirmationName" placeholder={selectedBusinessRow.business.name} />
+                      </div>
+                      <Button className="mt-3" type="submit">
+                        Restore business
+                      </Button>
+                    </form>
+                  ) : (
+                    <form action={archiveBusinessAction} className="rounded-xl border bg-background/80 p-4 text-sm">
+                      <input type="hidden" name="businessId" value={selectedBusinessRow.business.id} />
+                      <input type="hidden" name="returnTo" value={boardReturnTo} />
+                      <div className="space-y-2">
+                        <Label htmlFor="archiveBusinessName">Type business name to archive</Label>
+                        <Input id="archiveBusinessName" name="confirmationName" placeholder={selectedBusinessRow.business.name} />
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">Archive is the normal lifecycle control for real customer businesses and the first safety step for demo/test cleanup.</p>
+                      <Button className="mt-3" type="submit" variant="outline">
+                        Archive business safely
+                      </Button>
+                    </form>
+                  )}
+
+                  {canDeleteTestBusiness(selectedBusinessRow.business) ? (
+                    <form action={deleteTestBusinessAction} className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                      <input type="hidden" name="businessId" value={selectedBusinessRow.business.id} />
+                      <input type="hidden" name="returnTo" value={boardReturnTo} />
+                      <div className="space-y-2">
+                        <Label htmlFor="deleteBusinessName">Type business name to permanently delete</Label>
+                        <Input id="deleteBusinessName" name="confirmationName" placeholder={selectedBusinessRow.business.name} />
+                      </div>
+                      <p className="mt-2 text-xs text-destructive">
+                        Permanent delete removes the business plus its leads, calls, messages, notification settings, owner notifications, operator
+                        events, simulator runs, and SMS consent records.
+                      </p>
+                      <Button className="mt-3" type="submit" variant="destructive">
+                        Delete demo/test business permanently
+                      </Button>
+                    </form>
+                  ) : (
+                    <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+                      {selectedBusinessDeleteBlockedReason || 'Delete stays unavailable for this business.'}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
           {visibleRows.length === 0 ? (
             <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-              No businesses matched this view. Try a different filter or search for the exact business ID, owner email, or Twilio number.
+              {selectedBusinessId
+                ? 'That business is no longer available on the board. Clear the selection and pick another workspace.'
+                : 'No businesses matched this view. Try a different filter or search for the exact business ID, owner email, or Twilio number.'}
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border">
               {visibleRows.map(
                 ({
                   business,
-                  ownerPending,
+                  ownerStatusLabel,
+                  ownerStatusVariant,
                   managedSummary,
                   nextStep,
                   leadCount,
@@ -524,7 +745,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       <p>{business.ownerName || 'Owner name missing'}</p>
                       <p className="text-muted-foreground">{business.notificationSettings?.ownerEmail || 'Owner email missing'}</p>
                       <div className="flex flex-wrap gap-2">
-                        <Badge variant={ownerPending ? 'outline' : 'secondary'}>{ownerPending ? 'Invite pending' : 'Linked'}</Badge>
+                        <Badge variant={ownerStatusVariant}>{ownerStatusLabel}</Badge>
                         {business.notificationSettings?.ownerPhone || business.notifyPhone ? (
                           <Badge variant="outline">{formatPhoneForDisplay(business.notificationSettings?.ownerPhone || business.notifyPhone)}</Badge>
                         ) : null}
@@ -565,11 +786,17 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${business.id}`}>
                         Open business
                       </Link>
-                      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
-                        Open workspace
+                      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
+                        Open customer workspace
                       </Link>
-                      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={`/admin/${business.id}/workspace#recent-leads`}>
+                      <Link
+                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                        href={buildAdminCustomerOpenHref(business.id, '/app/leads?view=attention')}
+                      >
                         Open customer leads
+                      </Link>
+                      <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
+                        View support workspace snapshot
                       </Link>
                       {!isBusinessArchived(business) ? (
                         <form action={provisionBusinessAction}>
