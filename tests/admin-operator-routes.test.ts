@@ -9,6 +9,7 @@ function read(path: string) {
 test('admin routes expose support workspace and safe lifecycle controls', () => {
   const adminHome = read('app/admin/page.tsx');
   const adminDetail = read('app/admin/[businessId]/page.tsx');
+  const activityTimeline = read('components/admin-business-activity-timeline.tsx');
   const supportWorkspace = read('app/admin/[businessId]/workspace/page.tsx');
   const adminActions = read('app/admin/actions.ts');
   const businessPicker = read('components/admin-business-picker.tsx');
@@ -21,6 +22,8 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminHome, /Delete all test\/demo businesses/);
   assert.match(adminHome, /BULK_TEST_DATA_RESET_CONFIRMATION/);
   assert.match(adminHome, /Business triage board/);
+  assert.match(adminHome, /Last issue/);
+  assert.match(adminHome, /Test SMS/);
   assert.match(adminHome, /Open customer workspace/);
   assert.match(adminHome, /Delete demo\/test business permanently/);
   assert.match(adminHome, /Type business name to permanently delete/);
@@ -34,6 +37,9 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /Twilio setup control panel/);
   assert.match(adminDetail, /main Twilio account or business subaccount/i);
   assert.match(adminDetail, /CallbackCloser Twilio launch flow/);
+  assert.match(adminDetail, /Last issue/);
+  assert.match(adminDetail, /Test SMS truth/);
+  assert.match(adminDetail, /Current step/);
   assert.match(adminDetail, /Mark live/);
   assert.match(adminDetail, /Advanced/);
   assert.match(adminDetail, /Invite owner by email/);
@@ -42,6 +48,8 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /Open customer settings/);
   assert.match(adminDetail, /Open customer call flow/);
   assert.match(adminDetail, /View support workspace snapshot/);
+  assert.match(activityTimeline, /Recent activity/);
+  assert.match(activityTimeline, /Expand details/);
   assert.doesNotMatch(adminDetail, /Connect or invite owner/);
   assert.match(supportWorkspace, /support mode workspace/);
   assert.match(supportWorkspace, /Open customer workspace/);

@@ -22,6 +22,7 @@ import {
   DEMO_OWNER_CLERK_ID,
 } from '@/lib/admin-test-data-reset';
 import { logAuditEvent } from '@/lib/audit-log';
+import { buildTwilioSetupUpdateEventMetadata } from '@/lib/admin-operator-visibility';
 import { db } from '@/lib/db';
 import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
@@ -754,13 +755,16 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   });
 
   if (changedFields.length > 0) {
+    const setupUpdateEvent = buildTwilioSetupUpdateEventMetadata(changedFields);
     await recordBusinessOperatorEvent({
       businessId: data.businessId,
       type: 'admin.twilio_setup_updated',
       category: 'ONBOARDING',
       status: 'INFO',
-      summary: 'Twilio setup flow updated',
+      summary: setupUpdateEvent.summary,
       details: {
+        remediationStepKey: setupUpdateEvent.primaryStepKey,
+        remediationStepKeys: setupUpdateEvent.stepKeys,
         changedFields: buildChangedFieldMetadata(changedFields),
       },
     });
@@ -1015,7 +1019,7 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
       type: 'admin.test_sms_initiated',
       category: 'ADMIN_ACTIONS',
       status: 'PENDING',
-      summary: 'Test SMS initiated',
+      summary: 'Test SMS requested',
       details: {
         destinationPhone: formatPhoneDetail(destinationPhone),
         fromPhone: formatPhoneDetail(fromPhone),

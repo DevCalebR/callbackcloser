@@ -13,6 +13,7 @@ import {
   sendBusinessTestSmsAction,
   setBusinessProvisioningStatusAction,
 } from '@/app/admin/actions';
+import { AdminBusinessActivityTimeline } from '@/components/admin-business-activity-timeline';
 import { TwilioSetupChecklist } from '@/components/twilio-setup-checklist';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -21,12 +22,25 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
-import { getAdminTestSmsConfidenceState, isBusinessArchived } from '@/lib/admin-dashboard';
+import { isBusinessArchived } from '@/lib/admin-dashboard';
+import {
+  buildAdminBusinessIssue,
+  buildAdminTestSmsTruth,
+  getOperatorToneBadgeVariant,
+} from '@/lib/admin-operator-visibility';
 import { getAdminOwnerState, getTwilioWebhookSnapshot, listAdminTwilioNumbers } from '@/lib/admin-provisioning';
 import { requireAdmin } from '@/lib/admin';
 import { TwilioSetupTone, buildTwilioSetupFlow, twilioAccountModeOptions, twilioNumberSetupModeOptions } from '@/lib/twilio-setup';
 import { db } from '@/lib/db';
+import { formatDateTime } from '@/lib/lead-presenters';
 import { getManagedTextingNumber, managedTwilioStatusLabels } from '@/lib/managed-twilio-status';
+import {
+  businessTimelineFilterOptions,
+  countTimelineFilters,
+  listBusinessOperatorEvents,
+  matchesTimelineFilter,
+  type BusinessTimelineFilter,
+} from '@/lib/operator-events';
 import { formatPhoneForDisplay } from '@/lib/phone';
 
 type AdminTwilioDefaults = {
@@ -47,6 +61,18 @@ type AdminTwilioDefaults = {
 function getQueryValue(searchParams: Record<string, string | string[] | undefined> | undefined, key: string) {
   const value = searchParams?.[key];
   return typeof value === 'string' ? value : null;
+}
+
+function getTimelineFilter(searchParams: Record<string, string | string[] | undefined> | undefined): BusinessTimelineFilter {
+  const value = getQueryValue(searchParams, 'timeline');
+  if (value && businessTimelineFilterOptions.some((option) => option.key === value)) {
+    return value as BusinessTimelineFilter;
+  }
+  return 'all';
+}
+
+function buildTimelineFilterPath(businessId: string, filter: BusinessTimelineFilter) {
+  return filter === 'all' ? `/admin/${businessId}` : `/admin/${businessId}?timeline=${encodeURIComponent(filter)}`;
 }
 
 function HiddenAdminTwilioFields({
@@ -95,32 +121,25 @@ export default async function AdminBusinessDetailPage({
         OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
       },
     }),
-    db.businessOperatorEvent.findMany({
-      where: {
-        businessId: params.businessId,
-        type: {
-          startsWith: 'admin.test_sms_',
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-      select: {
-        type: true,
-        status: true,
-        createdAt: true,
-      },
-    }),
+    listBusinessOperatorEvents(params.businessId, 'all', 120),
   ]);
 
   if (!business) notFound();
 
+  const timelineFilter = getTimelineFilter(searchParams);
+  const testSmsTruth = buildAdminTestSmsTruth(operatorEvents);
   const [ownerState, webhookSnapshot, availableNumbers] = await Promise.all([
     getAdminOwnerState(business, business.notificationSettings),
     getTwilioWebhookSnapshot(business),
     listAdminTwilioNumbers(business),
   ]);
 
-  const testSmsState = getAdminTestSmsConfidenceState(operatorEvents);
+  const testSmsState =
+    testSmsTruth.state === 'not_run'
+      ? 'not_started'
+      : testSmsTruth.state === 'pending'
+        ? 'pending_delivery'
+        : testSmsTruth.state;
   const managedTextingNumber = getManagedTextingNumber(business);
   const setupFlow = buildTwilioSetupFlow({
     business,
@@ -130,6 +149,23 @@ export default async function AdminBusinessDetailPage({
     testSmsState,
     webhookSnapshot,
   });
+  const lastIssue = buildAdminBusinessIssue({
+    events: operatorEvents,
+    currentStep: {
+      stepKey: setupFlow.banner.stepKey,
+      title: setupFlow.banner.title,
+      detail: setupFlow.banner.detail,
+      tone: setupFlow.banner.tone,
+    },
+  });
+  const timelineCounts = countTimelineFilters(operatorEvents);
+  const visibleTimelineEvents = operatorEvents.filter((event) => matchesTimelineFilter(event, timelineFilter));
+  const timelineFilterLinks = businessTimelineFilterOptions.map((option) => ({
+    key: option.key,
+    label: option.label,
+    href: buildTimelineFilterPath(business.id, option.key),
+    count: timelineCounts.get(option.key) ?? 0,
+  }));
   const defaults: AdminTwilioDefaults = {
     businessId: business.id,
     twilioAccountMode: business.twilioAccountMode,
@@ -650,6 +686,90 @@ export default async function AdminBusinessDetailPage({
       {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived safely. Automation is paused.</div> : null}
       {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored and ready for review.</div> : null}
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardDescription>Last issue</CardDescription>
+            <CardTitle className="text-lg">{lastIssue.summary}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={getOperatorToneBadgeVariant(lastIssue.tone)}>
+                {lastIssue.state === 'healthy' ? 'Healthy' : lastIssue.statusLabel || 'Needs attention'}
+              </Badge>
+              {lastIssue.categoryLabel ? <Badge variant="outline">{lastIssue.categoryLabel}</Badge> : null}
+              {lastIssue.eventType ? <code className="rounded bg-background px-2 py-1 text-xs">{lastIssue.eventType}</code> : null}
+            </div>
+            <p className="text-muted-foreground">{lastIssue.detail}</p>
+            <p className="text-xs text-muted-foreground">
+              {lastIssue.createdAt ? `Recorded ${formatDateTime(lastIssue.createdAt)}` : 'Derived from the current business state.'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/90">
+          <CardHeader className="pb-3">
+            <CardDescription>Test SMS truth</CardDescription>
+            <CardTitle className="text-lg">{testSmsTruth.summary}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={getOperatorToneBadgeVariant(testSmsTruth.tone)}>{testSmsTruth.label}</Badge>
+              {testSmsTruth.eventType ? <code className="rounded bg-background px-2 py-1 text-xs">{testSmsTruth.eventType}</code> : null}
+            </div>
+            <p className="text-muted-foreground">{testSmsTruth.detail}</p>
+            <p className="text-xs text-muted-foreground">
+              {testSmsTruth.lastAttemptAt ? `Last attempt ${formatDateTime(testSmsTruth.lastAttemptAt)}` : 'No test SMS attempt recorded yet.'}
+            </p>
+            <form action={sendBusinessTestSmsAction} className="space-y-3">
+              <input type="hidden" name="businessId" value={business.id} />
+              <div className="space-y-2">
+                <Label htmlFor="adminOperatorTestSmsDestination">Test SMS destination</Label>
+                <Input
+                  id="adminOperatorTestSmsDestination"
+                  name="destinationPhone"
+                  defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''}
+                  placeholder="+15551234567"
+                />
+              </div>
+              <Button size="sm" type="submit">
+                {testSmsTruth.state === 'not_run' ? 'Send test SMS' : 'Retry test SMS'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/90">
+          <CardHeader className="pb-3">
+            <CardDescription>Current step</CardDescription>
+            <CardTitle className="text-lg">{setupFlow.banner.title}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={getBadgeVariant(setupFlow.banner.tone)}>
+                {setupFlow.banner.tone === 'success'
+                  ? 'Ready'
+                  : setupFlow.banner.tone === 'attention'
+                    ? 'Blocked'
+                    : setupFlow.banner.tone === 'pending'
+                      ? 'Pending'
+                      : 'In review'}
+              </Badge>
+              <code className="rounded bg-background px-2 py-1 text-xs">{setupFlow.banner.stepKey}</code>
+            </div>
+            <p className="text-muted-foreground">{setupFlow.banner.detail}</p>
+            <p className="text-xs text-muted-foreground">
+              This section stays stable so PR #2 can attach guided remediation and manual field entry to the same step key.
+            </p>
+            <div>{bannerAction}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div id="recent-activity">
+        <AdminBusinessActivityTimeline events={visibleTimelineEvents} activeFilter={timelineFilter} filterLinks={timelineFilterLinks} />
+      </div>
 
       <div id="admin-twilio-setup">
         <TwilioSetupChecklist

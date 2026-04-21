@@ -23,6 +23,11 @@ import {
   matchesAdminBoardFilter,
   type AdminBoardFilter,
 } from '@/lib/admin-dashboard';
+import {
+  buildAdminBusinessIssue,
+  buildAdminTestSmsTruth,
+  getOperatorToneBadgeVariant,
+} from '@/lib/admin-operator-visibility';
 import { AdminBusinessPicker } from '@/components/admin-business-picker';
 import { requireAdmin } from '@/lib/admin';
 import { Badge } from '@/components/ui/badge';
@@ -33,7 +38,7 @@ import { Label } from '@/components/ui/label';
 import { isPendingOwnerClerkId } from '@/lib/admin-provisioning';
 import { searchBusinessesForAdmin } from '@/lib/business';
 import { db } from '@/lib/db';
-import { formatDateTime, formatRelativeTime } from '@/lib/lead-presenters';
+import { formatRelativeTime } from '@/lib/lead-presenters';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { OperatorEventStatus } from '@prisma/client';
 import { formatPhoneForDisplay } from '@/lib/phone';
@@ -120,7 +125,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const view = (getQueryValue(searchParams, 'view') as AdminBoardFilter | null) || 'all';
   const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
-  const [businesses, businessPickerOptions, leadCounts, leadActivity, callActivity, messageActivity, notificationFailures, operatorSignals, resettableBusinesses] = await Promise.all([
+  const [businesses, businessPickerOptions, leadCounts, leadActivity, callActivity, messageActivity, latestOperatorIssues, latestTestSmsEvents, operatorSignals, resettableBusinesses] = await Promise.all([
     query
       ? searchBusinessesForAdmin(query)
       : db.business.findMany({
@@ -162,18 +167,36 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       by: ['businessId'],
       _max: { createdAt: true },
     }),
-    db.ownerNotification.findMany({
+    db.businessOperatorEvent.findMany({
       where: {
-        status: { in: ['FAILED', 'SKIPPED'] },
+        status: { in: [OperatorEventStatus.FAILED, OperatorEventStatus.WARNING] },
       },
       orderBy: { createdAt: 'desc' },
       select: {
         businessId: true,
         status: true,
-        error: true,
+        summary: true,
+        type: true,
+        category: true,
+        detailsJson: true,
         createdAt: true,
       },
-      take: 200,
+      take: 600,
+    }),
+    db.businessOperatorEvent.findMany({
+      where: {
+        type: { startsWith: 'admin.test_sms_' },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        businessId: true,
+        type: true,
+        status: true,
+        summary: true,
+        detailsJson: true,
+        createdAt: true,
+      },
+      take: 600,
     }),
     db.businessOperatorEvent.findMany({
       where: {
@@ -195,12 +218,33 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   );
   const callActivityMap = new Map(callActivity.map((item) => [item.businessId, item._max.createdAt]));
   const messageActivityMap = new Map(messageActivity.map((item) => [item.businessId, item._max.createdAt]));
-  const notificationFailureMap = new Map<string, { status: string; error: string | null; createdAt: Date }>();
+  const latestIssueMap = new Map<
+    string,
+    {
+      businessId: string;
+      type: string;
+      category: (typeof latestOperatorIssues)[number]['category'];
+      status: (typeof latestOperatorIssues)[number]['status'];
+      summary: string;
+      detailsJson: (typeof latestOperatorIssues)[number]['detailsJson'];
+      createdAt: Date;
+    }
+  >();
+  const testSmsEventMap = new Map<string, Array<(typeof latestTestSmsEvents)[number]>>();
   const operatorSignalMap = new Map<string, { failed: number; warning: number }>();
 
-  for (const failure of notificationFailures) {
-    if (!notificationFailureMap.has(failure.businessId)) {
-      notificationFailureMap.set(failure.businessId, failure);
+  for (const issue of latestOperatorIssues) {
+    if (!latestIssueMap.has(issue.businessId)) {
+      latestIssueMap.set(issue.businessId, issue);
+    }
+  }
+
+  for (const event of latestTestSmsEvents) {
+    const existing = testSmsEventMap.get(event.businessId) || [];
+    existing.push(event);
+    testSmsEventMap.set(event.businessId, existing);
+    if (existing.length >= 6) {
+      testSmsEventMap.set(event.businessId, existing.slice(0, 6));
     }
   }
 
@@ -243,7 +287,6 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       callActivityMap.get(business.id),
       messageActivityMap.get(business.id)
     );
-    const latestFailure = notificationFailureMap.get(business.id);
     const assignedNumber = getManagedTextingNumber(business);
     const archived = isBusinessArchived(business);
     const paused = !archived && business.provisioningStatus === 'PAUSED';
@@ -258,11 +301,22 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       attentionRequired: managedSummary.attentionRequired,
       complianceStarted: managedSummary.complianceStarted,
     });
-    const attentionSignal = latestFailure
-      ? compactCopy(`${latestFailure.error || `${latestFailure.status.toLowerCase()} owner notification`} on ${formatDateTime(latestFailure.createdAt)}.`)
-      : nextStep.tone === 'healthy'
-        ? 'Healthy. No immediate operator action needed.'
-        : compactCopy(`${nextStep.title}. ${nextStep.detail}`);
+    const lastIssue = buildAdminBusinessIssue({
+      events: latestIssueMap.has(business.id) ? [latestIssueMap.get(business.id)!] : [],
+      currentStep: {
+        stepKey: null,
+        title: nextStep.title,
+        detail: nextStep.detail,
+        tone: nextStep.tone === 'attention' ? 'attention' : nextStep.tone === 'pending' ? 'pending' : 'success',
+      },
+    });
+    const testSmsTruth = buildAdminTestSmsTruth(testSmsEventMap.get(business.id) || []);
+    const attentionSignal =
+      lastIssue.state === 'issue'
+        ? compactCopy(`${lastIssue.summary}. ${lastIssue.detail}`)
+        : nextStep.tone === 'healthy'
+          ? 'Healthy. No immediate operator action needed.'
+          : compactCopy(`${nextStep.title}. ${nextStep.detail}`);
     const operatorSignals = operatorSignalMap.get(business.id) || { failed: 0, warning: 0 };
 
     return {
@@ -275,11 +329,12 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       leadCount: leadCountMap.get(business.id) ?? 0,
       assignedNumber,
       lastActivityAt,
-      latestFailure,
+      lastIssue,
       overallStatus,
       a2pState,
       attentionSignal,
       operatorSignals,
+      testSmsTruth,
       canSendTestSms: Boolean(assignedNumber && (business.notificationSettings?.ownerPhone || business.notifyPhone)),
     };
   });
@@ -605,12 +660,16 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       </p>
                     </div>
                     <div>
-                      <p className="font-medium">Latest attention signal</p>
+                      <p className="font-medium">Last issue</p>
                       <p className="mt-1 text-muted-foreground">{selectedBusinessRow.attentionSignal}</p>
                     </div>
                     <div>
-                      <p className="font-medium">Current next step</p>
-                      <p className="mt-1 text-muted-foreground">{selectedBusinessRow.nextStep.actionLabel}</p>
+                      <p className="font-medium">Test SMS</p>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        <Badge variant={getOperatorToneBadgeVariant(selectedBusinessRow.testSmsTruth.tone)}>
+                          {selectedBusinessRow.testSmsTruth.label}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -710,11 +769,12 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                   leadCount,
                   assignedNumber,
                   lastActivityAt,
-                  latestFailure,
+                  lastIssue,
                   overallStatus,
                   a2pState,
                   attentionSignal,
                   operatorSignals,
+                  testSmsTruth,
                   canSendTestSms,
                 }) => (
                   <div key={business.id} className="grid gap-4 border-t bg-background/80 px-5 py-4 first:border-t-0 xl:grid-cols-[1.7fr_1fr_1.15fr_0.95fr_1.3fr]">
@@ -728,8 +788,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                         {isBusinessArchived(business) ? <Badge variant="outline">Archived</Badge> : null}
                       </div>
                       <div className="space-y-1 text-sm">
-                        <p className="font-medium">Needs attention signal</p>
-                        <p className={cn('text-muted-foreground', latestFailure ? 'text-destructive' : '')}>{attentionSignal}</p>
+                        <p className="font-medium">Last issue</p>
+                        <p className={cn('text-muted-foreground', lastIssue.state === 'issue' ? 'text-destructive' : '')}>{attentionSignal}</p>
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span>{business.id}</span>
@@ -774,12 +834,16 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       <p className="font-medium">Next action</p>
                       <p>{nextStep.actionLabel}</p>
                       <p className="text-muted-foreground">{nextStep.title}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={getOperatorToneBadgeVariant(testSmsTruth.tone)}>Test SMS {testSmsTruth.label}</Badge>
+                        {lastIssue.state === 'issue' ? <Badge variant={getOperatorToneBadgeVariant(lastIssue.tone)}>Needs attention</Badge> : null}
+                      </div>
                       {business.twilioWebhookSyncedAt ? (
                         <p className="text-xs text-muted-foreground">Webhook sync {formatRelativeTime(business.twilioWebhookSyncedAt)}</p>
                       ) : (
                         <p className="text-xs text-muted-foreground">Webhook sync still needed</p>
                       )}
-                      {latestFailure ? <p className="text-xs text-destructive">Latest issue recorded {formatRelativeTime(latestFailure.createdAt)}</p> : null}
+                      {lastIssue.createdAt ? <p className="text-xs text-destructive">Latest issue recorded {formatRelativeTime(lastIssue.createdAt)}</p> : null}
                     </div>
 
                     <div className="flex flex-wrap content-start gap-2">
