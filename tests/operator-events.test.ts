@@ -65,3 +65,38 @@ test('business operator event reads stay business-scoped', async () => {
     });
   }
 });
+
+test('operator events redact secret-like detail keys before persistence', async () => {
+  const fixtures = await seedTenantFixtures();
+
+  try {
+    const created = await recordBusinessOperatorEvent({
+      businessId: fixtures.businessA.id,
+      type: 'admin.twilio_setup_updated',
+      category: OperatorEventCategory.ADMIN_ACTIONS,
+      status: OperatorEventStatus.INFO,
+      summary: 'Twilio setup updated',
+      details: {
+        webhookUrl: 'https://example.com/webhook',
+        authToken: 'secret-token-value',
+        normalNote: 'Safe to show',
+      },
+    });
+
+    const stored = await db.businessOperatorEvent.findUniqueOrThrow({
+      where: { id: created!.id },
+      select: { detailsJson: true },
+    });
+
+    assert.deepEqual(stored.detailsJson, {
+      webhookUrl: '[redacted]',
+      authToken: '[redacted]',
+      normalNote: 'Safe to show',
+    });
+  } finally {
+    await cleanupTenantFixtures({
+      businessAId: fixtures.businessA.id,
+      businessBId: fixtures.businessB.id,
+    });
+  }
+});

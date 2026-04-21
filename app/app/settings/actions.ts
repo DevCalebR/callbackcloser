@@ -326,7 +326,7 @@ export async function sendBusinessTwilioTestSmsAction(formData: FormData) {
       type: 'admin.test_sms_initiated',
       category: 'ADMIN_ACTIONS',
       status: 'PENDING',
-      summary: 'Test SMS initiated',
+      summary: 'Test SMS requested',
       details: {
         destinationPhone: formatPhoneDetail(destinationPhone),
         fromPhone: formatPhoneDetail(fromPhone),
