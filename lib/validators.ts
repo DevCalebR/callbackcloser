@@ -140,6 +140,10 @@ export const adminDeleteBusinessSchema = z.object({
   confirmationName: z.string().trim().min(1),
 });
 
+export const adminBulkDeleteTestBusinessesSchema = z.object({
+  confirmationText: z.string().trim().min(1),
+});
+
 export const businessTwilioAdminOverrideSchema = z.object({
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
   twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
