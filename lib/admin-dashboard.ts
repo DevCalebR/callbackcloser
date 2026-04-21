@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 
 import { isTestDemoBusiness } from '@/lib/admin-test-data-reset';
+import type { OwnerLinkStatus } from '@/lib/business-owner-link';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { formatMessageStatus, isMessageDeliveryIssueStatus } from '@/lib/lead-presenters';
 
@@ -184,12 +185,14 @@ export function buildAdminNextStep(params: {
   business: DashboardBusiness;
   notificationSettings: DashboardNotificationSettings | null;
   ownerConnected: boolean;
+  ownerStatus?: OwnerLinkStatus;
 }): AdminNextStep {
   const { business, notificationSettings, ownerConnected } = params;
   const managedSummary = getManagedTwilioStatusSummary(business);
   const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
   const ownerPhone = notificationSettings?.ownerPhone?.trim() || business.notifyPhone || null;
   const hasTextingNumber = Boolean(getManagedTextingNumber(business) && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid));
+  const ownerStatus = params.ownerStatus ?? (ownerConnected ? 'connected' : 'pending_invite');
 
   if (isBusinessArchived(business)) {
     return {
@@ -227,14 +230,32 @@ export function buildAdminNextStep(params: {
     };
   }
 
-  if (!ownerConnected) {
+  if (ownerStatus === 'needs_repair') {
     return {
-      title: 'Owner account still needs connection',
-      detail: ownerEmail
-        ? 'The business is saved, but the Clerk owner is not attached yet. Re-run the owner connection flow from admin.'
-        : 'Add the owner email first, then connect or invite the owner.',
+      title: 'Owner link needs repair',
+      detail: 'The accepted Clerk owner account could not be linked cleanly. Reconnect the accepted owner from admin.',
       tone: 'attention',
       actionLabel: 'Connect owner',
+    };
+  }
+
+  if (ownerStatus === 'account_ready') {
+    return {
+      title: 'Accepted owner is ready to connect',
+      detail: 'A matching Clerk owner account already exists. Use the one-click connect action to finish the link.',
+      tone: 'pending',
+      actionLabel: 'Connect accepted owner',
+    };
+  }
+
+  if (!ownerConnected) {
+    return {
+      title: 'Owner invitation is still pending',
+      detail: ownerEmail
+        ? 'The business is saved, but the owner has not completed the Clerk invite yet.'
+        : 'Add the owner email first, then connect or invite the owner.',
+      tone: 'pending',
+      actionLabel: 'Wait for acceptance',
     };
   }
 
@@ -372,12 +393,14 @@ export function buildAdminOnboardingConfidence(params: {
   business: DashboardBusiness;
   notificationSettings: DashboardNotificationSettings | null;
   ownerConnected: boolean;
+  ownerStatus?: OwnerLinkStatus;
   successfulLeadCount: number;
   operatorEvents: Array<{ type: string; status: OperatorEventStatus; createdAt: Date }>;
 }) {
   const { business, notificationSettings, ownerConnected, successfulLeadCount, operatorEvents } = params;
   const managedSummary = getManagedTwilioStatusSummary(business);
-  const nextStep = buildAdminNextStep({ business, notificationSettings, ownerConnected });
+  const ownerStatus = params.ownerStatus ?? (ownerConnected ? 'connected' : 'pending_invite');
+  const nextStep = buildAdminNextStep({ business, notificationSettings, ownerConnected, ownerStatus });
   const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
   const ownerPhone = notificationSettings?.ownerPhone?.trim() || business.notifyPhone || null;
   const hasProfile = Boolean(business.name.trim() && business.forwardingNumber.trim());
@@ -463,7 +486,15 @@ export function buildAdminOnboardingConfidence(params: {
       label: 'Owner connected',
       complete: ownerConnected,
       variant: milestoneVariant({ complete: ownerConnected, blocking: true }),
-      detail: ownerConnected ? 'A Clerk owner is linked to this business.' : ownerEmail ? 'Owner invite or attachment still needs to finish.' : 'Add the owner email and connect the owner account.',
+      detail: ownerConnected
+        ? 'A Clerk owner is linked to this business.'
+        : ownerStatus === 'account_ready'
+          ? 'Accepted owner account found in Clerk. Finish the one-click connect step.'
+          : ownerStatus === 'needs_repair'
+            ? 'Accepted owner exists, but the business link needs repair before setup can continue.'
+            : ownerEmail
+              ? 'Owner invitation is still pending acceptance in Clerk.'
+              : 'Add the owner email and connect the owner account.',
     },
     {
       key: 'owner_alerts',
@@ -631,12 +662,13 @@ export function matchesAdminBoardFilter(
   business: DashboardBusiness,
   notificationSettings: DashboardNotificationSettings | null,
   ownerConnected: boolean,
+  ownerStatus: OwnerLinkStatus | undefined,
   filter: AdminBoardFilter
 ) {
   if (filter === 'all') return true;
 
   const managedSummary = getManagedTwilioStatusSummary(business);
-  const nextStep = buildAdminNextStep({ business, notificationSettings, ownerConnected });
+  const nextStep = buildAdminNextStep({ business, notificationSettings, ownerConnected, ownerStatus });
   const archived = isBusinessArchived(business);
   const paused = isBusinessAutomationPaused(business) && !archived;
 

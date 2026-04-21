@@ -34,7 +34,9 @@ export default async function OnboardingPage({
   const existing = await db.business.findUnique({ where: { ownerClerkId: userId } });
   if (existing) redirect('/app/leads');
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
+  const ownerState = typeof searchParams?.ownerState === 'string' ? searchParams.ownerState : undefined;
   const nextPath = resolveSafeNextPath(typeof searchParams?.next === 'string' ? searchParams.next : undefined);
+  const ownerRepairMode = ownerState === 'needs_repair';
 
   const checklistItems = [
     {
@@ -95,8 +97,12 @@ export default async function OnboardingPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Business profile and defaults</CardTitle>
-          <CardDescription>Set the core business details so we can get your missed-call coverage live fast.</CardDescription>
+          <CardTitle>{ownerRepairMode ? 'Owner access needs admin repair' : 'Business profile and defaults'}</CardTitle>
+          <CardDescription>
+            {ownerRepairMode
+              ? 'Your Clerk account exists, but the business still needs to be linked by an admin before setup can continue.'
+              : 'Set the core business details so we can get your missed-call coverage live fast.'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {error ? (
@@ -104,45 +110,52 @@ export default async function OnboardingPage({
               {error}
             </div>
           ) : null}
-          <form action={saveOnboardingAction} className="grid gap-4 sm:grid-cols-2">
-            <input type="hidden" name="next" value={nextPath} />
-            <div className="sm:col-span-2">
-              <Label htmlFor="name">Business name</Label>
-              <Input id="name" name="name" required placeholder="Acme Plumbing" />
+          {ownerRepairMode ? (
+            <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+              CallbackCloser found your owner account, but the business link needs repair before this workspace can open. Ask the admin to use
+              the visible <span className="font-medium text-foreground">Connect accepted owner</span> action in the admin business page.
             </div>
-            <div>
-              <Label htmlFor="forwardingNumber">Forwarding number</Label>
-              <Input id="forwardingNumber" name="forwardingNumber" required placeholder="+15551234567" />
-            </div>
-            <div>
-              <Label htmlFor="notifyPhone">Owner notify phone</Label>
-              <Input id="notifyPhone" name="notifyPhone" placeholder="+15559876543" />
-              <p className="mt-1 text-xs text-muted-foreground">Recommended. Ready-to-close lead summaries are sent here.</p>
-            </div>
-            <div>
-              <Label htmlFor="missedCallSeconds">Missed-call timeout (seconds)</Label>
-              <Input id="missedCallSeconds" name="missedCallSeconds" type="number" min={5} max={90} defaultValue={20} required />
-            </div>
-            <div>
-              <Label htmlFor="timezone">Timezone</Label>
-              <Input id="timezone" name="timezone" defaultValue="America/New_York" required />
-            </div>
-            <div>
-              <Label htmlFor="serviceLabel1">Service option 1</Label>
-              <Input id="serviceLabel1" name="serviceLabel1" defaultValue="Repair" required />
-            </div>
-            <div>
-              <Label htmlFor="serviceLabel2">Service option 2</Label>
-              <Input id="serviceLabel2" name="serviceLabel2" defaultValue="Install" required />
-            </div>
-            <div>
-              <Label htmlFor="serviceLabel3">Service option 3</Label>
-              <Input id="serviceLabel3" name="serviceLabel3" defaultValue="Maintenance" required />
-            </div>
-            <div className="sm:col-span-2 pt-2">
-              <Button type="submit">Create Business and Continue Setup</Button>
-            </div>
-          </form>
+          ) : (
+            <form action={saveOnboardingAction} className="grid gap-4 sm:grid-cols-2">
+              <input type="hidden" name="next" value={nextPath} />
+              <div className="sm:col-span-2">
+                <Label htmlFor="name">Business name</Label>
+                <Input id="name" name="name" required placeholder="Acme Plumbing" />
+              </div>
+              <div>
+                <Label htmlFor="forwardingNumber">Forwarding number</Label>
+                <Input id="forwardingNumber" name="forwardingNumber" required placeholder="+15551234567" />
+              </div>
+              <div>
+                <Label htmlFor="notifyPhone">Owner notify phone</Label>
+                <Input id="notifyPhone" name="notifyPhone" placeholder="+15559876543" />
+                <p className="mt-1 text-xs text-muted-foreground">Recommended. Ready-to-close lead summaries are sent here.</p>
+              </div>
+              <div>
+                <Label htmlFor="missedCallSeconds">Missed-call timeout (seconds)</Label>
+                <Input id="missedCallSeconds" name="missedCallSeconds" type="number" min={5} max={90} defaultValue={20} required />
+              </div>
+              <div>
+                <Label htmlFor="timezone">Timezone</Label>
+                <Input id="timezone" name="timezone" defaultValue="America/New_York" required />
+              </div>
+              <div>
+                <Label htmlFor="serviceLabel1">Service option 1</Label>
+                <Input id="serviceLabel1" name="serviceLabel1" defaultValue="Repair" required />
+              </div>
+              <div>
+                <Label htmlFor="serviceLabel2">Service option 2</Label>
+                <Input id="serviceLabel2" name="serviceLabel2" defaultValue="Install" required />
+              </div>
+              <div>
+                <Label htmlFor="serviceLabel3">Service option 3</Label>
+                <Input id="serviceLabel3" name="serviceLabel3" defaultValue="Maintenance" required />
+              </div>
+              <div className="sm:col-span-2 pt-2">
+                <Button type="submit">Create Business and Continue Setup</Button>
+              </div>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>

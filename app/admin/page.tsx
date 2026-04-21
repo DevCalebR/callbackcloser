@@ -214,13 +214,13 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
     adminBoardFilterOptions.map((option) => [
       option.key,
       businessRows.filter((item) =>
-        matchesAdminBoardFilter(item.business, item.business.notificationSettings, item.ownerConnected, option.key)
+        matchesAdminBoardFilter(item.business, item.business.notificationSettings, item.ownerConnected, undefined, option.key)
       ).length,
     ])
   );
 
   const visibleRows = businessRows.filter((item) =>
-    matchesAdminBoardFilter(item.business, item.business.notificationSettings, item.ownerConnected, view)
+    matchesAdminBoardFilter(item.business, item.business.notificationSettings, item.ownerConnected, undefined, view)
   );
 
   const summaryStats = [
