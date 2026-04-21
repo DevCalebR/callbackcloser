@@ -137,7 +137,7 @@ export const adminProvisionBusinessSchema = z
 
 export const adminWebhookSyncSchema = z.object({
   businessId: z.string().min(1),
-  target: z.enum(['VOICE', 'SMS', 'ALL']),
+  target: z.enum(['VOICE', 'SMS', 'STATUS', 'ALL']),
 });
 
 export const adminProvisioningStatusSchema = z.object({
@@ -148,6 +148,14 @@ export const adminProvisioningStatusSchema = z.object({
 export const adminSendTestSmsSchema = z.object({
   businessId: z.string().min(1),
   destinationPhone: z.string().trim().min(7).max(30),
+});
+
+export const adminSetupBasicsSchema = z.object({
+  businessId: z.string().min(1),
+  ownerName: z.string().trim().max(120).optional().or(z.literal('')),
+  ownerEmail: z.string().trim().email().optional().or(z.literal('')),
+  ownerPhone: z.string().trim().max(30).optional().or(z.literal('')),
+  forwardingNumber: z.string().trim().min(7).max(30).optional().or(z.literal('')),
 });
 
 export const adminTwilioSetupSchema = z.object({

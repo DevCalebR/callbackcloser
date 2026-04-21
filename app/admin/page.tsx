@@ -318,6 +318,9 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           ? 'Healthy. No immediate operator action needed.'
           : compactCopy(`${nextStep.title}. ${nextStep.detail}`);
     const operatorSignals = operatorSignalMap.get(business.id) || { failed: 0, warning: 0 };
+    const blockerStepHref = lastIssue.remediationStepKey
+      ? `/admin/${business.id}?step=${lastIssue.remediationStepKey}#step-${lastIssue.remediationStepKey}`
+      : null;
 
     return {
       business,
@@ -336,6 +339,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       operatorSignals,
       testSmsTruth,
       canSendTestSms: Boolean(assignedNumber && (business.notificationSettings?.ownerPhone || business.notifyPhone)),
+      blockerStepHref,
     };
   });
 
@@ -676,6 +680,11 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                     <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}`}>
                       Open business
                     </Link>
+                    {selectedBusinessRow.blockerStepHref ? (
+                      <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={selectedBusinessRow.blockerStepHref}>
+                        Open blocker step
+                      </Link>
+                    ) : null}
                     <Link
                       className={buttonVariants({ variant: 'outline', size: 'sm' })}
                       href={buildAdminCustomerOpenHref(selectedBusinessRow.business.id, '/app')}
@@ -776,6 +785,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                   operatorSignals,
                   testSmsTruth,
                   canSendTestSms,
+                  blockerStepHref,
                 }) => (
                   <div key={business.id} className="grid gap-4 border-t bg-background/80 px-5 py-4 first:border-t-0 xl:grid-cols-[1.7fr_1fr_1.15fr_0.95fr_1.3fr]">
                     <div className="space-y-3">
@@ -850,6 +860,11 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       <Link className={buttonVariants({ size: 'sm' })} href={`/admin/${business.id}`}>
                         Open business
                       </Link>
+                      {blockerStepHref ? (
+                        <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={blockerStepHref}>
+                          Open blocker step
+                        </Link>
+                      ) : null}
                       <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
                         Open customer workspace
                       </Link>

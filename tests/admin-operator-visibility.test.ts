@@ -74,6 +74,28 @@ test('admin business issue prefers the latest recorded issue and falls back to t
 
   assert.equal(eventIssue.summary, 'Webhook sync failed');
   assert.equal(eventIssue.eventType, 'webhooks.sync_failed');
+  assert.equal(eventIssue.remediationStepKey, 'voice_webhook_synced');
+
+  const statusIssue = buildAdminBusinessIssue({
+    events: [
+      {
+        type: 'webhooks.sync_failed',
+        category: OperatorEventCategory.WEBHOOKS,
+        status: OperatorEventStatus.FAILED,
+        summary: 'Webhook sync failed',
+        detailsJson: { target: 'STATUS', error: 'Callback URL mismatch.' },
+        createdAt: new Date('2026-04-20T12:03:00.000Z'),
+      },
+    ],
+    currentStep: {
+      stepKey: 'messaging_service_ready',
+      title: 'Messaging Service missing',
+      detail: 'Save or create a Messaging Service before sending live SMS.',
+      tone: 'attention',
+    },
+  });
+
+  assert.equal(statusIssue.remediationStepKey, 'status_callback_synced');
 
   const fallbackIssue = buildAdminBusinessIssue({
     events: [],
