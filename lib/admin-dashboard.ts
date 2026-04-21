@@ -28,6 +28,8 @@ type DashboardBusiness = Pick<
   | 'provisioningLastRunAt'
   | 'forwardingNumber'
   | 'notifyPhone'
+  | 'twilioAccountMode'
+  | 'twilioNumberSetupMode'
   | 'twilioSubaccountSid'
   | 'twilioMessagingServiceSid'
   | 'twilioPrimaryNumberSid'
@@ -238,10 +240,13 @@ export function buildAdminNextStep(params: {
     };
   }
 
-  if (!business.twilioSubaccountSid) {
+  if (!managedSummary.accountReady) {
     return {
-      title: 'Twilio subaccount is missing',
-      detail: 'Managed provisioning cannot finish until the business has a Twilio subaccount attached.',
+      title: business.twilioAccountMode === 'MAIN_ACCOUNT' ? 'Main Twilio account still needs review' : 'Twilio subaccount is missing',
+      detail:
+        business.twilioAccountMode === 'MAIN_ACCOUNT'
+          ? 'This business is set to use the main Twilio account directly. Confirm the parent-account mapping before continuing.'
+          : 'Managed provisioning cannot finish until the business has a Twilio subaccount attached.',
       tone: 'attention',
       actionLabel: 'Re-run provisioning',
     };
@@ -382,7 +387,7 @@ export function buildAdminOnboardingConfidence(params: {
   const ownerPhone = notificationSettings?.ownerPhone?.trim() || business.notifyPhone || null;
   const hasProfile = Boolean(business.name.trim() && business.forwardingNumber.trim());
   const ownerAlertsReady = Boolean(ownerPhone || ownerEmail);
-  const twilioSetupReady = Boolean(business.twilioSubaccountSid);
+  const twilioSetupReady = managedSummary.accountReady;
   const numberReady = Boolean(getManagedTextingNumber(business) && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid));
   const messagingServiceReady = Boolean(business.twilioMessagingServiceSid);
   const webhooksReady = Boolean(business.twilioWebhookSyncedAt);

@@ -1,4 +1,4 @@
-import { ManagedTwilioStatus, type Business } from '@prisma/client';
+import { ManagedTwilioStatus, TwilioAccountMode, type Business } from '@prisma/client';
 
 import { db } from '@/lib/db';
 import {
@@ -13,13 +13,14 @@ import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/o
 import { normalizePhoneNumber } from '@/lib/phone';
 import { logTwilioInfo } from '@/lib/twilio-logging';
 import { getTwilioWebhookConfig, syncTwilioIncomingPhoneNumberWebhooks } from '@/lib/twilio';
-import { getTwilioSubaccountClient } from '@/lib/twilio-client';
+import { getTwilioClient, getTwilioSubaccountClient } from '@/lib/twilio-client';
 import { ensureTwilioSubaccount } from '@/lib/twilio-provision';
 
 type ManagedTwilioBusiness = Pick<
   Business,
   | 'id'
   | 'name'
+  | 'twilioAccountMode'
   | 'twilioSubaccountSid'
   | 'twilioMessagingServiceSid'
   | 'twilioPrimaryNumberSid'
@@ -36,6 +37,31 @@ type ManagedTwilioBusiness = Pick<
 >;
 
 type AreaCodeInput = string | number | null | undefined;
+
+function getTwilioAccountMode(business: Pick<ManagedTwilioBusiness, 'twilioAccountMode'>) {
+  return business.twilioAccountMode || TwilioAccountMode.BUSINESS_SUBACCOUNT;
+}
+
+async function getProvisioningClient(
+  business: Pick<ManagedTwilioBusiness, 'id' | 'name' | 'twilioAccountMode' | 'twilioSubaccountSid'>,
+  correlationId: string
+) {
+  const accountMode = getTwilioAccountMode(business);
+  if (accountMode === TwilioAccountMode.MAIN_ACCOUNT) {
+    return {
+      accountMode,
+      client: getTwilioClient(),
+      subaccountSid: null as string | null,
+    };
+  }
+
+  const subaccountSid = business.twilioSubaccountSid || (await createSubaccountForBusiness(business, correlationId));
+  return {
+    accountMode,
+    client: getTwilioSubaccountClient(subaccountSid),
+    subaccountSid,
+  };
+}
 
 function parseAreaCode(areaCode: AreaCodeInput) {
   if (typeof areaCode === 'number' && Number.isInteger(areaCode) && areaCode >= 100 && areaCode <= 999) {
@@ -167,7 +193,7 @@ export async function createSubaccountForBusiness(business: Pick<ManagedTwilioBu
 }
 
 export async function createMessagingServiceForBusiness(
-  business: Pick<ManagedTwilioBusiness, 'id' | 'name' | 'twilioSubaccountSid' | 'twilioMessagingServiceSid'>,
+  business: Pick<ManagedTwilioBusiness, 'id' | 'name' | 'twilioAccountMode' | 'twilioSubaccountSid' | 'twilioMessagingServiceSid'>,
   correlationId = 'n/a'
 ) {
   if (business.twilioMessagingServiceSid) {
@@ -185,8 +211,7 @@ export async function createMessagingServiceForBusiness(
     return business.twilioMessagingServiceSid;
   }
 
-  const subaccountSid = business.twilioSubaccountSid || (await createSubaccountForBusiness(business, correlationId));
-  const client = getTwilioSubaccountClient(subaccountSid);
+  const { client, subaccountSid } = await getProvisioningClient(business, correlationId);
   const service = await client.messaging.v1.services.create({
     friendlyName: getFriendlyManagedTwilioName(business.name),
     useInboundWebhookOnNumber: true,
@@ -221,7 +246,10 @@ export async function createMessagingServiceForBusiness(
 }
 
 export async function buyOrProvisionPrimaryNumberForBusiness(
-  business: Pick<ManagedTwilioBusiness, 'id' | 'name' | 'twilioSubaccountSid' | 'twilioPrimaryNumberSid' | 'twilioPrimaryPhoneNumber'>,
+  business: Pick<
+    ManagedTwilioBusiness,
+    'id' | 'name' | 'twilioAccountMode' | 'twilioSubaccountSid' | 'twilioPrimaryNumberSid' | 'twilioPrimaryPhoneNumber'
+  >,
   options: { areaCode?: AreaCodeInput; correlationId?: string } = {}
 ) {
   const correlationId = options.correlationId ?? 'n/a';
@@ -245,8 +273,7 @@ export async function buyOrProvisionPrimaryNumberForBusiness(
     };
   }
 
-  const subaccountSid = business.twilioSubaccountSid || (await createSubaccountForBusiness(business, correlationId));
-  const client = getTwilioSubaccountClient(subaccountSid);
+  const { client, subaccountSid } = await getProvisioningClient(business, correlationId);
   const areaCode = parseAreaCode(options.areaCode);
   const candidates = await client.availablePhoneNumbers('US').local.list({
     limit: 1,
@@ -313,6 +340,7 @@ export async function syncManagedTwilioNumberWebhooks(
     ManagedTwilioBusiness,
     | 'id'
     | 'name'
+    | 'twilioAccountMode'
     | 'twilioSubaccountSid'
     | 'twilioPrimaryNumberSid'
     | 'twilioPhoneNumberSid'
@@ -326,8 +354,7 @@ export async function syncManagedTwilioNumberWebhooks(
     throw new Error('Managed Twilio primary number is missing');
   }
 
-  const subaccountSid = business.twilioSubaccountSid || (await createSubaccountForBusiness(business, correlationId));
-  const client = getTwilioSubaccountClient(subaccountSid);
+  const { client, subaccountSid } = await getProvisioningClient(business, correlationId);
   const { number } = await syncTwilioIncomingPhoneNumberWebhooks(phoneNumberSid, client);
   const normalized = normalizePhoneNumber(number.phoneNumber);
   const syncedAt = new Date();
@@ -372,18 +399,20 @@ export async function syncManagedTwilioNumberWebhooks(
 }
 
 export async function attachNumberToMessagingService(
-  business: Pick<ManagedTwilioBusiness, 'id' | 'name' | 'twilioSubaccountSid' | 'twilioMessagingServiceSid' | 'twilioPrimaryNumberSid'>,
+  business: Pick<
+    ManagedTwilioBusiness,
+    'id' | 'name' | 'twilioAccountMode' | 'twilioSubaccountSid' | 'twilioMessagingServiceSid' | 'twilioPrimaryNumberSid'
+  >,
   correlationId = 'n/a'
 ) {
   const messagingServiceSid = await createMessagingServiceForBusiness(business, correlationId);
   const primaryNumberSid = business.twilioPrimaryNumberSid;
-  const subaccountSid = business.twilioSubaccountSid || (await createSubaccountForBusiness(business, correlationId));
 
   if (!primaryNumberSid) {
     throw new Error('Managed Twilio primary number is missing');
   }
 
-  const client = getTwilioSubaccountClient(subaccountSid);
+  const { client, subaccountSid } = await getProvisioningClient(business, correlationId);
   try {
     await client.messaging.v1.services(messagingServiceSid).phoneNumbers.create({
       phoneNumberSid: primaryNumberSid,
@@ -435,6 +464,7 @@ export async function syncComplianceStatus(
     ManagedTwilioBusiness,
     | 'id'
     | 'managedTwilioStatus'
+    | 'twilioAccountMode'
     | 'twilioSubaccountSid'
     | 'twilioMessagingServiceSid'
     | 'twilioPrimaryNumberSid'
@@ -456,7 +486,13 @@ export async function syncComplianceStatus(
 export async function provisionManagedTwilioForBusiness(
   business: Pick<
     ManagedTwilioBusiness,
-    'id' | 'name' | 'twilioSubaccountSid' | 'twilioMessagingServiceSid' | 'twilioPrimaryNumberSid' | 'twilioPrimaryPhoneNumber'
+    | 'id'
+    | 'name'
+    | 'twilioAccountMode'
+    | 'twilioSubaccountSid'
+    | 'twilioMessagingServiceSid'
+    | 'twilioPrimaryNumberSid'
+    | 'twilioPrimaryPhoneNumber'
   >,
   options: { areaCode?: AreaCodeInput; correlationId?: string } = {}
 ) {
@@ -476,7 +512,8 @@ export async function provisionManagedTwilioForBusiness(
     twilioProvisioningStartedAt: new Date(),
   });
 
-  const subaccountSid = await createSubaccountForBusiness(business, correlationId);
+  const provisioningTarget = await getProvisioningClient(business, correlationId);
+  const subaccountSid = provisioningTarget.subaccountSid;
   const messagingServiceSid = await createMessagingServiceForBusiness(
     { ...business, twilioSubaccountSid: subaccountSid, twilioMessagingServiceSid: business.twilioMessagingServiceSid },
     correlationId

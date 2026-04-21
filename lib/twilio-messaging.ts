@@ -127,6 +127,7 @@ export async function sendAndPersistOutboundMessage(params: {
   ) {
     const managedSummary = getManagedTwilioStatusSummary({
       managedTwilioStatus: params.managedTwilioStatus,
+      twilioAccountMode: params.twilioSubaccountSid ? 'BUSINESS_SUBACCOUNT' : 'MAIN_ACCOUNT',
       twilioSubaccountSid: params.twilioSubaccountSid ?? null,
       twilioPrimaryPhoneNumber: from,
       twilioPhoneNumber: from,

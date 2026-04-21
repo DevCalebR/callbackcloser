@@ -1,9 +1,14 @@
 import { z } from 'zod';
 
+const twilioAccountModeSchema = z.enum(['MAIN_ACCOUNT', 'BUSINESS_SUBACCOUNT']);
+const twilioNumberSetupModeSchema = z.enum(['NEW_NUMBER', 'EXISTING_NUMBER']);
+
 export const onboardingSchema = z.object({
   name: z.string().min(2).max(120),
   forwardingNumber: z.string().min(7).max(30),
   notifyPhone: z.string().max(30).optional().or(z.literal('')),
+  twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
+  twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
   missedCallSeconds: z.coerce.number().int().min(5).max(90).default(20),
   serviceLabel1: z.string().min(1).max(40),
   serviceLabel2: z.string().min(1).max(40),
@@ -55,6 +60,9 @@ export const adminBusinessUpdateSchema = adminBusinessDraftSchema.extend({
   businessId: z.string().min(1),
   ownerClerkId: z.string().trim().optional().or(z.literal('')),
   internalNotes: z.string().trim().max(5_000).optional().or(z.literal('')),
+  twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
+  twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
+  twilioSubaccountSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
   twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
@@ -130,6 +138,33 @@ export const adminSendTestSmsSchema = z.object({
   destinationPhone: z.string().trim().min(7).max(30),
 });
 
+export const adminTwilioSetupSchema = z.object({
+  businessId: z.string().min(1),
+  twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
+  twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
+  twilioSubaccountSid: z.string().trim().max(64).optional().or(z.literal('')),
+  twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
+  twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
+  twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pCustomerProfileSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pBrandSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pCampaignSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pFailureReason: z.string().trim().max(500).optional().or(z.literal('')),
+  managedTwilioStatus: z
+    .enum([
+      'DRAFT',
+      'PROVISIONING',
+      'AWAITING_BUSINESS_VERIFICATION',
+      'BRAND_SUBMITTED',
+      'CAMPAIGN_SUBMITTED',
+      'COMPLIANT_LIVE',
+      'PAUSED_NONCOMPLIANT',
+      'FAILED_REVIEW',
+    ])
+    .default('DRAFT'),
+  confirmCriticalFieldClears: z.coerce.boolean().optional().default(false),
+});
+
 export const adminArchiveBusinessSchema = z.object({
   businessId: z.string().min(1),
   confirmationName: z.string().trim().min(1),
@@ -145,9 +180,37 @@ export const adminBulkDeleteTestBusinessesSchema = z.object({
 });
 
 export const businessTwilioAdminOverrideSchema = z.object({
+  twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
+  twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
+  twilioSubaccountSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
   twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pCustomerProfileSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pBrandSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pCampaignSid: z.string().trim().max(64).optional().or(z.literal('')),
+  a2pFailureReason: z.string().trim().max(500).optional().or(z.literal('')),
+  managedTwilioStatus: z
+    .enum([
+      'DRAFT',
+      'PROVISIONING',
+      'AWAITING_BUSINESS_VERIFICATION',
+      'BRAND_SUBMITTED',
+      'CAMPAIGN_SUBMITTED',
+      'COMPLIANT_LIVE',
+      'PAUSED_NONCOMPLIANT',
+      'FAILED_REVIEW',
+    ])
+    .default('DRAFT'),
   ownerPhone: z.string().trim().max(30).optional().or(z.literal('')),
   confirmCriticalFieldClears: z.coerce.boolean().optional().default(false),
+});
+
+export const businessTwilioSetupChoiceSchema = z.object({
+  twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
+  twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
+});
+
+export const businessTwilioTestSmsSchema = z.object({
+  destinationPhone: z.string().trim().min(7).max(30),
 });

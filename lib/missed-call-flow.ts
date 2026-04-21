@@ -15,6 +15,7 @@ type LeadFlowBusiness = Pick<
   | 'name'
   | 'ownerClerkId'
   | 'notifyPhone'
+  | 'twilioAccountMode'
   | 'twilioSubaccountSid'
   | 'twilioMessagingServiceSid'
   | 'twilioPhoneNumber'
@@ -180,7 +181,7 @@ export async function startMissedCallRecovery(params: StartRecoveryParams) {
     body: prompt,
     transport: params.transport ?? (params.isSimulator ? 'simulated' : 'twilio'),
     isSimulator: params.isSimulator,
-    twilioSubaccountSid: params.business.twilioSubaccountSid,
+    twilioSubaccountSid: params.business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : params.business.twilioSubaccountSid,
     twilioMessagingServiceSid: params.business.twilioMessagingServiceSid,
     managedTwilioStatus: params.business.managedTwilioStatus,
     a2pFailureReason: params.business.a2pFailureReason,
@@ -278,7 +279,7 @@ export async function processLeadInboundReply(params: ProcessReplyParams) {
     body: transition.responseText,
     transport: params.transport ?? (lead.isSimulator ? 'simulated' : 'twilio'),
     isSimulator: lead.isSimulator,
-    twilioSubaccountSid: params.business.twilioSubaccountSid,
+    twilioSubaccountSid: params.business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : params.business.twilioSubaccountSid,
     twilioMessagingServiceSid: params.business.twilioMessagingServiceSid,
     managedTwilioStatus: params.business.managedTwilioStatus,
     a2pFailureReason: params.business.a2pFailureReason,

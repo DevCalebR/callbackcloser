@@ -49,6 +49,8 @@ const demoBusiness: Business = {
   serviceLabel2: 'Install',
   serviceLabel3: 'Maintenance',
   timezone: 'America/Chicago',
+  twilioAccountMode: 'BUSINESS_SUBACCOUNT',
+  twilioNumberSetupMode: 'NEW_NUMBER',
   twilioSubaccountSid: 'ACbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   twilioMessagingServiceSid: 'MGbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   twilioPrimaryNumberSid: 'PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',

@@ -1,14 +1,16 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+import { BusinessProvisioningStatus, ManagedTwilioStatus, TwilioAccountMode, TwilioNumberSetupMode } from '@prisma/client';
 
 import { saveOnboardingAction } from '@/app/app/onboarding/actions';
-import { SetupChecklist } from '@/components/setup-checklist';
+import { TwilioSetupChecklist } from '@/components/twilio-setup-checklist';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/db';
+import { buildTwilioSetupFlow, twilioAccountModeOptions, twilioNumberSetupModeOptions } from '@/lib/twilio-setup';
 
 const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/settings';
 
@@ -36,32 +38,34 @@ export default async function OnboardingPage({
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const nextPath = resolveSafeNextPath(typeof searchParams?.next === 'string' ? searchParams.next : undefined);
 
-  const checklistItems = [
-    {
-      key: 'routing',
-      label: 'Connect phone / routing',
-      detail: 'Create the business first, then confirm which line should ring while CallbackCloser sets up the texting line that covers missed calls.',
-      complete: false,
+  const setupPreviewFlow = buildTwilioSetupFlow({
+    business: {
+      name: 'New business workspace',
+      notifyPhone: null,
+      forwardingNumber: '',
+      provisioningStatus: BusinessProvisioningStatus.DRAFT,
+      twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
+      twilioNumberSetupMode: TwilioNumberSetupMode.NEW_NUMBER,
+      twilioSubaccountSid: null,
+      twilioMessagingServiceSid: null,
+      twilioPrimaryNumberSid: null,
+      twilioPhoneNumberSid: null,
+      twilioPrimaryPhoneNumber: null,
+      twilioPhoneNumber: null,
+      twilioWebhookSyncedAt: null,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+      a2pCustomerProfileSid: null,
+      a2pBrandSid: null,
+      a2pCampaignSid: null,
+      a2pFailureReason: null,
+      a2pApprovedAt: null,
     },
-    {
-      key: 'sms',
-      label: 'Verify SMS template',
-      detail: 'Check the first automated text and the qualification prompts before live traffic starts.',
-      complete: false,
-    },
-    {
-      key: 'alerts',
-      label: 'Verify owner notifications',
-      detail: 'Add the owner mobile number so lead summaries reach the right phone immediately.',
-      complete: false,
-    },
-    {
-      key: 'test',
-      label: 'Run test lead',
-      detail: 'Place a missed-call test after settings and billing are complete so you can confirm the full handoff.',
-      complete: false,
-    },
-  ];
+    notificationSettings: null,
+    ownerConnected: true,
+    successfulLeadCount: 0,
+    testSmsState: 'not_started',
+    webhookSnapshot: null,
+  });
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -70,26 +74,38 @@ export default async function OnboardingPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Create your business workspace</h1>
           <p className="text-sm text-muted-foreground">
-            Start with the business details now. Next, you will land in Business Settings where CallbackCloser helps set up your texting line, routing, owner alerts, billing, and the A2P approval path needed before live customer texting is truly ready.
+            Start with the business details and Twilio setup choices here. After you save, CallbackCloser opens the same shared setup flow used later for ongoing business control, without auto-provisioning ahead of your chosen account mode.
           </p>
         </div>
       </div>
 
-      <SetupChecklist
-        title="First successful activation path"
-        description="CallbackCloser works best when the first missed-call test is treated like a guided rollout, not a blind setup sprint."
-        items={checklistItems}
+      <TwilioSetupChecklist
+        title="CallbackCloser Twilio launch flow"
+        description="The new-business setup starts the exact same step-by-step rollout you will keep using later in the business control panel."
+        banner={{
+          title: 'Create the business workspace first',
+          detail:
+            'Save the business basics below. Then the shared Twilio setup flow opens with your account mode and number path already selected near the top.',
+          tone: 'pending',
+          stepKey: 'account_mode',
+        }}
+        bannerAction={
+          <a className={buttonVariants({ size: 'sm' })} href="#onboarding-business-form">
+            Start setup
+          </a>
+        }
+        steps={setupPreviewFlow.steps}
       />
 
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <CardTitle>What happens after this form</CardTitle>
-          <CardDescription>Reduce onboarding drag by keeping the next steps explicit.</CardDescription>
+          <CardDescription>Reduce onboarding drag by carrying your Twilio choices directly into the guided control panel.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-          <div className="rounded-xl border bg-background/80 p-4">1. Business Settings opens so you can confirm routing and we can provision your business texting line.</div>
-          <div className="rounded-xl border bg-background/80 p-4">2. Billing and A2P readiness are confirmed so live missed calls can trigger compliant automated SMS follow-up.</div>
-          <div className="rounded-xl border bg-background/80 p-4">3. You run the missed-call test and confirm the owner alert arrives with a ready-to-call summary.</div>
+          <div className="rounded-xl border bg-background/80 p-4">1. The shared Twilio setup flow opens with your chosen account mode and number path already saved for this business.</div>
+          <div className="rounded-xl border bg-background/80 p-4">2. Nothing gets auto-provisioned before you can review Messaging Service, number assignment, webhooks, and honest A2P status in plain English.</div>
+          <div className="rounded-xl border bg-background/80 p-4">3. You send the test SMS, run the missed-call validation, and only mark live after the checklist is actually clear.</div>
         </CardContent>
       </Card>
 
@@ -104,8 +120,59 @@ export default async function OnboardingPage({
               {error}
             </div>
           ) : null}
-          <form action={saveOnboardingAction} className="grid gap-4 sm:grid-cols-2">
+          <form action={saveOnboardingAction} className="grid gap-4 sm:grid-cols-2" id="onboarding-business-form">
             <input type="hidden" name="next" value={nextPath} />
+            <div className="sm:col-span-2 space-y-3 rounded-xl border bg-background/80 p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Twilio account mode</p>
+                <p className="text-sm text-muted-foreground">Choose the account context before CallbackCloser provisions anything for this business.</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {twilioAccountModeOptions.map((option) => (
+                  <label key={option.value} className="rounded-xl border bg-card/80 p-4 text-sm">
+                    <div className="flex items-start gap-3">
+                      <input
+                        defaultChecked={option.value === TwilioAccountMode.BUSINESS_SUBACCOUNT}
+                        name="twilioAccountMode"
+                        type="radio"
+                        value={option.value}
+                      />
+                      <div className="space-y-1">
+                        <p className="font-medium">{option.label}</p>
+                        <p className="text-muted-foreground">{option.description}</p>
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="sm:col-span-2 space-y-3 rounded-xl border bg-background/80 p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Number path</p>
+                <p className="text-sm text-muted-foreground">Choose whether CallbackCloser should provision a new number or keep the rollout on an existing Twilio number.</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {twilioNumberSetupModeOptions.map((option) => (
+                  <label key={option.value} className="rounded-xl border bg-card/80 p-4 text-sm">
+                    <div className="flex items-start gap-3">
+                      <input
+                        defaultChecked={option.value === TwilioNumberSetupMode.NEW_NUMBER}
+                        name="twilioNumberSetupMode"
+                        type="radio"
+                        value={option.value}
+                      />
+                      <div className="space-y-1">
+                        <p className="font-medium">{option.label}</p>
+                        <p className="text-muted-foreground">{option.description}</p>
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Existing-number support stays admin-assisted unless the number already lives in the chosen Twilio account context.
+              </p>
+            </div>
             <div className="sm:col-span-2">
               <Label htmlFor="name">Business name</Label>
               <Input id="name" name="name" required placeholder="Acme Plumbing" />

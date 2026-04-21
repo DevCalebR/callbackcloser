@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BusinessProvisioningStatus, ManagedTwilioStatus, SubscriptionStatus } from '@prisma/client';
+import { BusinessProvisioningStatus, ManagedTwilioStatus, SubscriptionStatus, TwilioAccountMode, TwilioNumberSetupMode } from '@prisma/client';
 
 import {
   buildAdminProvisioningChecklist,
@@ -24,6 +24,8 @@ function createBusiness(overrides: Record<string, unknown> = {}) {
     serviceLabel3: 'Maintenance',
     missedCallSeconds: 20,
     subscriptionStatus: SubscriptionStatus.ACTIVE,
+    twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
+    twilioNumberSetupMode: TwilioNumberSetupMode.NEW_NUMBER,
     managedTwilioStatus: ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION,
     managedTwilioStatusUpdatedAt: new Date('2026-04-15T00:00:00.000Z'),
     twilioSubaccountSid: 'AC_TEST_SUBACCOUNT',

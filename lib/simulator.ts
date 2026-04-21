@@ -45,6 +45,7 @@ export async function getSimulatorBusiness() {
       name: true,
       ownerClerkId: true,
       notifyPhone: true,
+      twilioAccountMode: true,
       twilioSubaccountSid: true,
       twilioMessagingServiceSid: true,
       twilioPhoneNumber: true,
@@ -80,6 +81,7 @@ export async function getSimulatorRun(publicId: string) {
         select: {
           id: true,
           name: true,
+          twilioAccountMode: true,
           twilioSubaccountSid: true,
           twilioMessagingServiceSid: true,
           twilioPhoneNumber: true,
@@ -103,6 +105,7 @@ export type SimulatorRunRecord = SimulatorRun & {
     Business,
     | 'id'
     | 'name'
+    | 'twilioAccountMode'
     | 'twilioSubaccountSid'
     | 'twilioMessagingServiceSid'
     | 'twilioPhoneNumber'

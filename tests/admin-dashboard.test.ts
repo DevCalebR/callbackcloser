@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BusinessProvisioningStatus, ManagedTwilioStatus, OperatorEventStatus, SubscriptionStatus } from '@prisma/client';
+import {
+  BusinessProvisioningStatus,
+  ManagedTwilioStatus,
+  OperatorEventStatus,
+  SubscriptionStatus,
+  TwilioAccountMode,
+  TwilioNumberSetupMode,
+} from '@prisma/client';
 
 import {
   buildAdminOnboardingConfidence,
@@ -25,6 +32,8 @@ function createBusiness(overrides: Record<string, unknown> = {}) {
     provisioningStatus: BusinessProvisioningStatus.ONBOARDING,
     provisioningLastRunAt: new Date('2026-04-15T00:00:00.000Z'),
     provisioningError: null,
+    twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
+    twilioNumberSetupMode: TwilioNumberSetupMode.NEW_NUMBER,
     twilioSubaccountSid: 'AC_TEST_SUBACCOUNT',
     twilioMessagingServiceSid: 'MG_TEST_SERVICE',
     twilioPrimaryNumberSid: 'PN_TEST_PRIMARY',

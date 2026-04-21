@@ -19,6 +19,7 @@ type NotificationLeadRecord = Lead & {
     | 'name'
     | 'ownerClerkId'
     | 'notifyPhone'
+    | 'twilioAccountMode'
     | 'twilioSubaccountSid'
     | 'twilioMessagingServiceSid'
     | 'twilioPrimaryPhoneNumber'
@@ -133,6 +134,7 @@ async function getLeadForOwnerNotifications(leadId: string) {
           name: true,
           ownerClerkId: true,
           notifyPhone: true,
+          twilioAccountMode: true,
           twilioSubaccountSid: true,
           twilioMessagingServiceSid: true,
           twilioPrimaryPhoneNumber: true,
@@ -234,7 +236,7 @@ export async function sendOwnerLeadSms(leadId: string) {
       body,
       participant: 'OWNER',
       context: 'owner_alert',
-      twilioSubaccountSid: lead.business.twilioSubaccountSid,
+      twilioSubaccountSid: lead.business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : lead.business.twilioSubaccountSid,
       messagingServiceSid: lead.business.twilioMessagingServiceSid,
       managedTwilioStatus: lead.business.managedTwilioStatus,
       a2pFailureReason: lead.business.a2pFailureReason,
