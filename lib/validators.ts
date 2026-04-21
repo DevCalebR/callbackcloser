@@ -150,6 +150,17 @@ export const adminSendTestSmsSchema = z.object({
   destinationPhone: z.string().trim().min(7).max(30),
 });
 
+export const adminMissedCallValidationConfirmationSchema = z.object({
+  businessId: z.string().min(1),
+  note: z.string().trim().min(12).max(500),
+});
+
+export const adminMarkBusinessLiveSchema = z.object({
+  businessId: z.string().min(1),
+  note: z.string().trim().max(500).optional().or(z.literal('')),
+  acknowledgeWarnings: z.coerce.boolean().optional().default(false),
+});
+
 export const adminSetupBasicsSchema = z.object({
   businessId: z.string().min(1),
   ownerName: z.string().trim().max(120).optional().or(z.literal('')),

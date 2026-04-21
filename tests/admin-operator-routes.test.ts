@@ -23,7 +23,7 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminHome, /Delete all test\/demo businesses/);
   assert.match(adminHome, /BULK_TEST_DATA_RESET_CONFIRMATION/);
   assert.match(adminHome, /Business triage board/);
-  assert.match(adminHome, /Last issue/);
+  assert.match(adminHome, /Go-live blocker/);
   assert.match(adminHome, /Test SMS/);
   assert.match(adminHome, /Open customer workspace/);
   assert.match(adminHome, /Delete demo\/test business permanently/);
@@ -34,6 +34,8 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminActions, /export async function saveAdminSetupBasicsAction/);
   assert.match(adminActions, /export async function createBusinessTwilioSubaccountAction/);
   assert.match(adminActions, /export async function createBusinessMessagingServiceAction/);
+  assert.match(adminActions, /export async function confirmMissedCallValidationAction/);
+  assert.match(adminActions, /export async function markBusinessLiveAction/);
   assert.match(adminActions, /must start with \$\{prefix\}/);
   assert.match(adminActions, /const admin = await requireAdmin\(\)/);
   assert.match(adminHome, /View support workspace snapshot/);
@@ -44,13 +46,18 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /Setup steps/);
   assert.match(adminDetail, /Last issue/);
   assert.match(adminDetail, /Test SMS truth/);
+  assert.match(adminDetail, /Onboarding confidence/);
   assert.match(adminDetail, /Next step/);
   assert.match(adminDetail, /Mark business live/);
+  assert.match(adminDetail, /Mark missed-call flow validated/);
+  assert.match(adminDetail, /Mark live with warnings/);
   assert.match(adminDetail, /Advanced/);
   assert.match(adminDetail, /Invite owner by email/);
   assert.match(adminDetail, /Connect existing owner/);
   assert.match(adminDetail, /Send test SMS/);
   assert.match(stepCard, /Manual fallback \/ manual entry/);
+  assert.match(stepCard, /Latest evidence/);
+  assert.match(stepCard, /Warnings before completion/);
   assert.match(stepCard, /Step-by-step/);
   assert.match(stepCard, /How to verify/);
   assert.match(adminDetail, /Create subaccount automatically/);

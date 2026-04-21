@@ -11,7 +11,9 @@ import {
   type OwnerNotification,
 } from '@prisma/client';
 
+import type { TwilioWebhookSnapshot } from '@/lib/admin-provisioning-presenters';
 import { DEMO_OWNER_CLERK_ID, isTestDemoBusiness } from '@/lib/admin-test-data-reset';
+import type { AdminMissedCallValidationTruth } from '@/lib/admin-operator-proof';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { formatMessageStatus, isMessageDeliveryIssueStatus } from '@/lib/lead-presenters';
 
@@ -412,8 +414,10 @@ export function buildAdminOnboardingConfidence(params: {
   ownerConnected: boolean;
   successfulLeadCount: number;
   operatorEvents: Array<{ type: string; status: OperatorEventStatus; createdAt: Date }>;
+  webhookSnapshot?: TwilioWebhookSnapshot | null;
+  missedCallValidation?: Pick<AdminMissedCallValidationTruth, 'countsAsLaunchProof' | 'detail'> | null;
 }) {
-  const { business, notificationSettings, ownerConnected, successfulLeadCount, operatorEvents } = params;
+  const { business, notificationSettings, ownerConnected, successfulLeadCount, operatorEvents, webhookSnapshot, missedCallValidation } = params;
   const managedSummary = getManagedTwilioStatusSummary(business);
   const nextStep = buildAdminNextStep({ business, notificationSettings, ownerConnected });
   const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
@@ -423,7 +427,10 @@ export function buildAdminOnboardingConfidence(params: {
   const twilioSetupReady = managedSummary.accountReady;
   const numberReady = Boolean(getManagedTextingNumber(business) && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid));
   const messagingServiceReady = Boolean(business.twilioMessagingServiceSid);
-  const webhooksReady = Boolean(business.twilioWebhookSyncedAt);
+  const webhooksReady =
+    webhookSnapshot && !webhookSnapshot.error
+      ? webhookSnapshot.voiceSynced && webhookSnapshot.smsSynced && webhookSnapshot.statusSynced
+      : Boolean(business.twilioWebhookSyncedAt);
   const compliancePending =
     managedSummary.onboardingReady && !managedSummary.complianceReady && !managedSummary.attentionRequired;
   const latestTestSmsState = getAdminTestSmsConfidenceState(operatorEvents);
@@ -433,7 +440,7 @@ export function buildAdminOnboardingConfidence(params: {
   const hasRecentFailures = operatorEvents.some(
     (event) => event.status === OperatorEventStatus.FAILED || event.status === OperatorEventStatus.WARNING
   );
-  const missedCallValidated = successfulLeadCount > 0;
+  const missedCallValidated = missedCallValidation?.countsAsLaunchProof ?? successfulLeadCount > 0;
   const readyForTest = ownerConnected && ownerAlertsReady && twilioSetupReady && numberReady && messagingServiceReady && webhooksReady && managedSummary.complianceReady;
   const readyForLive = readyForTest && hasTestSmsSuccess && missedCallValidated;
   const canSafelyMarkLive = readyForLive;
@@ -485,7 +492,12 @@ export function buildAdminOnboardingConfidence(params: {
     blockers.push({ level: 'error', message: 'The latest admin test SMS did not complete cleanly. Fix that before you go live.' });
   }
   if (readyForTest && !missedCallValidated) {
-    blockers.push({ level: 'warning', message: 'Run one real missed-call test and confirm the lead reaches the owner before marking this business live.' });
+    blockers.push({
+      level: 'warning',
+      message:
+        missedCallValidation?.detail ||
+        'Run one real missed-call test and confirm the lead reaches the owner before marking this business live.',
+    });
   }
 
   const milestones: OnboardingConfidenceMilestone[] = [
@@ -569,7 +581,11 @@ export function buildAdminOnboardingConfidence(params: {
       label: 'Missed-call flow validated',
       complete: missedCallValidated,
       variant: milestoneVariant({ complete: missedCallValidated, blocking: readyForTest }),
-      detail: missedCallValidated ? 'At least one missed-call lead reached the owner flow for this business.' : 'Run one real missed-call test from start to finish before going live.',
+      detail:
+        missedCallValidation?.detail ||
+        (missedCallValidated
+          ? 'At least one missed-call lead reached the owner flow for this business.'
+          : 'Run one real missed-call test from start to finish before going live.'),
     },
     {
       key: 'live_gate',
