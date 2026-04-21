@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { AppNav } from '@/components/app-nav';
 import { db } from '@/lib/db';
+import { getCurrentBusiness } from '@/lib/auth';
 import { getPortfolioDemoBusiness, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getCustomerSystemStatus } from '@/lib/system-status';
 
@@ -30,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/sign-in');
   }
 
-  const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
+  const business = await getCurrentBusiness();
   const successfulLeadCount = business
     ? await db.lead.count({ where: { businessId: business.id, OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }] } })
     : 0;

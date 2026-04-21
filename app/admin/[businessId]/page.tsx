@@ -388,12 +388,14 @@ export default async function AdminBusinessDetailPage({
     business,
     notificationSettings: business.notificationSettings,
     ownerConnected: ownerState.connected,
+    ownerStatus: ownerState.status,
     webhookSnapshot,
   });
   const onboardingConfidence = buildAdminOnboardingConfidence({
     business,
     notificationSettings: business.notificationSettings,
     ownerConnected: ownerState.connected,
+    ownerStatus: ownerState.status,
     successfulLeadCount,
     operatorEvents: operatorEvents.map((event) => ({
       type: event.type,
@@ -523,7 +525,7 @@ export default async function AdminBusinessDetailPage({
           {ownerStateMessage === 'connected'
             ? 'Owner account connected.'
             : ownerStateMessage === 'invited'
-              ? 'Owner invite sent. Re-run owner connection after the invite is accepted.'
+              ? 'Owner invite sent. After the invite is accepted, CallbackCloser will auto-link the owner on first sign-in.'
               : 'Owner state updated.'}
         </div>
       ) : null}
@@ -569,6 +571,16 @@ export default async function AdminBusinessDetailPage({
                     <Link className={buttonVariants({ size: 'sm' })} href="#advanced">
                       Resume automation
                     </Link>
+                  ) : ownerState.accountReady && ownerState.clerkUserId && ownerState.email ? (
+                    <form action={connectBusinessOwnerAction}>
+                      <input type="hidden" name="businessId" value={business.id} />
+                      <input type="hidden" name="ownerEmail" value={ownerState.email} />
+                      <input type="hidden" name="ownerName" value={ownerState.name || business.ownerName || ''} />
+                      <input type="hidden" name="ownerClerkId" value={ownerState.clerkUserId} />
+                      <Button size="sm" type="submit">
+                        Connect accepted owner
+                      </Button>
+                    </form>
                   ) : !ownerState.connected ? (
                     <Link className={buttonVariants({ size: 'sm' })} href="#business-info">
                       Connect owner
@@ -756,8 +768,24 @@ export default async function AdminBusinessDetailPage({
             <div className="rounded-xl border bg-background/80 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium">{ownerState.name || business.ownerName || 'Owner not named yet'}</p>
-                <Badge variant={ownerState.connected ? 'success' : ownerState.pending ? 'outline' : 'destructive'}>
-                  {ownerState.connected ? 'Connected' : ownerState.pending ? 'Pending invite' : 'Needs connection'}
+                <Badge
+                  variant={
+                    ownerState.connected
+                      ? 'success'
+                      : ownerState.accountReady
+                        ? 'secondary'
+                        : ownerState.pending
+                          ? 'outline'
+                          : 'destructive'
+                  }
+                >
+                  {ownerState.connected
+                    ? 'Connected'
+                    : ownerState.accountReady
+                      ? 'Account ready'
+                      : ownerState.pending
+                        ? 'Pending invite'
+                        : 'Needs repair'}
                 </Badge>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -765,6 +793,7 @@ export default async function AdminBusinessDetailPage({
               </p>
               {ownerState.clerkUserId ? <p className="mt-2 text-xs text-muted-foreground">{ownerState.clerkUserId}</p> : null}
               {ownerState.invitedAt ? <p className="mt-2 text-xs text-muted-foreground">Invite sent {formatDateTime(ownerState.invitedAt)}</p> : null}
+              <p className="mt-2 text-sm text-muted-foreground">{ownerState.detail}</p>
             </div>
 
             <form action={connectBusinessOwnerAction} className="grid gap-4 md:grid-cols-2 rounded-xl border bg-background/80 p-4">
@@ -779,11 +808,15 @@ export default async function AdminBusinessDetailPage({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ownerClerkId">Existing Clerk user ID</Label>
-                <Input id="ownerClerkId" name="ownerClerkId" defaultValue={ownerState.connected ? ownerState.clerkUserId || '' : ''} />
+                <Input
+                  id="ownerClerkId"
+                  name="ownerClerkId"
+                  defaultValue={ownerState.connected || ownerState.accountReady || ownerState.needsRepair ? ownerState.clerkUserId || '' : ''}
+                />
               </div>
               <div className="md:col-span-2">
                 <Button type="submit" variant="outline">
-                  Connect or invite owner
+                  {ownerState.accountReady ? 'Connect accepted owner' : 'Connect or invite owner'}
                 </Button>
               </div>
             </form>

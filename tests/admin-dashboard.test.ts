@@ -103,6 +103,49 @@ test('next-step guidance stays explicit for owner setup and pending A2P review',
   assert.equal(missingOwnerContact.title, 'Owner contact info is missing');
   assert.equal(missingOwnerContact.actionLabel, 'Save owner contact info');
 
+  const pendingOwnerInvite = buildAdminNextStep({
+    business: createBusiness({
+      notifyPhone: null,
+      twilioSubaccountSid: null,
+      twilioMessagingServiceSid: null,
+      twilioPrimaryNumberSid: null,
+      twilioPhoneNumberSid: null,
+      twilioPrimaryPhoneNumber: null,
+      twilioPhoneNumber: null,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    }),
+    notificationSettings: createNotificationSettings({
+      ownerPhone: null,
+      ownerEmail: 'owner@example.com',
+    }),
+    ownerConnected: false,
+    ownerStatus: 'pending_invite',
+  });
+
+  assert.equal(pendingOwnerInvite.title, 'Owner invitation is still pending');
+  assert.equal(pendingOwnerInvite.tone, 'pending');
+
+  const acceptedOwnerReady = buildAdminNextStep({
+    business: createBusiness({
+      notifyPhone: null,
+      twilioSubaccountSid: null,
+      twilioMessagingServiceSid: null,
+      twilioPrimaryNumberSid: null,
+      twilioPhoneNumberSid: null,
+      twilioPrimaryPhoneNumber: null,
+      twilioPhoneNumber: null,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    }),
+    notificationSettings: createNotificationSettings({
+      ownerPhone: null,
+    }),
+    ownerConnected: false,
+    ownerStatus: 'account_ready',
+  });
+
+  assert.equal(acceptedOwnerReady.title, 'Accepted owner is ready to connect');
+  assert.equal(acceptedOwnerReady.actionLabel, 'Connect accepted owner');
+
   const pendingA2p = buildAdminNextStep({
     business: createBusiness({
       managedTwilioStatus: ManagedTwilioStatus.CAMPAIGN_SUBMITTED,
@@ -124,11 +167,11 @@ test('board filters and delete guard stay conservative', () => {
 
   assert.equal(canDeleteTestBusiness(pausedTestBusiness), true);
   assert.equal(
-    matchesAdminBoardFilter(pausedTestBusiness, createNotificationSettings(), true, 'archived'),
+    matchesAdminBoardFilter(pausedTestBusiness, createNotificationSettings(), true, undefined, 'archived'),
     true
   );
   assert.equal(
-    matchesAdminBoardFilter(createBusiness(), createNotificationSettings(), true, 'pending_a2p'),
+    matchesAdminBoardFilter(createBusiness(), createNotificationSettings(), true, undefined, 'pending_a2p'),
     true
   );
   assert.equal(
@@ -190,6 +233,27 @@ test('onboarding confidence distinguishes ready-for-test from ready-for-live', (
   assert.equal(readyForTest.readyForTest, true);
   assert.equal(readyForTest.canSafelyMarkLive, false);
   assert.match(readyForTest.nextAction, /test/i);
+
+  const acceptedOwnerPendingConnect = buildAdminOnboardingConfidence({
+    business: createBusiness({
+      twilioSubaccountSid: null,
+      twilioMessagingServiceSid: null,
+      twilioPrimaryNumberSid: null,
+      twilioPhoneNumberSid: null,
+      twilioPrimaryPhoneNumber: null,
+      twilioPhoneNumber: null,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: false,
+    ownerStatus: 'account_ready',
+    successfulLeadCount: 0,
+    operatorEvents: [],
+  });
+
+  const ownerMilestone = acceptedOwnerPendingConnect.milestones.find((item) => item.key === 'owner_connected');
+  assert.equal(acceptedOwnerPendingConnect.state, 'in_setup');
+  assert.match(ownerMilestone?.detail || '', /accepted owner account found/i);
 
   const readyForLive = buildAdminOnboardingConfidence({
     business: createBusiness({
