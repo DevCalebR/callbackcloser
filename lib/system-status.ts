@@ -5,6 +5,7 @@ import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 type StatusBusiness = Pick<
   Business,
   | 'managedTwilioStatus'
+  | 'twilioAccountMode'
   | 'twilioSubaccountSid'
   | 'twilioPrimaryPhoneNumber'
   | 'twilioPhoneNumber'

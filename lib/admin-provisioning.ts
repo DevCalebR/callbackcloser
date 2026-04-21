@@ -363,7 +363,7 @@ export async function getTwilioWebhookSnapshot(
 }
 
 export async function listAdminTwilioNumbers(
-  business: Pick<Business, 'twilioSubaccountSid'>
+  business: Pick<Business, 'twilioAccountMode' | 'twilioSubaccountSid'>
 ) {
   if (!hasTwilioClientEnv()) {
     return {
@@ -374,7 +374,7 @@ export async function listAdminTwilioNumbers(
   }
 
   try {
-    const client = getTwilioBusinessClient(business.twilioSubaccountSid);
+    const client = getTwilioBusinessClient(business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : business.twilioSubaccountSid);
     const numbers = await client.incomingPhoneNumbers.list({ limit: 20 });
     return {
       numbers: numbers.map((number) => ({
@@ -382,20 +382,20 @@ export async function listAdminTwilioNumbers(
         phoneNumber: normalizePhoneNumber(number.phoneNumber),
         friendlyName: number.friendlyName || null,
       })),
-      sourceLabel: business.twilioSubaccountSid ? 'business subaccount' : 'parent account',
+      sourceLabel: business.twilioAccountMode === 'MAIN_ACCOUNT' ? 'parent account' : 'business subaccount',
       error: null as string | null,
     };
   } catch (error) {
     return {
       numbers: [] as Array<{ sid: string; phoneNumber: string | null; friendlyName: string | null }>,
-      sourceLabel: business.twilioSubaccountSid ? 'business subaccount' : 'parent account',
+      sourceLabel: business.twilioAccountMode === 'MAIN_ACCOUNT' ? 'parent account' : 'business subaccount',
       error: error instanceof Error ? error.message : 'Unable to load Twilio numbers.',
     };
   }
 }
 
 export async function syncBusinessTwilioWebhooks(
-  business: Pick<Business, 'id' | 'twilioSubaccountSid' | 'twilioPhoneNumberSid' | 'twilioPrimaryNumberSid'>,
+  business: Pick<Business, 'id' | 'twilioAccountMode' | 'twilioSubaccountSid' | 'twilioPhoneNumberSid' | 'twilioPrimaryNumberSid'>,
   options: TwilioWebhookSyncOptions
 ) {
   const phoneNumberSid = business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid;
@@ -403,7 +403,7 @@ export async function syncBusinessTwilioWebhooks(
     throw new Error('No Twilio number is assigned to this business yet.');
   }
 
-  const client = getTwilioBusinessClient(business.twilioSubaccountSid);
+  const client = getTwilioBusinessClient(business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : business.twilioSubaccountSid);
   const { number } = await syncTwilioIncomingPhoneNumberWebhooks(phoneNumberSid, client, options);
   const normalizedPhoneNumber = normalizePhoneNumber(number.phoneNumber);
   const syncedAt = new Date();
@@ -441,6 +441,7 @@ export async function attachExistingNumberToBusiness(params: {
     Business,
     | 'id'
     | 'name'
+    | 'twilioAccountMode'
     | 'twilioSubaccountSid'
     | 'twilioMessagingServiceSid'
     | 'twilioPrimaryNumberSid'
@@ -452,8 +453,11 @@ export async function attachExistingNumberToBusiness(params: {
   correlationId?: string;
 }) {
   const correlationId = params.correlationId ?? `admin_existing_${params.business.id}`;
-  const subaccountSid = params.business.twilioSubaccountSid || (await createSubaccountForBusiness(params.business, correlationId));
-  const client = getTwilioBusinessClient(subaccountSid);
+  const subaccountSid =
+    params.business.twilioAccountMode === 'MAIN_ACCOUNT'
+      ? null
+      : params.business.twilioSubaccountSid || (await createSubaccountForBusiness(params.business, correlationId));
+  const client = getTwilioBusinessClient(params.business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : subaccountSid);
 
   const existingNumber = await client.incomingPhoneNumbers(params.phoneNumberSid).fetch();
   const normalizedPhoneNumber = normalizePhoneNumber(existingNumber.phoneNumber);
@@ -547,7 +551,9 @@ export async function runAdminProvisioning(params: {
     select: {
       id: true,
       name: true,
+      twilioAccountMode: true,
       twilioSubaccountSid: true,
+      twilioNumberSetupMode: true,
       twilioMessagingServiceSid: true,
       twilioPrimaryNumberSid: true,
       twilioPrimaryPhoneNumber: true,
@@ -568,6 +574,7 @@ export async function runAdminProvisioning(params: {
       provisioningStatus: BusinessProvisioningStatus.ONBOARDING,
       provisioningLastRunAt: new Date(),
       provisioningError: null,
+      twilioNumberSetupMode: params.mode,
     },
   });
   await recordBusinessOperatorEvent({
@@ -595,6 +602,7 @@ export async function runAdminProvisioning(params: {
         {
           id: business.id,
           name: business.name,
+          twilioAccountMode: business.twilioAccountMode,
           twilioSubaccountSid: business.twilioSubaccountSid,
           twilioMessagingServiceSid: business.twilioMessagingServiceSid,
           twilioPrimaryNumberSid: business.twilioPrimaryNumberSid,

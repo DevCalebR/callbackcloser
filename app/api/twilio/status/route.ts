@@ -257,7 +257,7 @@ export async function POST(request: Request) {
       businessId: business.id,
       type: 'voice.call_marked_missed',
       category: 'VOICE',
-      status: 'WARNING',
+      status: 'INFO',
       summary: 'Call marked missed',
       details: {
         callSid,
@@ -422,7 +422,7 @@ export async function POST(request: Request) {
                 `CallbackCloser: Monthly conversation limit reached (${usage.used}/${usage.limit}). ` +
                 'Missed call was recorded, but automated SMS follow-up was not sent.',
               participant: 'OWNER',
-              twilioSubaccountSid: business.twilioSubaccountSid,
+              twilioSubaccountSid: business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : business.twilioSubaccountSid,
               messagingServiceSid: business.twilioMessagingServiceSid,
               managedTwilioStatus: business.managedTwilioStatus,
               a2pFailureReason: business.a2pFailureReason,

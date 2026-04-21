@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ManagedTwilioStatus, SubscriptionStatus } from '@prisma/client';
+import { ManagedTwilioStatus, SubscriptionStatus, TwilioAccountMode } from '@prisma/client';
 
 import { getManagedTwilioStatusSummary, resolveManagedTwilioStatus } from '../lib/managed-twilio-status.ts';
 import { getCustomerSystemStatus } from '../lib/system-status.ts';
@@ -10,6 +10,7 @@ function createManagedBusiness(
   overrides: Record<string, unknown> = {}
 ) {
   return {
+    twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
     managedTwilioStatus: ManagedTwilioStatus.DRAFT,
     twilioSubaccountSid: null,
     twilioPrimaryPhoneNumber: null,

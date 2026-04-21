@@ -15,6 +15,7 @@ type ProvisionableBusiness = Pick<
   Business,
   | 'id'
   | 'name'
+  | 'twilioAccountMode'
   | 'twilioSubaccountSid'
   | 'twilioPhoneNumber'
   | 'twilioPhoneNumberSid'
@@ -118,6 +119,7 @@ export async function provisionPhoneNumber(options: ProvisionPhoneNumberOptions)
     select: {
       id: true,
       name: true,
+      twilioAccountMode: true,
       twilioSubaccountSid: true,
       twilioMessagingServiceSid: true,
       twilioPrimaryNumberSid: true,

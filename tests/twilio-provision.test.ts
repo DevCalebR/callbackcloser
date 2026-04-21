@@ -8,6 +8,7 @@ test('managed provisioning input reuses existing subaccount, messaging service, 
     {
       id: 'biz_123',
       name: 'Acme Plumbing',
+      twilioAccountMode: 'BUSINESS_SUBACCOUNT',
       twilioSubaccountSid: 'AC_SUBACCOUNT',
       twilioMessagingServiceSid: 'MG_SERVICE',
       twilioPrimaryNumberSid: null,
@@ -21,6 +22,7 @@ test('managed provisioning input reuses existing subaccount, messaging service, 
   assert.deepEqual(input, {
     id: 'biz_123',
     name: 'Acme Plumbing',
+    twilioAccountMode: 'BUSINESS_SUBACCOUNT',
     twilioSubaccountSid: 'AC_SUBACCOUNT',
     twilioMessagingServiceSid: 'MG_SERVICE',
     twilioPrimaryNumberSid: 'PN_FALLBACK',
@@ -33,6 +35,7 @@ test('managed provisioning input falls back to the provided business name when t
     {
       id: 'biz_123',
       name: '',
+      twilioAccountMode: 'BUSINESS_SUBACCOUNT',
       twilioSubaccountSid: null,
       twilioMessagingServiceSid: null,
       twilioPrimaryNumberSid: null,

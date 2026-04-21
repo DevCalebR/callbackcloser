@@ -5,6 +5,7 @@ export function buildManagedProvisioningBusinessInput(
     Business,
     | 'id'
     | 'name'
+    | 'twilioAccountMode'
     | 'twilioSubaccountSid'
     | 'twilioMessagingServiceSid'
     | 'twilioPrimaryNumberSid'
@@ -17,6 +18,7 @@ export function buildManagedProvisioningBusinessInput(
   return {
     id: business.id,
     name: business.name || fallbackBusinessName,
+    twilioAccountMode: business.twilioAccountMode,
     twilioSubaccountSid: business.twilioSubaccountSid,
     twilioMessagingServiceSid: business.twilioMessagingServiceSid,
     twilioPrimaryNumberSid: business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid,

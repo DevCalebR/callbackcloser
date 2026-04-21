@@ -1,4 +1,4 @@
-import { BusinessProvisioningStatus, ManagedTwilioStatus, type Prisma, SubscriptionStatus } from '@prisma/client';
+import { BusinessProvisioningStatus, ManagedTwilioStatus, TwilioAccountMode, TwilioNumberSetupMode, type Prisma, SubscriptionStatus } from '@prisma/client';
 
 import { db } from '@/lib/db';
 import { normalizePhoneNumber, normalizePhoneNumberToE164, phoneNumbersEqual } from '@/lib/phone';
@@ -9,6 +9,8 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
   forwardingNumber: string;
   notifyPhone?: string | null;
   ownerEmail?: string | null;
+  twilioAccountMode?: TwilioAccountMode | null;
+  twilioNumberSetupMode?: TwilioNumberSetupMode | null;
   missedCallSeconds: number;
   serviceLabel1: string;
   serviceLabel2: string;
@@ -20,8 +22,10 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
     name: input.name,
     ownerName: input.ownerName?.trim() || null,
     forwardingNumber: normalizePhoneNumber(input.forwardingNumber),
-    notifyPhone: normalizePhoneNumber(input.notifyPhone || '' ) || null,
+    notifyPhone: normalizePhoneNumber(input.notifyPhone || '') || null,
     provisioningStatus: BusinessProvisioningStatus.DRAFT,
+    twilioAccountMode: input.twilioAccountMode || TwilioAccountMode.BUSINESS_SUBACCOUNT,
+    twilioNumberSetupMode: input.twilioNumberSetupMode || TwilioNumberSetupMode.NEW_NUMBER,
     missedCallSeconds: input.missedCallSeconds,
     serviceLabel1: input.serviceLabel1,
     serviceLabel2: input.serviceLabel2,
@@ -40,6 +44,8 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
       ownerName: data.ownerName,
       forwardingNumber: data.forwardingNumber,
       notifyPhone: data.notifyPhone,
+      twilioAccountMode: data.twilioAccountMode,
+      twilioNumberSetupMode: data.twilioNumberSetupMode,
       missedCallSeconds: data.missedCallSeconds,
       serviceLabel1: data.serviceLabel1,
       serviceLabel2: data.serviceLabel2,

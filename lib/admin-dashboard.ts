@@ -11,6 +11,7 @@ import {
   type OwnerNotification,
 } from '@prisma/client';
 
+import { DEMO_OWNER_CLERK_ID, isTestDemoBusiness } from '@/lib/admin-test-data-reset';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { formatMessageStatus, isMessageDeliveryIssueStatus } from '@/lib/lead-presenters';
 
@@ -28,6 +29,8 @@ type DashboardBusiness = Pick<
   | 'provisioningLastRunAt'
   | 'forwardingNumber'
   | 'notifyPhone'
+  | 'twilioAccountMode'
+  | 'twilioNumberSetupMode'
   | 'twilioSubaccountSid'
   | 'twilioMessagingServiceSid'
   | 'twilioPrimaryNumberSid'
@@ -132,6 +135,8 @@ export type AdminOnboardingConfidence = {
   hasRecentFailures: boolean;
 };
 
+export type AdminTestSmsConfidenceState = 'not_started' | 'pending_delivery' | 'delivered' | 'failed';
+
 export const adminBoardFilterOptions: AdminBoardFilterOption[] = [
   { key: 'all', label: 'All' },
   { key: 'needs_attention', label: 'Needs attention' },
@@ -141,8 +146,6 @@ export const adminBoardFilterOptions: AdminBoardFilterOption[] = [
   { key: 'paused', label: 'Paused' },
   { key: 'archived', label: 'Archived' },
 ];
-
-const DEMO_OWNER_CLERK_ID = 'simulator_demo_callbackcloser';
 
 export function isBusinessArchived(business: Pick<DashboardBusiness, 'archivedAt'>) {
   return Boolean(business.archivedAt);
@@ -157,7 +160,7 @@ export function isBusinessAutomationPaused(
 export function canDeleteTestBusiness(
   business: Pick<DashboardBusiness, 'isTestBusiness' | 'ownerClerkId' | 'archivedAt'>
 ) {
-  return isBusinessArchived(business) && (business.isTestBusiness || business.ownerClerkId === DEMO_OWNER_CLERK_ID);
+  return isBusinessArchived(business) && isTestDemoBusiness(business);
 }
 
 export function getDeleteTestBusinessBlockedReason(
@@ -270,10 +273,13 @@ export function buildAdminNextStep(params: {
     };
   }
 
-  if (!business.twilioSubaccountSid) {
+  if (!managedSummary.accountReady) {
     return {
-      title: 'Twilio subaccount is missing',
-      detail: 'Managed provisioning cannot finish until the business has a Twilio subaccount attached.',
+      title: business.twilioAccountMode === 'MAIN_ACCOUNT' ? 'Main Twilio account still needs review' : 'Twilio subaccount is missing',
+      detail:
+        business.twilioAccountMode === 'MAIN_ACCOUNT'
+          ? 'This business is set to use the main Twilio account directly. Confirm the parent-account mapping before continuing.'
+          : 'Managed provisioning cannot finish until the business has a Twilio subaccount attached.',
       tone: 'attention',
       actionLabel: 'Re-run provisioning',
     };
@@ -374,6 +380,32 @@ function milestoneVariant(params: { complete: boolean; blocking?: boolean }) {
   return 'pending' as const;
 }
 
+export function getAdminTestSmsConfidenceState(
+  operatorEvents: Array<{ type: string; status: OperatorEventStatus; createdAt: Date }>
+): AdminTestSmsConfidenceState {
+  const latest = operatorEvents
+    .filter((event) => event.type.startsWith('admin.test_sms_'))
+    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0];
+
+  if (!latest) {
+    return 'not_started';
+  }
+
+  if (latest.type === 'admin.test_sms_delivered') {
+    return 'delivered';
+  }
+
+  if (
+    latest.type === 'admin.test_sms_failed' ||
+    latest.type === 'admin.test_sms_suppressed' ||
+    latest.type === 'admin.test_sms_delivery_failed'
+  ) {
+    return 'failed';
+  }
+
+  return 'pending_delivery';
+}
+
 export function buildAdminOnboardingConfidence(params: {
   business: DashboardBusiness;
   notificationSettings: DashboardNotificationSettings | null;
@@ -388,18 +420,16 @@ export function buildAdminOnboardingConfidence(params: {
   const ownerPhone = notificationSettings?.ownerPhone?.trim() || business.notifyPhone || null;
   const hasProfile = Boolean(business.name.trim() && business.forwardingNumber.trim());
   const ownerAlertsReady = Boolean(ownerPhone || ownerEmail);
-  const twilioSetupReady = Boolean(business.twilioSubaccountSid);
+  const twilioSetupReady = managedSummary.accountReady;
   const numberReady = Boolean(getManagedTextingNumber(business) && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid));
   const messagingServiceReady = Boolean(business.twilioMessagingServiceSid);
   const webhooksReady = Boolean(business.twilioWebhookSyncedAt);
   const compliancePending =
     managedSummary.onboardingReady && !managedSummary.complianceReady && !managedSummary.attentionRequired;
-  const hasTestSmsSuccess = operatorEvents.some(
-    (event) => event.type === 'admin.test_sms_accepted' && event.status === OperatorEventStatus.SUCCESS
-  );
-  const hasTestSmsFailure = operatorEvents.some(
-    (event) => event.type === 'admin.test_sms_failed' || event.type === 'admin.test_sms_suppressed'
-  );
+  const latestTestSmsState = getAdminTestSmsConfidenceState(operatorEvents);
+  const hasTestSmsSuccess = latestTestSmsState === 'delivered';
+  const hasPendingTestSmsDelivery = latestTestSmsState === 'pending_delivery';
+  const hasTestSmsFailure = latestTestSmsState === 'failed';
   const hasRecentFailures = operatorEvents.some(
     (event) => event.status === OperatorEventStatus.FAILED || event.status === OperatorEventStatus.WARNING
   );
@@ -415,7 +445,12 @@ export function buildAdminOnboardingConfidence(params: {
     state = 'live_with_warnings';
   } else if (business.provisioningStatus === BusinessProvisioningStatus.LIVE && canSafelyMarkLive) {
     state = 'live';
-  } else if (nextStep.tone === 'attention' || managedSummary.attentionRequired || business.provisioningStatus === BusinessProvisioningStatus.NEEDS_ATTENTION) {
+  } else if (
+    nextStep.tone === 'attention' ||
+    managedSummary.attentionRequired ||
+    business.provisioningStatus === BusinessProvisioningStatus.NEEDS_ATTENTION ||
+    hasTestSmsFailure
+  ) {
     state = 'needs_attention';
   } else if (compliancePending) {
     state = 'waiting_on_a2p';
@@ -437,8 +472,14 @@ export function buildAdminOnboardingConfidence(params: {
   if (compliancePending) {
     blockers.push({ level: 'warning', message: 'A2P review is still pending. No operator action is needed unless Twilio asks for changes.' });
   }
-  if (readyForTest && !hasTestSmsSuccess) {
+  if (readyForTest && latestTestSmsState === 'not_started') {
     blockers.push({ level: 'warning', message: 'Run an admin test SMS from the business line before treating this onboarding as launch-ready.' });
+  }
+  if (readyForTest && hasPendingTestSmsDelivery) {
+    blockers.push({
+      level: 'warning',
+      message: 'The latest admin test SMS was accepted by Twilio, but delivery has not been confirmed yet. Wait for delivery or inspect recent activity before you go live.',
+    });
   }
   if (readyForTest && hasTestSmsFailure) {
     blockers.push({ level: 'error', message: 'The latest admin test SMS did not complete cleanly. Fix that before you go live.' });
@@ -512,10 +553,16 @@ export function buildAdminOnboardingConfidence(params: {
     },
     {
       key: 'test_sms',
-      label: 'Test SMS run',
+      label: 'Test SMS passed',
       complete: hasTestSmsSuccess,
       variant: milestoneVariant({ complete: hasTestSmsSuccess, blocking: readyForTest }),
-      detail: hasTestSmsSuccess ? 'Admin test SMS was accepted by Twilio from the business line.' : 'Run the admin test SMS once the business is ready for messaging.',
+      detail: hasTestSmsSuccess
+        ? 'The latest admin test SMS was delivered from the business line.'
+        : hasPendingTestSmsDelivery
+          ? 'The latest admin test SMS was accepted by Twilio, but delivery is still pending confirmation.'
+          : hasTestSmsFailure
+            ? 'The latest admin test SMS failed or was suppressed. Fix messaging before you go live.'
+            : 'Run the admin test SMS once the business is ready for messaging.',
     },
     {
       key: 'missed_call_validation',
@@ -571,7 +618,11 @@ export function buildAdminOnboardingConfidence(params: {
       stateVariant: 'secondary',
       readinessLabel: 'Ready for test',
       readinessVariant: 'secondary',
-      nextAction: hasTestSmsSuccess ? 'Run a real missed-call test' : 'Send a test SMS',
+      nextAction: hasTestSmsSuccess
+        ? 'Run a real missed-call test'
+        : hasPendingTestSmsDelivery
+          ? 'Confirm test SMS delivery'
+          : 'Send a test SMS',
       summary: 'The business looks ready for operator-led validation. Run the checks before you mark it live.',
     },
     ready_to_go_live: {

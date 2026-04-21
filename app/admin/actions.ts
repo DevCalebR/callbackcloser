@@ -1,12 +1,13 @@
 'use server';
 
-import { BusinessProvisioningStatus, ManagedTwilioStatus, SubscriptionStatus } from '@prisma/client';
+import { BusinessProvisioningStatus, ManagedTwilioStatus, SubscriptionStatus, TwilioAccountMode, TwilioNumberSetupMode } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import {
   buildPendingOwnerClerkId,
   connectExistingBusinessOwner,
+  findClerkUserByEmail,
   inviteBusinessOwner,
   runAdminProvisioning,
   syncBusinessTwilioWebhooks,
@@ -15,6 +16,11 @@ import {
 import { deleteDeletableTestBusiness } from '@/lib/admin-business-lifecycle';
 import { requireAdmin } from '@/lib/admin';
 import { canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
+import {
+  bulkDeleteTestDemoBusinesses,
+  BULK_TEST_DATA_RESET_CONFIRMATION,
+  DEMO_OWNER_CLERK_ID,
+} from '@/lib/admin-test-data-reset';
 import { logAuditEvent } from '@/lib/audit-log';
 import { db } from '@/lib/db';
 import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
@@ -22,18 +28,19 @@ import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } f
 import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import {
   adminArchiveBusinessSchema,
+  adminBulkDeleteTestBusinessesSchema,
   adminBusinessDraftSchema,
   adminConnectExistingOwnerSchema,
   adminDeleteBusinessSchema,
   adminInviteOwnerSchema,
   adminSendTestSmsSchema,
+  adminTwilioSetupSchema,
   adminBusinessUpdateSchema,
   adminProvisionBusinessSchema,
   adminProvisioningStatusSchema,
   adminWebhookSyncSchema,
 } from '@/lib/validators';
 
-const DEMO_OWNER_CLERK_ID = 'simulator_demo_callbackcloser';
 const DEFAULT_DEMO_NAME = 'CallbackCloser Demo';
 const DEFAULT_DEMO_TEXTING_NUMBER = '+15005550006';
 const DEFAULT_DEMO_FORWARDING_NUMBER = '+15005550001';
@@ -298,18 +305,51 @@ export async function createAdminBusinessAction(formData: FormData) {
 
   let redirectPath: string;
   try {
-    await runAdminProvisioning({
+    const existingOwner = await findClerkUserByEmail(data.ownerEmail);
+    if (existingOwner) {
+      await connectExistingBusinessOwner({
+        businessId: business.id,
+        ownerEmail: data.ownerEmail,
+        ownerName: data.ownerName || null,
+        ownerClerkId: existingOwner.id,
+      });
+
+      redirectPath = buildAdminBusinessRedirectPath(business.id, {
+        created: 1,
+        ownerAction: 'connected',
+      });
+    } else {
+      const inviteResult = await inviteBusinessOwner({
+        businessId: business.id,
+        ownerEmail: data.ownerEmail,
+        ownerName: data.ownerName || null,
+      });
+
+      redirectPath = buildAdminBusinessRedirectPath(business.id, {
+        created: 1,
+        ownerAction: inviteResult.state,
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Business created, but owner setup failed.';
+    await db.business.update({
+      where: { id: business.id },
+      data: {
+        provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
+        provisioningError: message,
+      },
+    });
+    await recordBusinessOperatorEvent({
       businessId: business.id,
-      mode: 'NEW_NUMBER',
-      areaCode: data.areaCode || null,
+      type: 'onboarding.owner_setup_failed',
+      category: 'ONBOARDING',
+      status: 'FAILED',
+      summary: 'Owner setup failed after business creation',
+      details: {
+        error: message,
+      },
     });
 
-    redirectPath = buildAdminBusinessRedirectPath(business.id, {
-      created: 1,
-      provisioned: 1,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Business created, but managed Twilio provisioning failed.';
     redirectPath = buildAdminBusinessRedirectPath(business.id, {
       created: 1,
       error: message,
@@ -549,6 +589,207 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
   );
 }
 
+export async function saveAdminTwilioSetupAction(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const parsed = adminTwilioSetupSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid Twilio setup update.')}`);
+  }
+
+  const data = parsed.data;
+  const existingBusiness = await db.business.findUnique({
+    where: { id: data.businessId },
+  });
+
+  if (!existingBusiness) {
+    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+  }
+
+  const twilioAccountMode = data.twilioAccountMode as TwilioAccountMode;
+  const twilioNumberSetupMode = data.twilioNumberSetupMode as TwilioNumberSetupMode;
+  const twilioSubaccountSid = twilioAccountMode === TwilioAccountMode.MAIN_ACCOUNT ? null : normalizeOptionalSid(data.twilioSubaccountSid);
+  const twilioPhoneNumber = normalizeOptionalE164Phone(data.twilioPhoneNumber || '', 'Twilio number');
+  const twilioPhoneNumberSid = normalizeOptionalSid(data.twilioPhoneNumberSid);
+  const twilioMessagingServiceSid = normalizeOptionalSid(data.twilioMessagingServiceSid);
+  const a2pCustomerProfileSid = normalizeOptionalSid(data.a2pCustomerProfileSid);
+  const a2pBrandSid = normalizeOptionalSid(data.a2pBrandSid);
+  const a2pCampaignSid = normalizeOptionalSid(data.a2pCampaignSid);
+  const a2pFailureReason = data.a2pFailureReason?.trim() || null;
+
+  const criticalFieldClears = [
+    existingBusiness.twilioSubaccountSid && !twilioSubaccountSid && twilioAccountMode === TwilioAccountMode.BUSINESS_SUBACCOUNT
+      ? 'Twilio subaccount SID'
+      : null,
+    (existingBusiness.twilioPrimaryPhoneNumber || existingBusiness.twilioPhoneNumber) && !twilioPhoneNumber ? 'Twilio number' : null,
+    (existingBusiness.twilioPrimaryNumberSid || existingBusiness.twilioPhoneNumberSid) && !twilioPhoneNumberSid ? 'Twilio number SID' : null,
+    existingBusiness.twilioMessagingServiceSid && !twilioMessagingServiceSid ? 'messaging service SID' : null,
+  ].filter(Boolean) as string[];
+
+  if (criticalFieldClears.length > 0 && !data.confirmCriticalFieldClears) {
+    redirect(
+      buildAdminBusinessRedirectPath(data.businessId, {
+        error: `Confirm clearing live fields before removing: ${criticalFieldClears.join(', ')}.`,
+      })
+    );
+  }
+
+  const managedTwilioStatusChanged = existingBusiness.managedTwilioStatus !== data.managedTwilioStatus;
+  const twilioMappingChanged =
+    existingBusiness.twilioAccountMode !== twilioAccountMode ||
+    existingBusiness.twilioNumberSetupMode !== twilioNumberSetupMode ||
+    existingBusiness.twilioSubaccountSid !== twilioSubaccountSid ||
+    (existingBusiness.twilioPrimaryPhoneNumber || existingBusiness.twilioPhoneNumber) !== twilioPhoneNumber ||
+    (existingBusiness.twilioPrimaryNumberSid || existingBusiness.twilioPhoneNumberSid) !== twilioPhoneNumberSid ||
+    existingBusiness.twilioMessagingServiceSid !== twilioMessagingServiceSid;
+  const a2pMetadataChanged =
+    existingBusiness.a2pCustomerProfileSid !== a2pCustomerProfileSid ||
+    existingBusiness.a2pBrandSid !== a2pBrandSid ||
+    existingBusiness.a2pCampaignSid !== a2pCampaignSid ||
+    existingBusiness.a2pFailureReason !== a2pFailureReason;
+
+  const changedFields = [
+    existingBusiness.twilioAccountMode !== twilioAccountMode
+      ? { key: 'twilioAccountMode', label: 'Twilio account mode', before: existingBusiness.twilioAccountMode, after: twilioAccountMode }
+      : null,
+    existingBusiness.twilioNumberSetupMode !== twilioNumberSetupMode
+      ? {
+          key: 'twilioNumberSetupMode',
+          label: 'Twilio number path',
+          before: existingBusiness.twilioNumberSetupMode,
+          after: twilioNumberSetupMode,
+        }
+      : null,
+    existingBusiness.twilioSubaccountSid !== twilioSubaccountSid
+      ? { key: 'twilioSubaccountSid', label: 'Twilio subaccount SID', before: existingBusiness.twilioSubaccountSid, after: twilioSubaccountSid }
+      : null,
+    (existingBusiness.twilioPrimaryPhoneNumber || existingBusiness.twilioPhoneNumber) !== twilioPhoneNumber
+      ? {
+          key: 'twilioPhoneNumber',
+          label: 'Twilio number',
+          before: existingBusiness.twilioPrimaryPhoneNumber || existingBusiness.twilioPhoneNumber,
+          after: twilioPhoneNumber,
+        }
+      : null,
+    (existingBusiness.twilioPrimaryNumberSid || existingBusiness.twilioPhoneNumberSid) !== twilioPhoneNumberSid
+      ? {
+          key: 'twilioPhoneNumberSid',
+          label: 'Twilio number SID',
+          before: existingBusiness.twilioPrimaryNumberSid || existingBusiness.twilioPhoneNumberSid,
+          after: twilioPhoneNumberSid,
+        }
+      : null,
+    existingBusiness.twilioMessagingServiceSid !== twilioMessagingServiceSid
+      ? {
+          key: 'twilioMessagingServiceSid',
+          label: 'messaging service SID',
+          before: existingBusiness.twilioMessagingServiceSid,
+          after: twilioMessagingServiceSid,
+        }
+      : null,
+    existingBusiness.a2pCustomerProfileSid !== a2pCustomerProfileSid
+      ? {
+          key: 'a2pCustomerProfileSid',
+          label: 'A2P customer profile SID',
+          before: existingBusiness.a2pCustomerProfileSid,
+          after: a2pCustomerProfileSid,
+        }
+      : null,
+    existingBusiness.a2pBrandSid !== a2pBrandSid
+      ? { key: 'a2pBrandSid', label: 'A2P brand SID', before: existingBusiness.a2pBrandSid, after: a2pBrandSid }
+      : null,
+    existingBusiness.a2pCampaignSid !== a2pCampaignSid
+      ? { key: 'a2pCampaignSid', label: 'A2P campaign SID', before: existingBusiness.a2pCampaignSid, after: a2pCampaignSid }
+      : null,
+    existingBusiness.a2pFailureReason !== a2pFailureReason
+      ? {
+          key: 'a2pFailureReason',
+          label: 'A2P failure reason',
+          before: existingBusiness.a2pFailureReason,
+          after: a2pFailureReason,
+        }
+      : null,
+    managedTwilioStatusChanged
+      ? {
+          key: 'managedTwilioStatus',
+          label: 'managed Twilio status',
+          before: existingBusiness.managedTwilioStatus,
+          after: data.managedTwilioStatus,
+        }
+      : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; before: string | null; after: string | null }>;
+
+  await db.business.update({
+    where: { id: data.businessId },
+    data: {
+      twilioAccountMode,
+      twilioNumberSetupMode,
+      twilioSubaccountSid,
+      managedTwilioStatus: data.managedTwilioStatus as ManagedTwilioStatus,
+      managedTwilioStatusUpdatedAt: managedTwilioStatusChanged ? new Date() : existingBusiness.managedTwilioStatusUpdatedAt,
+      twilioPhoneNumber,
+      twilioPrimaryPhoneNumber: twilioPhoneNumber,
+      twilioPhoneNumberSid,
+      twilioPrimaryNumberSid: twilioPhoneNumberSid,
+      twilioMessagingServiceSid,
+      a2pCustomerProfileSid,
+      a2pBrandSid,
+      a2pCampaignSid,
+      a2pFailureReason,
+      a2pSubmittedAt:
+        managedTwilioStatusChanged &&
+        ['AWAITING_BUSINESS_VERIFICATION', 'BRAND_SUBMITTED', 'CAMPAIGN_SUBMITTED'].includes(data.managedTwilioStatus)
+          ? existingBusiness.a2pSubmittedAt || new Date()
+          : existingBusiness.a2pSubmittedAt,
+      a2pApprovedAt:
+        data.managedTwilioStatus === ManagedTwilioStatus.COMPLIANT_LIVE
+          ? existingBusiness.a2pApprovedAt || new Date()
+          : managedTwilioStatusChanged
+            ? null
+            : existingBusiness.a2pApprovedAt,
+      ...(twilioMappingChanged ? { twilioWebhookSyncedAt: null } : {}),
+      ...(twilioMappingChanged || a2pMetadataChanged || managedTwilioStatusChanged ? { provisioningLastRunAt: new Date() } : {}),
+      provisioningError: null,
+    },
+  });
+
+  if (changedFields.length > 0) {
+    await recordBusinessOperatorEvent({
+      businessId: data.businessId,
+      type: 'admin.twilio_setup_updated',
+      category: 'ONBOARDING',
+      status: 'INFO',
+      summary: 'Twilio setup flow updated',
+      details: {
+        changedFields: buildChangedFieldMetadata(changedFields),
+      },
+    });
+    logAuditEvent({
+      event: 'admin_twilio_setup_saved',
+      actorType: 'user',
+      actorId: admin.userId,
+      businessId: data.businessId,
+      targetType: 'business',
+      targetId: data.businessId,
+      metadata: {
+        actorEmail: admin.email,
+        source: 'twilio_setup_flow',
+        changedFields: buildChangedFieldMetadata(changedFields),
+      },
+    });
+  }
+
+  await revalidateAdminPaths(data.businessId);
+  revalidatePath('/app/settings');
+  revalidatePath('/app/call-flow');
+  redirect(
+    buildAdminBusinessRedirectPath(data.businessId, {
+      saved: 1,
+      changed: changedFields.map((field) => field.key).join(','),
+    })
+  );
+}
+
 export async function inviteBusinessOwnerAction(formData: FormData) {
   await requireAdmin();
 
@@ -687,6 +928,7 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
     where: { id: parsed.data.businessId },
     select: {
       id: true,
+      twilioAccountMode: true,
       twilioSubaccountSid: true,
       twilioPhoneNumberSid: true,
       twilioPrimaryNumberSid: true,
@@ -785,7 +1027,8 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
       toPhone: destinationPhone!,
       body: `CallbackCloser admin test: ${business.name} is using ${fromPhone} for live support verification.`,
       participant: 'OWNER',
-      twilioSubaccountSid: business.twilioSubaccountSid,
+      context: 'admin_test',
+      twilioSubaccountSid: business.twilioAccountMode === TwilioAccountMode.MAIN_ACCOUNT ? null : business.twilioSubaccountSid,
       messagingServiceSid: business.twilioMessagingServiceSid,
       managedTwilioStatus: business.managedTwilioStatus,
       a2pFailureReason: business.a2pFailureReason,
@@ -1038,4 +1281,47 @@ export async function deleteTestBusinessAction(formData: FormData) {
 
   revalidatePath('/admin');
   redirect(clearBusinessSelectionFromReturnPath(parsed.data.returnTo, { deleted: 1 }, '/admin?deleted=1'));
+}
+
+export async function bulkDeleteTestBusinessesAction(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const parsed = adminBulkDeleteTestBusinessesSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid reset request.')}`);
+  }
+
+  let redirectPath = '/admin';
+
+  try {
+    const result = await bulkDeleteTestDemoBusinesses({
+      confirmation: parsed.data.confirmationText,
+    });
+
+    logAuditEvent({
+      event: 'admin_test_businesses_bulk_deleted',
+      actorType: 'user',
+      actorId: admin.userId,
+      targetType: 'business_collection',
+      targetId: 'test_demo_businesses',
+      metadata: {
+        actorEmail: admin.email,
+        deletedCount: result.deletedCount,
+        deletedBusinessNames: result.deletedBusinessNames,
+        confirmationText: BULK_TEST_DATA_RESET_CONFIRMATION,
+      },
+    });
+
+    revalidatePath('/admin');
+
+    redirectPath =
+      result.deletedCount > 0
+        ? `/admin?resetResult=deleted&resetDeleted=${encodeURIComponent(String(result.deletedCount))}`
+        : '/admin?resetResult=noop&resetDeleted=0';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to delete test/demo businesses.';
+    redirectPath = `/admin?error=${encodeURIComponent(message)}`;
+  }
+
+  redirect(redirectPath);
 }

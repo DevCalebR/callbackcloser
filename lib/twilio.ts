@@ -17,7 +17,7 @@ export type TwilioWebhookConfig = {
 export { getTwilioBusinessClient, getTwilioClient, getTwilioSubaccountClient } from '@/lib/twilio-client';
 export type { TwilioClient } from '@/lib/twilio-client';
 
-export function getTwilioWebhookConfig(): TwilioWebhookConfig {
+function buildConfiguredTwilioWebhookUrl(path: string) {
   const appBaseUrl = getConfiguredAppBaseUrl();
   if (!appBaseUrl) {
     const resolution = resolveConfiguredAppBaseUrl();
@@ -46,20 +46,32 @@ export function getTwilioWebhookConfig(): TwilioWebhookConfig {
   }
 
   const normalizedBaseUrl = parsed.toString().replace(/\/$/, '');
-  const buildUrl = (path: string) => {
-    const next = new URL(path, `${normalizedBaseUrl}/`);
-    if (usesSharedWebhookToken && webhookToken) {
-      next.searchParams.set('webhook_token', webhookToken);
-    }
-    return next.toString();
-  };
+  const next = new URL(path, `${normalizedBaseUrl}/`);
+  if (usesSharedWebhookToken && webhookToken) {
+    next.searchParams.set('webhook_token', webhookToken);
+  }
 
   return {
     appBaseUrl: normalizedBaseUrl,
-    voiceUrl: buildUrl('/api/twilio/voice'),
-    smsUrl: buildUrl('/api/twilio/sms'),
-    statusUrl: buildUrl('/api/twilio/status'),
+    url: next.toString(),
   };
+}
+
+export function getTwilioWebhookConfig(): TwilioWebhookConfig {
+  const voice = buildConfiguredTwilioWebhookUrl('/api/twilio/voice');
+  const sms = buildConfiguredTwilioWebhookUrl('/api/twilio/sms');
+  const status = buildConfiguredTwilioWebhookUrl('/api/twilio/status');
+
+  return {
+    appBaseUrl: voice.appBaseUrl,
+    voiceUrl: voice.url,
+    smsUrl: sms.url,
+    statusUrl: status.url,
+  };
+}
+
+export function getTwilioMessageStatusCallbackUrl() {
+  return buildConfiguredTwilioWebhookUrl('/api/twilio/message-status').url;
 }
 
 export async function syncTwilioIncomingPhoneNumberWebhooks(

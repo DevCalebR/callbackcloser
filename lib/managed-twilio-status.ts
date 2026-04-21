@@ -1,4 +1,4 @@
-import { ManagedTwilioStatus, type Business } from '@prisma/client';
+import { ManagedTwilioStatus, TwilioAccountMode, type Business } from '@prisma/client';
 
 type ManagedTwilioBlockerKey =
   | 'subaccount'
@@ -14,6 +14,8 @@ type ManagedTwilioBlockerKey =
 export type ManagedTwilioSummary = {
   label: string;
   description: string;
+  accountMode: TwilioAccountMode;
+  accountReady: boolean;
   subaccountReady: boolean;
   numberAssigned: boolean;
   messagingServiceReady: boolean;
@@ -65,6 +67,7 @@ export function resolveManagedTwilioStatus(
   business: Pick<
     Business,
     | 'managedTwilioStatus'
+    | 'twilioAccountMode'
     | 'twilioSubaccountSid'
     | 'twilioMessagingServiceSid'
     | 'twilioPrimaryNumberSid'
@@ -113,6 +116,7 @@ export function getManagedTwilioStatusSummary(
   business: Pick<
     Business,
     | 'managedTwilioStatus'
+    | 'twilioAccountMode'
     | 'twilioSubaccountSid'
     | 'twilioPrimaryPhoneNumber'
     | 'twilioPhoneNumber'
@@ -133,7 +137,10 @@ export function getManagedTwilioStatusSummary(
     business.a2pFailureReason && managedTwilioStatus === ManagedTwilioStatus.FAILED_REVIEW
       ? business.a2pFailureReason
       : managedTwilioStatusDescriptions[managedTwilioStatus];
+  const accountMode = business.twilioAccountMode || TwilioAccountMode.BUSINESS_SUBACCOUNT;
+  const requiresSubaccount = accountMode === TwilioAccountMode.BUSINESS_SUBACCOUNT;
   const subaccountReady = Boolean(business.twilioSubaccountSid);
+  const accountReady = requiresSubaccount ? subaccountReady : true;
   const numberAssigned = hasManagedTwilioNumber(business);
   const messagingServiceReady = Boolean(business.twilioMessagingServiceSid);
   const webhooksSynced = Boolean(business.twilioWebhookSyncedAt);
@@ -143,11 +150,13 @@ export function getManagedTwilioStatusSummary(
   );
   const blockers: ManagedTwilioSummary['blockers'] = [];
 
-  if (!subaccountReady) {
+  if (!accountReady) {
     blockers.push({
       key: 'subaccount',
-      label: 'Create Twilio subaccount',
-      detail: 'Create or reconnect the managed Twilio subaccount for this business.',
+      label: requiresSubaccount ? 'Create Twilio subaccount' : 'Confirm Twilio account mode',
+      detail: requiresSubaccount
+        ? 'Create or reconnect the managed Twilio subaccount for this business.'
+        : 'This business is using the parent Twilio account directly, so the parent-account mapping needs to stay accurate.',
     });
   }
 
@@ -215,7 +224,7 @@ export function getManagedTwilioStatusSummary(
     });
   }
 
-  const onboardingReady = subaccountReady && numberAssigned && messagingServiceReady && webhooksSynced;
+  const onboardingReady = accountReady && numberAssigned && messagingServiceReady && webhooksSynced;
   const messagingReady = onboardingReady && complianceReady;
   const attentionRequired =
     managedTwilioStatus === ManagedTwilioStatus.PAUSED_NONCOMPLIANT || managedTwilioStatus === ManagedTwilioStatus.FAILED_REVIEW;
@@ -223,6 +232,8 @@ export function getManagedTwilioStatusSummary(
   return {
     label,
     description,
+    accountMode,
+    accountReady,
     subaccountReady,
     numberAssigned,
     messagingServiceReady,

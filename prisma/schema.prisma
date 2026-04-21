@@ -32,6 +32,8 @@ model Business {
   twilioMessagingServiceSid   String?            @unique
   twilioPrimaryNumberSid      String?            @unique
   twilioPrimaryPhoneNumber    String?            @unique
+  twilioAccountMode           TwilioAccountMode  @default(BUSINESS_SUBACCOUNT)
+  twilioNumberSetupMode       TwilioNumberSetupMode @default(NEW_NUMBER)
   a2pCustomerProfileSid       String?            @unique
   a2pBrandSid                 String?            @unique
   a2pCampaignSid              String?            @unique
@@ -352,6 +354,16 @@ enum ManagedTwilioStatus {
   COMPLIANT_LIVE
   PAUSED_NONCOMPLIANT
   FAILED_REVIEW
+}
+
+enum TwilioAccountMode {
+  MAIN_ACCOUNT
+  BUSINESS_SUBACCOUNT
+}
+
+enum TwilioNumberSetupMode {
+  NEW_NUMBER
+  EXISTING_NUMBER
 }
 
 enum BusinessProvisioningStatus {

@@ -14,6 +14,8 @@ type AdminBusinessSummary = Pick<
   | 'ownerClerkId'
   | 'notifyPhone'
   | 'forwardingNumber'
+  | 'twilioAccountMode'
+  | 'twilioNumberSetupMode'
   | 'twilioSubaccountSid'
   | 'twilioPhoneNumber'
   | 'twilioPhoneNumberSid'
@@ -316,9 +318,14 @@ export function buildAdminProvisioningChecklist({
     },
     {
       key: 'twilio_subaccount',
-      label: 'Twilio subaccount',
-      complete: Boolean(business.twilioSubaccountSid),
-      detail: business.twilioSubaccountSid ? 'Managed Twilio subaccount is attached.' : 'Create the business Twilio subaccount.',
+      label: business.twilioAccountMode === 'MAIN_ACCOUNT' ? 'Twilio account mode' : 'Twilio subaccount',
+      complete: managedSummary.accountReady,
+      detail:
+        business.twilioAccountMode === 'MAIN_ACCOUNT'
+          ? 'This business uses the parent Twilio account directly.'
+          : business.twilioSubaccountSid
+            ? 'Managed Twilio subaccount is attached.'
+            : 'Create the business Twilio subaccount.',
     },
     {
       key: 'texting_number',
