@@ -954,6 +954,8 @@ export async function bulkDeleteTestBusinessesAction(formData: FormData) {
     redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid reset request.')}`);
   }
 
+  let redirectPath = '/admin';
+
   try {
     const result = await bulkDeleteTestDemoBusinesses({
       confirmation: parsed.data.confirmationText,
@@ -974,9 +976,15 @@ export async function bulkDeleteTestBusinessesAction(formData: FormData) {
     });
 
     revalidatePath('/admin');
-    redirect(`/admin?resetDeleted=${encodeURIComponent(String(result.deletedCount))}`);
+
+    redirectPath =
+      result.deletedCount > 0
+        ? `/admin?resetResult=deleted&resetDeleted=${encodeURIComponent(String(result.deletedCount))}`
+        : '/admin?resetResult=noop&resetDeleted=0';
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to delete test/demo businesses.';
-    redirect(`/admin?error=${encodeURIComponent(message)}`);
+    redirectPath = `/admin?error=${encodeURIComponent(message)}`;
   }
+
+  redirect(redirectPath);
 }

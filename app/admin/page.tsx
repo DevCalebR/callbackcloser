@@ -82,6 +82,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const createdDemo = getQueryValue(searchParams, 'createdDemo') === '1';
   const createdBusinessId = getQueryValue(searchParams, 'businessId');
   const deleted = getQueryValue(searchParams, 'deleted') === '1';
+  const resetResult = getQueryValue(searchParams, 'resetResult');
   const resetDeleted = Number(getQueryValue(searchParams, 'resetDeleted') || '0');
   const error = getQueryValue(searchParams, 'error');
   const query = getQueryValue(searchParams, 'q')?.trim() || '';
@@ -260,9 +261,14 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {deleted ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Archived test business deleted.</div> : null}
-      {Number.isFinite(resetDeleted) && resetDeleted > 0 ? (
+      {resetResult === 'deleted' && Number.isFinite(resetDeleted) ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           Deleted {resetDeleted} test/demo {resetDeleted === 1 ? 'business' : 'businesses'}.
+        </div>
+      ) : null}
+      {resetResult === 'noop' ? (
+        <div className="rounded-md border bg-background/80 p-3 text-sm text-muted-foreground">
+          No test/demo businesses were eligible for deletion.
         </div>
       ) : null}
       {createdDemo && createdBusinessId ? (
