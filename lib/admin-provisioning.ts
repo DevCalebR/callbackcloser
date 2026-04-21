@@ -7,6 +7,7 @@ import {
   type TwilioWebhookSnapshot,
 } from '@/lib/admin-provisioning-presenters';
 import { ensureBusinessNotificationSettings } from '@/lib/business-notification-settings';
+import { findClerkUserByEmail, getOwnerLinkStateForBusiness, type OwnerLinkState } from '@/lib/business-owner-link';
 import { db } from '@/lib/db';
 import { getConfiguredAppBaseUrl } from '@/lib/env.server';
 import {
@@ -24,12 +25,16 @@ import { getTwilioBusinessClient, hasTwilioClientEnv } from '@/lib/twilio-client
 import { getTwilioWebhookConfig, syncTwilioIncomingPhoneNumberWebhooks, type TwilioWebhookSyncOptions } from '@/lib/twilio';
 
 export type AdminOwnerState = {
-  connected: boolean;
-  pending: boolean;
+  connected: OwnerLinkState['connected'];
+  pending: OwnerLinkState['pending'];
+  accountReady: OwnerLinkState['accountReady'];
+  needsRepair: OwnerLinkState['needsRepair'];
+  status: OwnerLinkState['status'];
   invitedAt: Date | null;
   clerkUserId: string | null;
   name: string | null;
   email: string | null;
+  detail: string;
 };
 
 export {
@@ -41,63 +46,11 @@ export {
 } from '@/lib/admin-provisioning-presenters';
 export type { AdminProvisioningChecklistItem } from '@/lib/admin-provisioning-presenters';
 
-export async function findClerkUserByEmail(email: string) {
-  const normalized = email.trim().toLowerCase();
-  if (!normalized) return null;
-
-  const client = await clerkClient();
-  const result = await client.users.getUserList({
-    emailAddress: [normalized],
-    limit: 1,
-  });
-
-  return result.data[0] ?? null;
-}
-
 export async function getAdminOwnerState(
-  business: Pick<Business, 'ownerClerkId' | 'ownerName' | 'ownerInviteSentAt'>,
+  business: Pick<Business, 'id' | 'ownerClerkId' | 'ownerName' | 'ownerInviteSentAt'>,
   notificationSettings: Pick<BusinessNotificationSettings, 'ownerEmail'> | null
 ): Promise<AdminOwnerState> {
-  const ownerEmail = notificationSettings?.ownerEmail?.trim().toLowerCase() || null;
-
-  if (isPendingOwnerClerkId(business.ownerClerkId)) {
-    return {
-      connected: false,
-      pending: true,
-      invitedAt: business.ownerInviteSentAt,
-      clerkUserId: null,
-      name: business.ownerName?.trim() || null,
-      email: ownerEmail,
-    };
-  }
-
-  try {
-    const client = await clerkClient();
-    const user = await client.users.getUser(business.ownerClerkId);
-    const primaryEmail =
-      user.primaryEmailAddressId
-        ? user.emailAddresses.find((emailAddress) => emailAddress.id === user.primaryEmailAddressId)?.emailAddress
-        : user.emailAddresses[0]?.emailAddress;
-    const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || business.ownerName?.trim() || null;
-
-    return {
-      connected: true,
-      pending: false,
-      invitedAt: business.ownerInviteSentAt,
-      clerkUserId: user.id,
-      name: fullName,
-      email: primaryEmail?.trim().toLowerCase() || ownerEmail,
-    };
-  } catch {
-    return {
-      connected: false,
-      pending: false,
-      invitedAt: business.ownerInviteSentAt,
-      clerkUserId: business.ownerClerkId,
-      name: business.ownerName?.trim() || null,
-      email: ownerEmail,
-    };
-  }
+  return getOwnerLinkStateForBusiness(business, notificationSettings);
 }
 
 async function assertOwnerNotAttachedElsewhere(ownerClerkId: string, businessId: string) {

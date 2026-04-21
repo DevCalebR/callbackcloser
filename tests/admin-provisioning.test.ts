@@ -89,6 +89,29 @@ test('admin provisioning checklist surfaces incomplete rollout steps clearly', (
   assert.equal(a2pStep?.complete, false);
 });
 
+test('admin provisioning checklist distinguishes accepted owner from a truly pending invite', () => {
+  const checklist = buildAdminProvisioningChecklist({
+    business: createBusiness({
+      ownerClerkId: buildPendingOwnerClerkId(),
+    }),
+    notificationSettings: {
+      ownerPhone: null,
+      ownerEmail: 'owner@example.com',
+      notifySms: true,
+      notifyEmail: true,
+      notifyInApp: true,
+      urgentOnly: false,
+    },
+    ownerConnected: false,
+    ownerStatus: 'account_ready',
+    webhookSnapshot: null,
+  });
+
+  const ownerStep = checklist.find((item) => item.key === 'owner_account');
+  assert.equal(ownerStep?.complete, false);
+  assert.match(ownerStep?.detail || '', /accepted owner account found in Clerk/i);
+});
+
 test('admin provisioning checklist shows completed rollout when owner, messaging, and webhooks are ready', () => {
   const checklist = buildAdminProvisioningChecklist({
     business: createBusiness({

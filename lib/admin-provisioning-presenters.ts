@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { BusinessProvisioningStatus, type Business, type BusinessNotificationSettings } from '@prisma/client';
 
+import type { OwnerLinkStatus } from '@/lib/business-owner-link';
 import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { normalizePhoneNumber } from '@/lib/phone';
 
@@ -67,6 +68,7 @@ type ProvisioningChecklistInput = {
   business: AdminBusinessSummary;
   notificationSettings: NotificationSettingsSummary | null;
   ownerConnected: boolean;
+  ownerStatus?: OwnerLinkStatus;
   webhookSnapshot: TwilioWebhookSnapshot | null;
 };
 
@@ -106,12 +108,24 @@ export function buildAdminProvisioningChecklist({
   business,
   notificationSettings,
   ownerConnected,
+  ownerStatus,
   webhookSnapshot,
 }: ProvisioningChecklistInput): AdminProvisioningChecklistItem[] {
   const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
   const ownerPhone = normalizePhoneNumber(notificationSettings?.ownerPhone || business.notifyPhone || '') || null;
   const messagingServiceReady = Boolean(business.twilioMessagingServiceSid);
   const managedSummary = getManagedTwilioStatusSummary(business);
+  const effectiveOwnerStatus = ownerStatus ?? (ownerConnected ? 'connected' : 'pending_invite');
+  const ownerAccountDetail =
+    effectiveOwnerStatus === 'connected'
+      ? 'A Clerk user is linked to this business.'
+      : effectiveOwnerStatus === 'account_ready'
+        ? 'Accepted owner account found in Clerk. Connect the accepted owner to finish the link.'
+        : effectiveOwnerStatus === 'needs_repair'
+          ? 'Owner link needs repair. Reconnect the accepted owner from the admin owner card.'
+          : ownerEmail
+            ? 'Owner invitation is still pending acceptance in Clerk.'
+            : 'Add an owner email and connect or invite the owner.';
 
   return [
     {
@@ -124,11 +138,7 @@ export function buildAdminProvisioningChecklist({
       key: 'owner_account',
       label: 'Owner account connected',
       complete: ownerConnected,
-      detail: ownerConnected
-        ? 'A Clerk user is linked to this business.'
-        : ownerEmail
-          ? 'Owner account is still pending. Connect the Clerk user or resend the invite.'
-          : 'Add an owner email and connect or invite the owner.',
+      detail: ownerAccountDetail,
     },
     {
       key: 'owner_alerts',
