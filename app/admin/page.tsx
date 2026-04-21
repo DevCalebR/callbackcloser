@@ -1,12 +1,17 @@
 import Link from 'next/link';
 
 import {
+  bulkDeleteTestBusinessesAction,
   createAdminBusinessAction,
   createDemoBusinessAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
   sendBusinessTestSmsAction,
 } from '@/app/admin/actions';
+import {
+  BULK_TEST_DATA_RESET_CONFIRMATION,
+  listTestDemoBusinessesForReset,
+} from '@/lib/admin-test-data-reset';
 import {
   adminBoardFilterOptions,
   buildAdminNextStep,
@@ -77,12 +82,13 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const createdDemo = getQueryValue(searchParams, 'createdDemo') === '1';
   const createdBusinessId = getQueryValue(searchParams, 'businessId');
   const deleted = getQueryValue(searchParams, 'deleted') === '1';
+  const resetDeleted = Number(getQueryValue(searchParams, 'resetDeleted') || '0');
   const error = getQueryValue(searchParams, 'error');
   const query = getQueryValue(searchParams, 'q')?.trim() || '';
   const view = (getQueryValue(searchParams, 'view') as AdminBoardFilter | null) || 'all';
   const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
-  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, operatorSignals] = await Promise.all([
+  const [businesses, leadCounts, leadActivity, callActivity, messageActivity, operatorSignals, resettableBusinesses] = await Promise.all([
     query
       ? searchBusinessesForAdmin(query)
       : db.business.findMany({
@@ -121,6 +127,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       },
       take: 600,
     }),
+    listTestDemoBusinessesForReset(),
   ]);
 
   const leadCountMap = new Map(leadCounts.map((item) => [item.businessId, item._count._all]));
@@ -222,6 +229,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
     { label: 'Live', value: filterCounts.get('live') ?? 0 },
     { label: 'Archived', value: filterCounts.get('archived') ?? 0 },
   ];
+  const resettableBusinessPreview = resettableBusinesses.slice(0, 4).map((business) => business.name);
 
   return (
     <div className="container space-y-6 py-8">
@@ -252,6 +260,11 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {deleted ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Archived test business deleted.</div> : null}
+      {Number.isFinite(resetDeleted) && resetDeleted > 0 ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          Deleted {resetDeleted} test/demo {resetDeleted === 1 ? 'business' : 'businesses'}.
+        </div>
+      ) : null}
       {createdDemo && createdBusinessId ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           Demo business ready. Use <code className="rounded bg-background px-1 py-0.5">{createdBusinessId}</code> as `SIMULATOR_BUSINESS_ID`, or open the
@@ -365,6 +378,51 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-destructive/30 bg-destructive/5">
+        <CardHeader>
+          <CardTitle>Reset test data</CardTitle>
+          <CardDescription>
+            Founder/admin-only destructive cleanup. This removes every current test/demo business and its business-owned data so you can restart from a clean slate.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-xl border bg-background/80 p-4 text-sm">
+            <p className="font-medium text-foreground">
+              {resettableBusinesses.length} test/demo {resettableBusinesses.length === 1 ? 'business' : 'businesses'} eligible for deletion
+            </p>
+            <p className="mt-2 text-muted-foreground">
+              Only businesses marked as test/demo or the dedicated simulator demo workspace are included. Real customer businesses stay untouched.
+            </p>
+            {resettableBusinessPreview.length > 0 ? (
+              <p className="mt-3 text-muted-foreground">
+                Preview: {resettableBusinessPreview.join(', ')}
+                {resettableBusinesses.length > resettableBusinessPreview.length ? ` and ${resettableBusinesses.length - resettableBusinessPreview.length} more.` : '.'}
+              </p>
+            ) : (
+              <p className="mt-3 text-muted-foreground">No test/demo businesses are currently eligible for cleanup.</p>
+            )}
+          </div>
+
+          <form action={bulkDeleteTestBusinessesAction} className="rounded-xl border border-destructive/30 bg-background/80 p-4">
+            <div className="space-y-2">
+              <Label htmlFor="confirmationText">Type {BULK_TEST_DATA_RESET_CONFIRMATION}</Label>
+              <Input
+                id="confirmationText"
+                name="confirmationText"
+                autoComplete="off"
+                placeholder={BULK_TEST_DATA_RESET_CONFIRMATION}
+              />
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              This is irreversible. Deleting a business also removes its business-scoped leads, calls, messages, notifications, operator events, settings, and related demo data through the existing schema cascades.
+            </p>
+            <Button className="mt-4" type="submit" variant="destructive" disabled={resettableBusinesses.length === 0}>
+              Delete all test/demo businesses
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       <Card className="bg-card/90">
         <CardHeader>

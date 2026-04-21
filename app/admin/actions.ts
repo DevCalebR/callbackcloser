@@ -13,6 +13,11 @@ import {
 } from '@/lib/admin-provisioning';
 import { requireAdmin } from '@/lib/admin';
 import { canDeleteTestBusiness } from '@/lib/admin-dashboard';
+import {
+  bulkDeleteTestDemoBusinesses,
+  BULK_TEST_DATA_RESET_CONFIRMATION,
+  DEMO_OWNER_CLERK_ID,
+} from '@/lib/admin-test-data-reset';
 import { logAuditEvent } from '@/lib/audit-log';
 import { db } from '@/lib/db';
 import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
@@ -20,6 +25,7 @@ import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } f
 import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import {
   adminArchiveBusinessSchema,
+  adminBulkDeleteTestBusinessesSchema,
   adminBusinessDraftSchema,
   adminDeleteBusinessSchema,
   adminSendTestSmsSchema,
@@ -30,7 +36,6 @@ import {
   adminWebhookSyncSchema,
 } from '@/lib/validators';
 
-const DEMO_OWNER_CLERK_ID = 'simulator_demo_callbackcloser';
 const DEFAULT_DEMO_NAME = 'CallbackCloser Demo';
 const DEFAULT_DEMO_TEXTING_NUMBER = '+15005550006';
 const DEFAULT_DEMO_FORWARDING_NUMBER = '+15005550001';
@@ -939,4 +944,39 @@ export async function deleteTestBusinessAction(formData: FormData) {
 
   revalidatePath('/admin');
   redirect('/admin?deleted=1');
+}
+
+export async function bulkDeleteTestBusinessesAction(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const parsed = adminBulkDeleteTestBusinessesSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid reset request.')}`);
+  }
+
+  try {
+    const result = await bulkDeleteTestDemoBusinesses({
+      confirmation: parsed.data.confirmationText,
+    });
+
+    logAuditEvent({
+      event: 'admin_test_businesses_bulk_deleted',
+      actorType: 'user',
+      actorId: admin.userId,
+      targetType: 'business_collection',
+      targetId: 'test_demo_businesses',
+      metadata: {
+        actorEmail: admin.email,
+        deletedCount: result.deletedCount,
+        deletedBusinessNames: result.deletedBusinessNames,
+        confirmationText: BULK_TEST_DATA_RESET_CONFIRMATION,
+      },
+    });
+
+    revalidatePath('/admin');
+    redirect(`/admin?resetDeleted=${encodeURIComponent(String(result.deletedCount))}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to delete test/demo businesses.';
+    redirect(`/admin?error=${encodeURIComponent(message)}`);
+  }
 }

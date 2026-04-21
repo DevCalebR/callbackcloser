@@ -11,6 +11,7 @@ import {
   type OwnerNotification,
 } from '@prisma/client';
 
+import { isTestDemoBusiness } from '@/lib/admin-test-data-reset';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { formatMessageStatus, isMessageDeliveryIssueStatus } from '@/lib/lead-presenters';
 
@@ -143,8 +144,6 @@ export const adminBoardFilterOptions: AdminBoardFilterOption[] = [
   { key: 'archived', label: 'Archived' },
 ];
 
-const DEMO_OWNER_CLERK_ID = 'simulator_demo_callbackcloser';
-
 export function isBusinessArchived(business: Pick<DashboardBusiness, 'archivedAt'>) {
   return Boolean(business.archivedAt);
 }
@@ -158,7 +157,7 @@ export function isBusinessAutomationPaused(
 export function canDeleteTestBusiness(
   business: Pick<DashboardBusiness, 'isTestBusiness' | 'ownerClerkId' | 'archivedAt'>
 ) {
-  return isBusinessArchived(business) && (business.isTestBusiness || business.ownerClerkId === DEMO_OWNER_CLERK_ID);
+  return isBusinessArchived(business) && isTestDemoBusiness(business);
 }
 
 export function getBusinessLifecycleLabel(
