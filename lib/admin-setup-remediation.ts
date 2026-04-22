@@ -1,5 +1,7 @@
 import { TwilioAccountMode, type Business } from '@prisma/client';
 
+import type { AdminOnboardingConfidence } from '@/lib/admin-dashboard';
+import type { AdminGoLiveDecisionTruth, AdminMissedCallValidationTruth, AdminOperationalProof } from '@/lib/admin-operator-proof';
 import type { AdminTestSmsTruth } from '@/lib/admin-operator-visibility';
 import type { AdminOwnerState, TwilioWebhookSnapshot } from '@/lib/admin-provisioning-presenters';
 import { formatDateTime } from '@/lib/lead-presenters';
@@ -39,6 +41,8 @@ export type AdminSetupPanel = {
   nextAction: string;
   instructions: string[];
   verification: string[];
+  latestEvidence: string[];
+  warnings: string[];
   manualFields: AdminSetupManualField[];
   automaticActionLabel: string | null;
   secondaryAutomaticActionLabel: string | null;
@@ -89,15 +93,30 @@ export function buildAdminSetupPanels(params: {
   ownerState: AdminOwnerState;
   webhookSnapshot: TwilioWebhookSnapshot | null;
   testSmsTruth: AdminTestSmsTruth;
-  successfulLeadCount: number;
+  onboardingConfidence: AdminOnboardingConfidence;
+  missedCallValidation: AdminMissedCallValidationTruth;
+  goLiveDecision: AdminGoLiveDecisionTruth;
+  proofs: AdminOperationalProof[];
 }) {
-  const { business, setupFlow, ownerState, webhookSnapshot, testSmsTruth, successfulLeadCount } = params;
+  const {
+    business,
+    setupFlow,
+    ownerState,
+    webhookSnapshot,
+    testSmsTruth,
+    onboardingConfidence,
+    missedCallValidation,
+    goLiveDecision,
+    proofs,
+  } = params;
   const usingSubaccount = business.twilioAccountMode === TwilioAccountMode.BUSINESS_SUBACCOUNT;
   const numberLabel = business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || 'No business number is saved yet.';
   const numberSid = business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || 'No number SID is saved yet.';
   const voiceWebhook = formatWebhookExpectation(webhookSnapshot, 'voice');
   const smsWebhook = formatWebhookExpectation(webhookSnapshot, 'sms');
   const statusWebhook = formatWebhookExpectation(webhookSnapshot, 'status');
+  const messagingProof = proofs.find((proof) => proof.key === 'messaging_path');
+  const webhookProof = proofs.find((proof) => proof.key === 'webhooks');
 
   const panels: AdminSetupPanel[] = [
     {
@@ -122,6 +141,10 @@ export function buildAdminSetupPanels(params: {
         'The step should show Owner connected.',
         'The business should display the correct owner email and no pending invite blocker.',
       ],
+      latestEvidence: ownerState.connected
+        ? [ownerState.email ? `Connected owner: ${ownerState.email}` : 'A CallbackCloser owner account is linked.']
+        : [],
+      warnings: ownerState.connected ? [] : ['Without an attached owner, the business still lacks a trustworthy handoff path.'],
       manualFields: [
         {
           key: 'ownerEmail',
@@ -154,6 +177,8 @@ export function buildAdminSetupPanels(params: {
         `The step should show ${setupFlow.accountModeLabel}.`,
         usingSubaccount ? 'The next step should ask for a subaccount.' : 'The subaccount step should no longer block the flow.',
       ],
+      latestEvidence: [`Current mode: ${setupFlow.accountModeLabel}.`],
+      warnings: [],
       manualFields: [
         {
           key: 'twilioAccountMode',
@@ -180,6 +205,8 @@ export function buildAdminSetupPanels(params: {
         `The step should show ${setupFlow.numberSetupModeLabel}.`,
         'The number assignment panel should match the path you selected.',
       ],
+      latestEvidence: [`Current number path: ${setupFlow.numberSetupModeLabel}.`],
+      warnings: [],
       manualFields: [
         {
           key: 'twilioNumberSetupMode',
@@ -216,6 +243,8 @@ export function buildAdminSetupPanels(params: {
       verification: usingSubaccount
         ? ['The step should show Subaccount ready.', 'A Twilio subaccount SID that begins with AC should be saved on the business.']
         : ['The step should stay non-blocking while main-account mode is selected.'],
+      latestEvidence: business.twilioSubaccountSid ? [`Saved subaccount SID: ${business.twilioSubaccountSid}`] : [],
+      warnings: usingSubaccount && !business.twilioSubaccountSid ? ['Subaccount mode still needs an AC SID before Twilio resources can be trusted.'] : [],
       manualFields: usingSubaccount
         ? [
             {
@@ -245,6 +274,14 @@ export function buildAdminSetupPanels(params: {
         'After saving, send a test SMS from the next step.',
       ],
       verification: ['The step should show Ready.', 'The saved Messaging Service SID should begin with MG.', 'A test SMS should accept or deliver after this is saved.'],
+      latestEvidence: [
+        business.twilioMessagingServiceSid ? `Saved Messaging Service SID: ${business.twilioMessagingServiceSid}` : 'No Messaging Service SID is saved yet.',
+        ...(messagingProof?.evidenceSummary ? [messagingProof.evidenceSummary] : []),
+      ],
+      warnings:
+        testSmsTruth.state === 'failed'
+          ? ['The latest test SMS failed, so the messaging path is still not proven even if the MG SID is saved.']
+          : [],
       manualFields: [
         {
           key: 'twilioMessagingServiceSid',
@@ -272,6 +309,8 @@ export function buildAdminSetupPanels(params: {
         'Then move to the webhook steps so CallbackCloser can verify routing.',
       ],
       verification: ['The step should show Ready.', 'A Twilio phone number and number SID should both be saved.', 'The webhook steps should be able to compare the assigned number against Twilio.'],
+      latestEvidence: [`Current number: ${numberLabel}`, `Current number SID: ${numberSid}`],
+      warnings: [],
       manualFields: [
         {
           key: 'twilioPhoneNumber',
@@ -302,6 +341,13 @@ export function buildAdminSetupPanels(params: {
         'After saving in Twilio, re-open this step or run sync again to verify.',
       ],
       verification: ['The step should show Synced.', 'The current Twilio voice webhook should match the expected CallbackCloser URL exactly.'],
+      latestEvidence: [`Current Twilio value: ${voiceWebhook.current}`, `Expected CallbackCloser value: ${voiceWebhook.expected}`],
+      warnings:
+        webhookSnapshot?.error
+          ? [webhookSnapshot.error]
+          : webhookProof?.status === 'failed'
+            ? ['The live Twilio webhook read still shows at least one mismatch.']
+            : [],
       manualFields: [
         {
           key: 'twilioPhoneNumberSid',
@@ -326,6 +372,13 @@ export function buildAdminSetupPanels(params: {
         'Re-open this step or run sync again after the Twilio value is updated.',
       ],
       verification: ['The step should show Synced.', 'The current Twilio SMS webhook should match the expected CallbackCloser URL exactly.'],
+      latestEvidence: [`Current Twilio value: ${smsWebhook.current}`, `Expected CallbackCloser value: ${smsWebhook.expected}`],
+      warnings:
+        webhookSnapshot?.error
+          ? [webhookSnapshot.error]
+          : webhookProof?.status === 'failed'
+            ? ['The live Twilio webhook read still shows at least one mismatch.']
+            : [],
       manualFields: [
         {
           key: 'twilioPhoneNumberSid',
@@ -350,6 +403,13 @@ export function buildAdminSetupPanels(params: {
         'After saving in Twilio, reload this step or run sync again.',
       ],
       verification: ['The step should show Synced.', 'The Twilio status callback should match the expected CallbackCloser URL exactly.'],
+      latestEvidence: [`Current Twilio value: ${statusWebhook.current}`, `Expected CallbackCloser value: ${statusWebhook.expected}`],
+      warnings:
+        webhookSnapshot?.error
+          ? [webhookSnapshot.error]
+          : webhookProof?.status === 'failed'
+            ? ['The live Twilio webhook read still shows at least one mismatch.']
+            : [],
       manualFields: [
         {
           key: 'twilioPhoneNumberSid',
@@ -378,6 +438,12 @@ export function buildAdminSetupPanels(params: {
         'If the business is blocked, record the blocker in plain English so the next operator does not have to guess.',
       ],
       verification: ['The saved status should match the real Twilio state.', 'If approved, the step should show Approved.', 'If blocked, the blocker note should explain why.'],
+      latestEvidence: [
+        business.a2pCustomerProfileSid ? `Customer profile SID: ${business.a2pCustomerProfileSid}` : 'No customer profile SID saved.',
+        business.a2pBrandSid ? `Brand SID: ${business.a2pBrandSid}` : 'No brand SID saved.',
+        business.a2pCampaignSid ? `Campaign SID: ${business.a2pCampaignSid}` : 'No campaign SID saved.',
+      ],
+      warnings: business.a2pFailureReason ? [business.a2pFailureReason] : [],
       manualFields: [
         {
           key: 'managedTwilioStatus',
@@ -431,6 +497,19 @@ export function buildAdminSetupPanels(params: {
         'If the test fails, use the related setup steps and recent activity to correct the blocking issue.',
       ],
       verification: ['This step should show Delivered.', 'Recent activity should contain the final test SMS delivery event.', 'You should avoid marking the business live until delivery is confirmed.'],
+      latestEvidence: [
+        testSmsTruth.lastAttemptAt ? `Last attempt: ${formatDateTime(testSmsTruth.lastAttemptAt)}` : 'No test SMS attempt recorded yet.',
+        `Latest result: ${testSmsTruth.summary}.`,
+        ...(testSmsTruth.reason ? [`Known reason: ${testSmsTruth.reason}.`] : []),
+      ],
+      warnings:
+        testSmsTruth.state === 'failed'
+          ? ['Do not treat messaging as proven until the business line delivers a test SMS cleanly.']
+          : testSmsTruth.state === 'pending'
+            ? ['Twilio accepted the request, but delivery is still unproven.']
+            : testSmsTruth.state === 'not_run'
+              ? ['This business still lacks direct test-delivery proof.']
+              : [],
       manualFields: [
         {
           key: 'destinationPhone',
@@ -446,18 +525,27 @@ export function buildAdminSetupPanels(params: {
       key: 'missed_call_validated',
       title: 'Missed-call flow validation',
       currentState:
-        successfulLeadCount > 0
-          ? `${successfulLeadCount} missed-call validation event${successfulLeadCount === 1 ? '' : 's'} reached owner-visible lead state.`
-          : 'No missed-call validation has been recorded yet.',
+        missedCallValidation.verifiedAt
+          ? `${missedCallValidation.label} • latest proof ${formatDateTime(missedCallValidation.verifiedAt)}`
+          : missedCallValidation.summary,
       explanation: 'This is the end-to-end proof that inbound call, missed-call detection, lead creation, outbound SMS, and owner visibility all still work in order.',
-      nextAction: 'Run a real missed call and use the customer workspace plus timeline to confirm the flow end to end.',
+      nextAction: missedCallValidation.countsAsLaunchProof
+        ? 'Use this proof to support the final go-live decision, or record a fresher note if you re-tested the flow manually.'
+        : 'Run a real missed call and use the customer workspace plus timeline to confirm the flow end to end.',
       instructions: [
         'Confirm the forwarding number and owner alert phone are correct.',
         'Place a real missed call to the business number.',
         'Check the customer call-flow or leads view to confirm the lead was created.',
         'Use recent activity to confirm the event order: inbound call, missed call, lead, SMS, and owner alert.',
+        'If you validated the flow outside the app, record a short manual confirmation note so the proof stays visible here.',
       ],
-      verification: ['The timeline should show the full missed-call sequence in order.', 'The customer workspace should show the lead and owner visibility outcome.', 'This step should show Validated after the flow succeeds.'],
+      verification: ['The timeline should show the full missed-call sequence in order.', 'The customer workspace should show the lead and owner visibility outcome.', 'This step should only count as complete once recent evidence or a manual note exists.'],
+      latestEvidence: [
+        missedCallValidation.verifiedAt ? `Latest proof timestamp: ${formatDateTime(missedCallValidation.verifiedAt)}` : 'No missed-call proof timestamp recorded yet.',
+        missedCallValidation.summary,
+        ...(missedCallValidation.evidenceSummary ? [missedCallValidation.evidenceSummary] : []),
+      ],
+      warnings: missedCallValidation.countsAsLaunchProof ? [] : ['Without explicit missed-call proof, the founder still has to guess whether the recovery flow actually works.'],
       manualFields: [
         {
           key: 'forwardingNumber',
@@ -480,13 +568,27 @@ export function buildAdminSetupPanels(params: {
       title: 'Safe to mark live',
       currentState: findStep(setupFlow, 'safe_to_mark_live').detail,
       explanation: 'This is the final operator gate. It should only clear once the business has real setup proof, not just saved labels.',
-      nextAction: findStep(setupFlow, 'safe_to_mark_live').complete ? 'Mark the business live when you are ready.' : 'Clear the remaining setup blockers before marking the business live.',
+      nextAction: findStep(setupFlow, 'safe_to_mark_live').complete
+        ? 'Review the proof list and mark the business live when you are ready.'
+        : 'Clear the remaining setup blockers before marking the business live, or record an explicit warning note if you must launch anyway.',
       instructions: [
-        'Review the remaining blocked steps above.',
-        'Do not mark the business live until each blocking step is complete.',
+        'Review the remaining blocked steps and proof list above.',
+        'Do not mark the business live until each blocking step is complete unless you are intentionally accepting the warning state.',
+        'If you must launch with known gaps, record a short note explaining what is still missing and why you are proceeding.',
         'If the business should stop running, pause automation here instead of leaving the state ambiguous.',
       ],
-      verification: ['The launch gate should say Ready before you mark live.', 'The business should only be marked live after test SMS and missed-call validation are complete.'],
+      verification: ['The launch gate should say Ready before you mark live, unless the operator explicitly acknowledges a warning state.', 'The business should only be treated as fully live after test SMS and missed-call validation are complete.'],
+      latestEvidence: [
+        goLiveDecision.decidedAt ? `Latest go-live decision: ${formatDateTime(goLiveDecision.decidedAt)}` : 'No explicit go-live decision has been recorded yet.',
+        goLiveDecision.summary,
+        ...(goLiveDecision.note ? [goLiveDecision.note] : []),
+      ],
+      warnings:
+        onboardingConfidence.blockers.length > 0
+          ? onboardingConfidence.blockers.map((blocker) => blocker.message)
+          : goLiveDecision.state === 'marked_live_with_warnings'
+            ? [goLiveDecision.detail]
+            : [],
       manualFields: [],
       automaticActionLabel: 'Mark business live',
       secondaryAutomaticActionLabel: 'Pause automation',

@@ -272,11 +272,57 @@ test('onboarding confidence distinguishes ready-for-test from ready-for-live', (
         createdAt: new Date('2026-04-17T12:00:00.000Z'),
       },
     ],
+    missedCallValidation: {
+      countsAsLaunchProof: true,
+      detail: 'Recent event sequence proves the missed-call flow reached the owner alert path.',
+    },
   });
 
   assert.equal(readyForLive.state, 'ready_to_go_live');
   assert.equal(readyForLive.canSafelyMarkLive, true);
   assert.equal(readyForLive.readinessLabel, 'Ready for live');
+});
+
+test('onboarding confidence does not overstate webhook or missed-call proof when explicit truth is missing', () => {
+  const confidence = buildAdminOnboardingConfidence({
+    business: createBusiness({
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+      twilioWebhookSyncedAt: new Date('2026-04-17T00:00:00.000Z'),
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 4,
+    operatorEvents: [
+      {
+        type: 'admin.test_sms_delivered',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+    webhookSnapshot: {
+      currentVoiceUrl: 'https://wrong.example.com/voice',
+      currentSmsUrl: 'https://app.callbackcloser.com/api/twilio/sms',
+      currentStatusUrl: 'https://app.callbackcloser.com/api/twilio/message-status',
+      expectedVoiceUrl: 'https://app.callbackcloser.com/api/twilio/voice',
+      expectedSmsUrl: 'https://app.callbackcloser.com/api/twilio/sms',
+      expectedStatusUrl: 'https://app.callbackcloser.com/api/twilio/message-status',
+      voiceSynced: false,
+      smsSynced: true,
+      statusSynced: true,
+      error: null,
+    },
+    missedCallValidation: {
+      countsAsLaunchProof: false,
+      detail: 'Historical lead activity exists, but explicit missed-call proof is still missing.',
+    },
+  });
+
+  assert.equal(confidence.readyForTest, false);
+  assert.equal(confidence.canSafelyMarkLive, false);
+  assert.equal(confidence.state, 'in_setup');
+  assert.match(confidence.milestones.find((item) => item.key === 'webhooks')?.detail || '', /re-sync/i);
+  assert.match(confidence.milestones.find((item) => item.key === 'missed_call_validation')?.detail || '', /explicit/i);
 });
 
 test('admin test SMS confidence waits for delivery confirmation', () => {

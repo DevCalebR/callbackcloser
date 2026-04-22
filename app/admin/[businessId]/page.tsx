@@ -3,11 +3,13 @@ import { notFound } from 'next/navigation';
 
 import {
   archiveBusinessAction,
+  confirmMissedCallValidationAction,
   connectExistingBusinessOwnerAction,
   createBusinessMessagingServiceAction,
   createBusinessTwilioSubaccountAction,
   deleteTestBusinessAction,
   inviteBusinessOwnerAction,
+  markBusinessLiveAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
   restoreBusinessAction,
@@ -24,9 +26,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
+import { buildAdminOnboardingConfidence, isBusinessArchived } from '@/lib/admin-dashboard';
+import { buildAdminMissedCallValidationTruth, buildAdminOperationalProofs } from '@/lib/admin-operator-proof';
 import { buildAdminNextStepGuide, buildAdminSetupPanels } from '@/lib/admin-setup-remediation';
-import { isBusinessArchived } from '@/lib/admin-dashboard';
 import {
   buildAdminBusinessIssue,
   buildAdminTestSmsTruth,
@@ -182,6 +186,11 @@ export default async function AdminBusinessDetailPage({
         ? 'pending_delivery'
         : testSmsTruth.state;
   const managedTextingNumber = getManagedTextingNumber(business);
+  const ownerContact = business.notificationSettings?.ownerPhone || business.notifyPhone || null;
+  const missedCallValidation = buildAdminMissedCallValidationTruth({
+    events: operatorEvents,
+    successfulLeadCount,
+  });
   const setupFlow = buildTwilioSetupFlow({
     business,
     notificationSettings: business.notificationSettings,
@@ -189,6 +198,42 @@ export default async function AdminBusinessDetailPage({
     successfulLeadCount,
     testSmsState,
     webhookSnapshot,
+    missedCallValidation: {
+      complete: missedCallValidation.countsAsLaunchProof,
+      stateLabel: missedCallValidation.label,
+      detail: missedCallValidation.detail,
+      tone:
+        missedCallValidation.tone === 'success'
+          ? 'success'
+          : missedCallValidation.tone === 'attention'
+            ? 'attention'
+            : missedCallValidation.tone === 'pending'
+              ? 'pending'
+              : 'neutral',
+    },
+  });
+  const onboardingConfidence = buildAdminOnboardingConfidence({
+    business,
+    notificationSettings: business.notificationSettings,
+    ownerConnected: ownerState.connected,
+    successfulLeadCount,
+    operatorEvents,
+    webhookSnapshot,
+    missedCallValidation,
+  });
+  const { goLiveDecision, proofs } = buildAdminOperationalProofs({
+    ownerConnected: ownerState.connected,
+    ownerEmail: business.notificationSettings?.ownerEmail || null,
+    ownerPhone: ownerContact,
+    messagingServiceReady: Boolean(business.twilioMessagingServiceSid),
+    numberAssigned: Boolean(managedTextingNumber && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid)),
+    testSmsTruth,
+    missedCallValidation,
+    webhookSnapshot,
+    provisioningStatus: business.provisioningStatus,
+    canSafelyMarkLive: onboardingConfidence.canSafelyMarkLive,
+    blockers: onboardingConfidence.blockers.map((blocker) => blocker.message),
+    events: operatorEvents,
   });
   const lastIssue = buildAdminBusinessIssue({
     events: operatorEvents,
@@ -232,7 +277,10 @@ export default async function AdminBusinessDetailPage({
     ownerState,
     webhookSnapshot,
     testSmsTruth,
-    successfulLeadCount,
+    onboardingConfidence,
+    missedCallValidation,
+    goLiveDecision,
+    proofs,
   });
   const nextStepGuide = buildAdminNextStepGuide({
     setupFlow,
@@ -252,6 +300,8 @@ export default async function AdminBusinessDetailPage({
   const archived = getQueryValue(searchParams, 'archived') === '1';
   const restored = getQueryValue(searchParams, 'restored') === '1';
   const statusSaved = getQueryValue(searchParams, 'statusSaved');
+  const validationSaved = getQueryValue(searchParams, 'validationSaved') === '1';
+  const liveAcknowledged = getQueryValue(searchParams, 'liveAcknowledged');
   const error = getQueryValue(searchParams, 'error');
 
   function renderAutomaticActions(step: TwilioSetupStep) {
@@ -546,31 +596,82 @@ export default async function AdminBusinessDetailPage({
 
     if (step.key === 'missed_call_validated') {
       return (
-        <div className="flex flex-wrap gap-3">
-          <Link className={buttonVariants({ size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app/call-flow')}>
-            Open customer call flow
-          </Link>
-          <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
-            Open customer workspace
-          </Link>
-          <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="#recent-activity">
-            Open recent activity
-          </Link>
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <Link className={buttonVariants({ size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app/call-flow')}>
+              Open customer call flow
+            </Link>
+            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
+              Open customer workspace
+            </Link>
+            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="#recent-activity">
+              Open recent activity
+            </Link>
+          </div>
+          <form action={confirmMissedCallValidationAction} className="space-y-3 rounded-xl border bg-background/80 p-4">
+            <input name="businessId" type="hidden" value={business.id} />
+            <input name="returnStep" type="hidden" value={step.key} />
+            <div className="space-y-2">
+              <Label htmlFor="manualMissedCallValidationNote">Manual validation note</Label>
+              <Textarea
+                id="manualMissedCallValidationNote"
+                name="note"
+                placeholder="Example: Placed a missed call from my cell, saw the lead created, recovery SMS sent, and owner alert arrived on +1..."
+                rows={4}
+              />
+            </div>
+            <Button size="sm" type="submit" variant="outline">
+              Mark missed-call flow validated
+            </Button>
+          </form>
         </div>
       );
     }
 
     if (step.key === 'safe_to_mark_live') {
       return (
-        <div className="flex flex-wrap gap-3">
-          <form action={setBusinessProvisioningStatusAction}>
+        <div className="space-y-4">
+          <form action={markBusinessLiveAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
             <input name="businessId" type="hidden" value={business.id} />
             <input name="returnStep" type="hidden" value={step.key} />
-            <input name="status" type="hidden" value="LIVE" />
-            <Button disabled={!setupFlow.safeToMarkLive || business.provisioningStatus === 'LIVE'} size="sm" type="submit">
-              {business.provisioningStatus === 'LIVE' ? 'Already live' : 'Mark business live'}
+            {!onboardingConfidence.canSafelyMarkLive ? (
+              <>
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                  <p className="font-medium text-destructive">Launch proof is still incomplete</p>
+                  <ul className="mt-2 space-y-2 text-destructive">
+                    {onboardingConfidence.blockers.map((blocker) => (
+                      <li key={blocker.message}>• {blocker.message}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="goLiveNote">Operator note</Label>
+                  <Textarea
+                    id="goLiveNote"
+                    name="note"
+                    placeholder="Record why this business is going live despite the current warning state."
+                    rows={4}
+                  />
+                </div>
+                <label className="flex items-start gap-2 rounded-xl border bg-background/80 p-3 text-sm">
+                  <input name="acknowledgeWarnings" type="checkbox" value="true" />
+                  <span>I understand this business is going live without complete proof and I am recording that decision explicitly.</span>
+                </label>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                The current launch proof is green. Review it once more, then mark the business live when you want automation active.
+              </p>
+            )}
+            <Button disabled={business.provisioningStatus === 'LIVE' && onboardingConfidence.canSafelyMarkLive} size="sm" type="submit">
+              {business.provisioningStatus === 'LIVE' && onboardingConfidence.canSafelyMarkLive
+                ? 'Already live'
+                : onboardingConfidence.canSafelyMarkLive
+                  ? 'Mark business live'
+                  : 'Mark live with warnings'}
             </Button>
           </form>
+
           <form action={setBusinessProvisioningStatusAction}>
             <input name="businessId" type="hidden" value={business.id} />
             <input name="returnStep" type="hidden" value={step.key} />
@@ -789,9 +890,75 @@ export default async function AdminBusinessDetailPage({
       {synced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Webhook sync complete for {synced}.</div> : null}
       {testSms ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Test SMS requested. Wait for final delivery or failure before trusting the setup.</div> : null}
       {statusSaved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning status updated to {statusSaved}.</div> : null}
+      {validationSaved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Manual missed-call validation proof saved.</div> : null}
+      {liveAcknowledged ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          {liveAcknowledged === 'warnings' ? 'Business marked live with explicit warning acknowledgment.' : 'Business marked live after launch checks.'}
+        </div>
+      ) : null}
       {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived safely. Automation is paused.</div> : null}
       {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored and ready for review.</div> : null}
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader className="gap-3">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-2">
+              <CardDescription>Onboarding confidence</CardDescription>
+              <CardTitle className="text-lg">{onboardingConfidence.summary}</CardTitle>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={onboardingConfidence.stateVariant}>{onboardingConfidence.stateLabel}</Badge>
+              <Badge variant={onboardingConfidence.readinessVariant}>{onboardingConfidence.readinessLabel}</Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium">Next action:</p>
+            <span className="text-muted-foreground">{onboardingConfidence.nextAction}</span>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-3 rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Blockers and warnings</p>
+              {onboardingConfidence.blockers.length > 0 ? (
+                <ul className="space-y-2 text-muted-foreground">
+                  {onboardingConfidence.blockers.map((blocker) => (
+                    <li key={blocker.message}>• {blocker.message}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground">No current blockers are recorded for the go-live decision.</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Link className={buttonVariants({ size: 'sm' })} href={nextStepHref}>
+                  Open next step
+                </Link>
+                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildStepPath(business.id, 'safe_to_mark_live', timelineFilter)}>
+                  Open go-live step
+                </Link>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {proofs.map((proof) => (
+                <div key={proof.key} className="rounded-xl border bg-background/80 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium">{proof.label}</p>
+                    <Badge variant={getOperatorToneBadgeVariant(proof.tone)}>{proof.statusLabel}</Badge>
+                  </div>
+                  <p className="mt-2 text-muted-foreground">{proof.detail}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {proof.verifiedAt ? `Latest proof ${formatDateTime(proof.verifiedAt)}` : proof.sourceLabel || 'No proof timestamp yet'}
+                  </p>
+                  {proof.evidenceSummary ? <p className="mt-2 text-xs text-muted-foreground">{proof.evidenceSummary}</p> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="border-primary/20 bg-primary/5">
@@ -886,6 +1053,8 @@ export default async function AdminBusinessDetailPage({
                 step={step}
                 title={panel.title}
                 instructions={panel.instructions}
+                latestEvidence={panel.latestEvidence}
+                warnings={panel.warnings}
                 verification={panel.verification}
               />
             );

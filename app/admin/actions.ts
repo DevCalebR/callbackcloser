@@ -8,23 +8,26 @@ import {
   buildPendingOwnerClerkId,
   connectExistingBusinessOwner,
   findClerkUserByEmail,
+  getAdminOwnerState,
+  getTwilioWebhookSnapshot,
   inviteBusinessOwner,
   runAdminProvisioning,
   syncBusinessTwilioWebhooks,
   updateBusinessProvisioningStatus,
 } from '@/lib/admin-provisioning';
 import { deleteDeletableTestBusiness } from '@/lib/admin-business-lifecycle';
+import { buildAdminOnboardingConfidence, canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
+import { buildAdminMissedCallValidationTruth } from '@/lib/admin-operator-proof';
 import { requireAdmin } from '@/lib/admin';
-import { canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
 import {
   bulkDeleteTestDemoBusinesses,
   BULK_TEST_DATA_RESET_CONFIRMATION,
   DEMO_OWNER_CLERK_ID,
 } from '@/lib/admin-test-data-reset';
 import { logAuditEvent } from '@/lib/audit-log';
-import { buildTwilioSetupUpdateEventMetadata } from '@/lib/admin-operator-visibility';
+import { buildAdminTestSmsTruth, buildTwilioSetupUpdateEventMetadata } from '@/lib/admin-operator-visibility';
 import { db } from '@/lib/db';
-import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
+import { formatPhoneDetail, listBusinessOperatorEvents, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import {
@@ -34,6 +37,8 @@ import {
   adminConnectExistingOwnerSchema,
   adminDeleteBusinessSchema,
   adminInviteOwnerSchema,
+  adminMarkBusinessLiveSchema,
+  adminMissedCallValidationConfirmationSchema,
   adminSendTestSmsSchema,
   adminSetupBasicsSchema,
   adminTwilioSetupSchema,
@@ -43,6 +48,7 @@ import {
   adminWebhookSyncSchema,
 } from '@/lib/validators';
 import { createMessagingServiceForBusiness, createSubaccountForBusiness } from '@/lib/managed-twilio';
+import { buildTwilioSetupFlow } from '@/lib/twilio-setup';
 
 const DEFAULT_DEMO_NAME = 'CallbackCloser Demo';
 const DEFAULT_DEMO_TEXTING_NUMBER = '+15005550006';
@@ -208,6 +214,85 @@ async function loadBusinessForLifecycleAction(businessId: string) {
       notificationSettings: true,
     },
   });
+}
+
+async function loadBusinessLaunchContext(businessId: string) {
+  const [business, successfulLeadCount, operatorEvents] = await Promise.all([
+    db.business.findUnique({
+      where: { id: businessId },
+      include: {
+        notificationSettings: true,
+      },
+    }),
+    db.lead.count({
+      where: {
+        businessId,
+        OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
+      },
+    }),
+    listBusinessOperatorEvents(businessId, 'all', 160),
+  ]);
+
+  if (!business) {
+    throw new Error('Business not found.');
+  }
+
+  const testSmsTruth = buildAdminTestSmsTruth(operatorEvents);
+  const [ownerState, webhookSnapshot] = await Promise.all([
+    getAdminOwnerState(business, business.notificationSettings),
+    getTwilioWebhookSnapshot(business),
+  ]);
+  const missedCallValidation = buildAdminMissedCallValidationTruth({
+    events: operatorEvents,
+    successfulLeadCount,
+  });
+  const setupFlow = buildTwilioSetupFlow({
+    business,
+    notificationSettings: business.notificationSettings,
+    ownerConnected: ownerState.connected,
+    successfulLeadCount,
+    testSmsState:
+      testSmsTruth.state === 'not_run'
+        ? 'not_started'
+        : testSmsTruth.state === 'pending'
+          ? 'pending_delivery'
+          : testSmsTruth.state,
+    webhookSnapshot,
+    missedCallValidation: {
+      complete: missedCallValidation.countsAsLaunchProof,
+      stateLabel: missedCallValidation.label,
+      detail: missedCallValidation.detail,
+      tone:
+        missedCallValidation.tone === 'success'
+          ? 'success'
+          : missedCallValidation.tone === 'attention'
+            ? 'attention'
+            : missedCallValidation.tone === 'pending'
+              ? 'pending'
+              : 'neutral',
+    },
+  });
+  const confidence = buildAdminOnboardingConfidence({
+    business,
+    notificationSettings: business.notificationSettings,
+    ownerConnected: ownerState.connected,
+    successfulLeadCount,
+    operatorEvents,
+    webhookSnapshot,
+    missedCallValidation,
+  });
+
+  return {
+    business,
+    confidence,
+    missedCallValidation,
+    setupFlow,
+    ownerState,
+    operatorEvents,
+    testSmsTruth,
+    webhookSnapshot,
+    successfulLeadCount,
+  };
 }
 
 export async function createDemoBusinessAction(formData: FormData) {
@@ -1361,6 +1446,63 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
   redirect(redirectPath);
 }
 
+export async function confirmMissedCallValidationAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
+  const businessId = getString(formData, 'businessId');
+  const parsed = adminMissedCallValidationConfirmationSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    redirect(
+      buildAdminBusinessRedirectPath(
+        businessId,
+        withReturnStepParam({ error: parsed.error.issues[0]?.message || 'Add a short validation note.' }, returnStep)
+      )
+    );
+  }
+
+  const business = await db.business.findUnique({
+    where: { id: parsed.data.businessId },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  if (!business) {
+    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+  }
+
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'admin.missed_call_validation_confirmed',
+    category: 'ADMIN_ACTIONS',
+    status: 'SUCCESS',
+    summary: 'Missed-call flow manually confirmed',
+    details: {
+      remediationStepKey: 'missed_call_validated',
+      note: parsed.data.note,
+    },
+  });
+
+  logAuditEvent({
+    event: 'admin_missed_call_validation_confirmed',
+    actorType: 'user',
+    actorId: admin.userId,
+    businessId: business.id,
+    targetType: 'business',
+    targetId: business.id,
+    metadata: {
+      actorEmail: admin.email,
+      source: 'admin_setup_panels',
+      note: parsed.data.note,
+    },
+  });
+
+  await revalidateAdminPaths(business.id);
+  redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ validationSaved: 1 }, returnStep)));
+}
+
 export async function setBusinessProvisioningStatusAction(formData: FormData) {
   await requireAdmin();
   const returnStep = getReturnStep(formData);
@@ -1376,6 +1518,105 @@ export async function setBusinessProvisioningStatusAction(formData: FormData) {
     buildAdminBusinessRedirectPath(
       parsed.data.businessId,
       withReturnStepParam({ statusSaved: parsed.data.status.toLowerCase() }, returnStep)
+    )
+  );
+}
+
+export async function markBusinessLiveAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
+  const businessId = getString(formData, 'businessId');
+  const parsed = adminMarkBusinessLiveSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    redirect(
+      buildAdminBusinessRedirectPath(
+        businessId,
+        withReturnStepParam({ error: parsed.error.issues[0]?.message || 'Unable to mark the business live.' }, returnStep)
+      )
+    );
+  }
+
+  const { business, confidence } = await loadBusinessLaunchContext(parsed.data.businessId);
+
+  if (business.archivedAt) {
+    redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ error: 'Restore the archived business before marking it live.' }, returnStep)));
+  }
+
+  const blockers = confidence.blockers.map((blocker) => blocker.message);
+  const note = parsed.data.note?.trim() || null;
+
+  if (!confidence.canSafelyMarkLive && !parsed.data.acknowledgeWarnings) {
+    redirect(
+      buildAdminBusinessRedirectPath(
+        business.id,
+        withReturnStepParam(
+          {
+            error: blockers.length > 0 ? `Launch proof is still incomplete: ${blockers.join(' ')}` : 'Launch proof is still incomplete.',
+          },
+          returnStep
+        )
+      )
+    );
+  }
+
+  if (!confidence.canSafelyMarkLive && !note) {
+    redirect(
+      buildAdminBusinessRedirectPath(
+        business.id,
+        withReturnStepParam(
+          {
+            error: 'Add a short operator note before marking this business live with warnings.',
+          },
+          returnStep
+        )
+      )
+    );
+  }
+
+  await updateBusinessProvisioningStatus(business.id, BusinessProvisioningStatus.LIVE, null);
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: confidence.canSafelyMarkLive ? 'admin.go_live_marked_safe' : 'admin.go_live_marked_with_warnings',
+    category: 'ADMIN_ACTIONS',
+    status: confidence.canSafelyMarkLive ? 'SUCCESS' : 'WARNING',
+    summary: confidence.canSafelyMarkLive ? 'Business marked live after launch checks' : 'Business marked live with known warnings',
+    details: {
+      remediationStepKey: 'safe_to_mark_live',
+      note,
+      blockers,
+      acknowledgeWarnings: parsed.data.acknowledgeWarnings,
+      canSafelyMarkLive: confidence.canSafelyMarkLive,
+    },
+  });
+
+  logAuditEvent({
+    event: 'admin_business_marked_live',
+    actorType: 'user',
+    actorId: admin.userId,
+    businessId: business.id,
+    targetType: 'business',
+    targetId: business.id,
+    metadata: {
+      actorEmail: admin.email,
+      source: 'admin_setup_panels',
+      blockers,
+      canSafelyMarkLive: confidence.canSafelyMarkLive,
+      note,
+    },
+  });
+
+  await revalidateAdminPaths(business.id);
+  redirect(
+    buildAdminBusinessRedirectPath(
+      business.id,
+      withReturnStepParam(
+        {
+          statusSaved: 'live',
+          liveAcknowledged: confidence.canSafelyMarkLive ? 'safe' : 'warnings',
+        },
+        returnStep
+      )
     )
   );
 }

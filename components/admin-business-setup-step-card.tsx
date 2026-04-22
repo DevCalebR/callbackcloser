@@ -22,6 +22,8 @@ export function AdminBusinessSetupStepCard({
   nextAction,
   instructions,
   verification,
+  latestEvidence,
+  warnings,
   automaticActions,
   manualEntry,
   open,
@@ -34,6 +36,8 @@ export function AdminBusinessSetupStepCard({
   nextAction: string;
   instructions: string[];
   verification: string[];
+  latestEvidence: string[];
+  warnings: string[];
   automaticActions?: ReactNode;
   manualEntry?: ReactNode;
   open?: boolean;
@@ -74,6 +78,28 @@ export function AdminBusinessSetupStepCard({
             <p className="font-medium">What to do next</p>
             <p className="text-muted-foreground">{nextAction}</p>
           </section>
+
+          {latestEvidence.length > 0 ? (
+            <section className="space-y-2 text-sm">
+              <p className="font-medium">Latest evidence</p>
+              <ul className="space-y-2 text-muted-foreground">
+                {latestEvidence.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {warnings.length > 0 ? (
+            <section className="space-y-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+              <p className="font-medium text-destructive">Warnings before completion</p>
+              <ul className="space-y-2 text-destructive">
+                {warnings.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           {automaticActions ? (
             <section className="space-y-3 text-sm">
