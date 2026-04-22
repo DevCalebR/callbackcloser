@@ -45,6 +45,7 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /automatic repair and manual fallback/i);
   assert.match(adminDetail, /Setup steps/);
   assert.match(adminDetail, /Last issue/);
+  assert.match(adminDetail, /Open fix step/);
   assert.match(adminDetail, /Test SMS truth/);
   assert.match(adminDetail, /Onboarding confidence/);
   assert.match(adminDetail, /Next step/);
@@ -68,6 +69,8 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /View support workspace snapshot/);
   assert.match(adminHome, /Open blocker step/);
   assert.match(activityTimeline, /Recent activity/);
+  assert.match(activityTimeline, /Show more activity/);
+  assert.match(activityTimeline, /Collapse activity/);
   assert.match(activityTimeline, /Expand details/);
   assert.doesNotMatch(adminDetail, /Connect or invite owner/);
   assert.match(supportWorkspace, /support mode workspace/);

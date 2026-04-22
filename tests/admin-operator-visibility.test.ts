@@ -109,6 +109,27 @@ test('admin business issue prefers the latest recorded issue and falls back to t
 
   assert.equal(fallbackIssue.summary, 'Messaging Service missing');
   assert.equal(fallbackIssue.remediationStepKey, 'messaging_service_ready');
+
+  const ownerAlertIssue = buildAdminBusinessIssue({
+    events: [
+      {
+        type: 'owner_alert.email_skipped',
+        category: OperatorEventCategory.OWNER_ALERTS,
+        status: OperatorEventStatus.WARNING,
+        summary: 'Owner email alert skipped',
+        detailsJson: { reason: 'missing_config' },
+        createdAt: new Date('2026-04-20T12:04:00.000Z'),
+      },
+    ],
+    currentStep: {
+      stepKey: 'safe_to_mark_live',
+      title: 'Safe to mark live',
+      detail: 'Review launch proof.',
+      tone: 'pending',
+    },
+  });
+
+  assert.equal(ownerAlertIssue.remediationStepKey, 'owner_connected');
 });
 
 test('twilio setup update metadata stays specific enough for future remediation panels', () => {

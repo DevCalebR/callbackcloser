@@ -445,30 +445,6 @@ export function buildAdminOnboardingConfidence(params: {
   const readyForLive = readyForTest && hasTestSmsSuccess && missedCallValidated;
   const canSafelyMarkLive = readyForLive;
 
-  let state: OnboardingConfidenceState = 'in_setup';
-  if (isBusinessArchived(business)) {
-    state = 'archived';
-  } else if (business.provisioningStatus === BusinessProvisioningStatus.LIVE && (!canSafelyMarkLive || hasRecentFailures || managedSummary.attentionRequired)) {
-    state = 'live_with_warnings';
-  } else if (business.provisioningStatus === BusinessProvisioningStatus.LIVE && canSafelyMarkLive) {
-    state = 'live';
-  } else if (
-    nextStep.tone === 'attention' ||
-    managedSummary.attentionRequired ||
-    business.provisioningStatus === BusinessProvisioningStatus.NEEDS_ATTENTION ||
-    hasTestSmsFailure
-  ) {
-    state = 'needs_attention';
-  } else if (compliancePending) {
-    state = 'waiting_on_a2p';
-  } else if (readyForLive) {
-    state = 'ready_to_go_live';
-  } else if (readyForTest) {
-    state = 'ready_for_test';
-  } else if (!twilioSetupReady && !numberReady && !messagingServiceReady && !webhooksReady && !ownerConnected) {
-    state = 'draft';
-  }
-
   const blockers: AdminOnboardingConfidence['blockers'] = [];
   if (nextStep.tone === 'attention') {
     blockers.push({ level: 'error', message: nextStep.detail });
@@ -498,6 +474,32 @@ export function buildAdminOnboardingConfidence(params: {
         missedCallValidation?.detail ||
         'Run one real missed-call test and confirm the lead reaches the owner before marking this business live.',
     });
+  }
+
+  const hasActiveGoLiveWarnings = blockers.length > 0;
+
+  let state: OnboardingConfidenceState = 'in_setup';
+  if (isBusinessArchived(business)) {
+    state = 'archived';
+  } else if (business.provisioningStatus === BusinessProvisioningStatus.LIVE && hasActiveGoLiveWarnings) {
+    state = 'live_with_warnings';
+  } else if (business.provisioningStatus === BusinessProvisioningStatus.LIVE && !hasActiveGoLiveWarnings) {
+    state = 'live';
+  } else if (
+    nextStep.tone === 'attention' ||
+    managedSummary.attentionRequired ||
+    business.provisioningStatus === BusinessProvisioningStatus.NEEDS_ATTENTION ||
+    hasTestSmsFailure
+  ) {
+    state = 'needs_attention';
+  } else if (compliancePending) {
+    state = 'waiting_on_a2p';
+  } else if (readyForLive) {
+    state = 'ready_to_go_live';
+  } else if (readyForTest) {
+    state = 'ready_for_test';
+  } else if (!twilioSetupReady && !numberReady && !messagingServiceReady && !webhooksReady && !ownerConnected) {
+    state = 'draft';
   }
 
   const milestones: OnboardingConfidenceMilestone[] = [

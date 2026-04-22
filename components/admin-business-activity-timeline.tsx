@@ -63,11 +63,22 @@ export function AdminBusinessActivityTimeline({
   events,
   activeFilter,
   filterLinks,
+  expanded,
+  expandHref,
+  collapseHref,
+  defaultVisibleCount = 5,
 }: {
   events: TimelineEvent[];
   activeFilter: BusinessTimelineFilter;
   filterLinks: Array<{ key: BusinessTimelineFilter; label: string; href: string; count: number }>;
+  expanded: boolean;
+  expandHref: string | null;
+  collapseHref: string | null;
+  defaultVisibleCount?: number;
 }) {
+  const visibleEvents = expanded ? events : events.slice(0, defaultVisibleCount);
+  const hasHiddenEvents = events.length > defaultVisibleCount;
+
   return (
     <Card className="bg-card/90">
       <CardHeader className="space-y-4">
@@ -95,7 +106,7 @@ export function AdminBusinessActivityTimeline({
           <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">No business events match this filter yet.</div>
         ) : (
           <div className="space-y-3">
-            {events.map((event) => (
+            {visibleEvents.map((event) => (
               <details key={event.id} className="rounded-xl border bg-background/80 p-4">
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -121,6 +132,27 @@ export function AdminBusinessActivityTimeline({
                 </div>
               </details>
             ))}
+            {hasHiddenEvents ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/80 p-4 text-sm">
+                <p className="text-muted-foreground">
+                  {expanded
+                    ? `Showing all ${events.length} activity items.`
+                    : `Showing ${visibleEvents.length} of ${events.length} activity items by default.`}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {!expanded && expandHref ? (
+                    <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={expandHref}>
+                      Show more activity
+                    </Link>
+                  ) : null}
+                  {expanded && collapseHref ? (
+                    <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={collapseHref}>
+                      Collapse activity
+                    </Link>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </CardContent>
