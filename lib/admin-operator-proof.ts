@@ -314,12 +314,15 @@ export function buildAdminGoLiveDecisionTruth(params: {
   const note = latestDecisionEvent ? getDetailString(latestDecisionEvent.detailsJson, 'note') : null;
 
   if (params.provisioningStatus === BusinessProvisioningStatus.LIVE) {
-    if (latestDecisionEvent?.type === 'admin.go_live_marked_with_warnings' || !params.canSafelyMarkLive) {
+    if (!params.canSafelyMarkLive) {
       return {
         state: 'marked_live_with_warnings',
         label: 'Live with warnings',
         tone: 'attention',
-        summary: latestDecisionEvent?.summary || 'Business is live with known launch gaps',
+        summary:
+          latestDecisionEvent?.type === 'admin.go_live_marked_with_warnings'
+            ? latestDecisionEvent.summary
+            : 'Business is live with known launch gaps',
         detail:
           note ||
           (params.blockers.length > 0
@@ -336,8 +339,14 @@ export function buildAdminGoLiveDecisionTruth(params: {
       state: 'marked_live',
       label: 'Live',
       tone: 'success',
-      summary: latestDecisionEvent?.summary || 'Business marked live after launch checks',
-      detail: note || 'The business is live and the recorded launch proof still clears the go-live gate.',
+      summary:
+        latestDecisionEvent?.type === 'admin.go_live_marked_safe'
+          ? latestDecisionEvent.summary
+          : 'Business is live and no current go-live warnings remain',
+      detail:
+        latestDecisionEvent?.type === 'admin.go_live_marked_with_warnings' && note
+          ? `Earlier warning note: ${note}`
+          : note || 'The business is live and the current launch proof clears the go-live gate.',
       decidedAt: latestDecisionEvent?.createdAt || null,
       sourceLabel: latestDecisionEvent ? 'Operator decision' : 'Current business state',
       note,

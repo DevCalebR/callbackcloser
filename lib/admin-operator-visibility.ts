@@ -82,6 +82,7 @@ function isOpenIssueStatus(status: OperatorEventStatus) {
 function getRemediationStepKeyForIssueEvent(event: IssueEventRecord): TwilioSetupStepKey | null {
   if (event.type.startsWith('onboarding.owner_')) return 'owner_connected';
   if (event.type.startsWith('admin.test_sms_')) return 'test_sms_delivered';
+  if (event.type.startsWith('owner_alert.')) return 'owner_connected';
   if (event.type === 'provisioning.twilio_subaccount_failed') return 'account_ready';
   if (event.type === 'provisioning.messaging_service_failed') return 'messaging_service_ready';
   if (

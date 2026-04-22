@@ -86,21 +86,60 @@ function getTimelineFilter(searchParams: Record<string, string | string[] | unde
   return 'all';
 }
 
-function buildTimelineFilterPath(businessId: string, filter: BusinessTimelineFilter, step: TwilioSetupStepKey | null) {
+function getActivityExpanded(searchParams: Record<string, string | string[] | undefined> | undefined) {
+  return getQueryValue(searchParams, 'activity') === 'all';
+}
+
+function buildTimelineFilterPath(
+  businessId: string,
+  filter: BusinessTimelineFilter,
+  step: TwilioSetupStepKey | null,
+  activityExpanded: boolean
+) {
   const search = new URLSearchParams();
   if (filter !== 'all') search.set('timeline', filter);
   if (step) search.set('step', step);
+  if (activityExpanded) search.set('activity', 'all');
   const query = search.toString();
   return query ? `/admin/${businessId}?${query}` : `/admin/${businessId}`;
 }
 
-function buildStepPath(businessId: string, step: TwilioSetupStepKey, timelineFilter: BusinessTimelineFilter) {
+function buildStepPath(
+  businessId: string,
+  step: TwilioSetupStepKey,
+  timelineFilter: BusinessTimelineFilter,
+  activityExpanded: boolean
+) {
   const search = new URLSearchParams();
   if (timelineFilter !== 'all') {
     search.set('timeline', timelineFilter);
   }
   search.set('step', step);
+  if (activityExpanded) {
+    search.set('activity', 'all');
+  }
   return `/admin/${businessId}?${search.toString()}#step-${step}`;
+}
+
+function buildActivityPath(
+  businessId: string,
+  timelineFilter: BusinessTimelineFilter,
+  step: TwilioSetupStepKey | null,
+  expanded: boolean
+) {
+  const search = new URLSearchParams();
+  if (timelineFilter !== 'all') {
+    search.set('timeline', timelineFilter);
+  }
+  if (step) {
+    search.set('step', step);
+  }
+  if (expanded) {
+    search.set('activity', 'all');
+  }
+
+  const query = search.toString();
+  return query ? `/admin/${businessId}?${query}#recent-activity` : `/admin/${businessId}#recent-activity`;
 }
 
 function HiddenAdminTwilioFields({
@@ -172,6 +211,7 @@ export default async function AdminBusinessDetailPage({
   const business = businessRecord;
 
   const timelineFilter = getTimelineFilter(searchParams);
+  const activityExpanded = getActivityExpanded(searchParams);
   const testSmsTruth = buildAdminTestSmsTruth(operatorEvents);
   const [ownerState, webhookSnapshot, availableNumbers] = await Promise.all([
     getAdminOwnerState(business, business.notificationSettings),
@@ -253,10 +293,15 @@ export default async function AdminBusinessDetailPage({
   const timelineFilterLinks = businessTimelineFilterOptions.map((option) => ({
     key: option.key,
     label: option.label,
-    href: buildTimelineFilterPath(business.id, option.key, selectedStepKey),
+    href: buildTimelineFilterPath(business.id, option.key, selectedStepKey, activityExpanded),
     count: timelineCounts.get(option.key) ?? 0,
   }));
   const visibleTimelineEvents = operatorEvents.filter((event) => matchesTimelineFilter(event, timelineFilter));
+  const expandActivityHref = visibleTimelineEvents.length > 5 ? buildActivityPath(business.id, timelineFilter, selectedStepKey, true) : null;
+  const collapseActivityHref = activityExpanded ? buildActivityPath(business.id, timelineFilter, selectedStepKey, false) : null;
+  const lastIssueHref = lastIssue.remediationStepKey
+    ? buildStepPath(business.id, lastIssue.remediationStepKey, timelineFilter, activityExpanded)
+    : null;
   const defaults: AdminTwilioDefaults = {
     businessId: business.id,
     twilioAccountMode: business.twilioAccountMode,
@@ -288,7 +333,7 @@ export default async function AdminBusinessDetailPage({
     panels: setupPanels,
   });
   const nextStep = getStepByKey(setupFlow.steps, nextStepGuide.key);
-  const nextStepHref = buildStepPath(business.id, nextStepGuide.key, timelineFilter);
+  const nextStepHref = buildStepPath(business.id, nextStepGuide.key, timelineFilter, activityExpanded);
   const selectedStep = getStepByKey(setupFlow.steps, selectedStepKey);
 
   const created = getQueryValue(searchParams, 'created') === '1';
@@ -935,7 +980,7 @@ export default async function AdminBusinessDetailPage({
                 <Link className={buttonVariants({ size: 'sm' })} href={nextStepHref}>
                   Open next step
                 </Link>
-                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildStepPath(business.id, 'safe_to_mark_live', timelineFilter)}>
+                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildStepPath(business.id, 'safe_to_mark_live', timelineFilter, activityExpanded)}>
                   Open go-live step
                 </Link>
               </div>
@@ -978,6 +1023,11 @@ export default async function AdminBusinessDetailPage({
             <p className="text-xs text-muted-foreground">
               {lastIssue.createdAt ? `Recorded ${formatDateTime(lastIssue.createdAt)}` : 'Derived from the current business state.'}
             </p>
+            {lastIssueHref ? (
+              <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={lastIssueHref}>
+                Open fix step
+              </Link>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -995,7 +1045,7 @@ export default async function AdminBusinessDetailPage({
             <p className="text-xs text-muted-foreground">
               {testSmsTruth.lastAttemptAt ? `Last attempt ${formatDateTime(testSmsTruth.lastAttemptAt)}` : 'No test SMS attempt recorded yet.'}
             </p>
-            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildStepPath(business.id, 'test_sms_delivered', timelineFilter)}>
+            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildStepPath(business.id, 'test_sms_delivered', timelineFilter, activityExpanded)}>
               Open testing step
             </Link>
           </CardContent>
@@ -1029,7 +1079,14 @@ export default async function AdminBusinessDetailPage({
       </div>
 
       <div id="recent-activity">
-        <AdminBusinessActivityTimeline events={visibleTimelineEvents} activeFilter={timelineFilter} filterLinks={timelineFilterLinks} />
+        <AdminBusinessActivityTimeline
+          activeFilter={timelineFilter}
+          collapseHref={collapseActivityHref}
+          events={visibleTimelineEvents}
+          expandHref={expandActivityHref}
+          expanded={activityExpanded}
+          filterLinks={timelineFilterLinks}
+        />
       </div>
 
       <Card className="bg-card/90" id="admin-setup-steps">
@@ -1046,7 +1103,7 @@ export default async function AdminBusinessDetailPage({
                 automaticActions={renderAutomaticActions(step)}
                 currentState={panel.currentState}
                 explanation={panel.explanation}
-                href={buildStepPath(business.id, step.key, timelineFilter)}
+                href={buildStepPath(business.id, step.key, timelineFilter, activityExpanded)}
                 manualEntry={renderManualEntry(step)}
                 nextAction={panel.nextAction}
                 open={selectedStepKey === step.key}

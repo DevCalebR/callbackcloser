@@ -407,3 +407,35 @@ test('onboarding confidence stays honest when A2P is pending or live has warning
   assert.equal(liveWithWarnings.canSafelyMarkLive, false);
   assert.equal(liveWithWarnings.readinessLabel, 'Live with warnings');
 });
+
+test('historical warning events do not keep a clean live business in live-with-warnings', () => {
+  const cleanLive = buildAdminOnboardingConfidence({
+    business: createBusiness({
+      provisioningStatus: BusinessProvisioningStatus.LIVE,
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 2,
+    operatorEvents: [
+      {
+        type: 'owner_alert.email_skipped',
+        status: OperatorEventStatus.WARNING,
+        createdAt: new Date('2026-04-15T12:00:00.000Z'),
+      },
+      {
+        type: 'admin.test_sms_delivered',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+    missedCallValidation: {
+      countsAsLaunchProof: true,
+      detail: 'Recent event sequence proves the missed-call flow reached the owner alert path.',
+    },
+  });
+
+  assert.equal(cleanLive.state, 'live');
+  assert.equal(cleanLive.blockers.length, 0);
+});
