@@ -79,6 +79,33 @@ function isOpenIssueStatus(status: OperatorEventStatus) {
   return status === OperatorEventStatus.FAILED || status === OperatorEventStatus.WARNING;
 }
 
+function getRemediationStepKeyForIssueEvent(event: IssueEventRecord): TwilioSetupStepKey | null {
+  if (event.type.startsWith('onboarding.owner_')) return 'owner_connected';
+  if (event.type.startsWith('admin.test_sms_')) return 'test_sms_delivered';
+  if (event.type === 'provisioning.twilio_subaccount_failed') return 'account_ready';
+  if (event.type === 'provisioning.messaging_service_failed') return 'messaging_service_ready';
+  if (
+    event.type === 'provisioning.number_purchase_failed' ||
+    event.type === 'provisioning.number_attach_failed' ||
+    event.type === 'provisioning.number_assignment_failed'
+  ) {
+    return 'number_assigned';
+  }
+  if (event.type === 'webhooks.sync_failed') {
+    const target = getDetailString(event.detailsJson, 'target');
+    if (target === 'SMS') return 'sms_webhook_synced';
+    if (target === 'STATUS') return 'status_callback_synced';
+    return 'voice_webhook_synced';
+  }
+
+  const remediationStepKey = getDetailString(event.detailsJson, 'remediationStepKey');
+  if (remediationStepKey) {
+    return remediationStepKey as TwilioSetupStepKey;
+  }
+
+  return null;
+}
+
 function getTestSmsState(event: Pick<BusinessOperatorEvent, 'type'> | null): AdminTestSmsTruthState {
   if (!event) return 'not_run';
   if (event.type === 'admin.test_sms_delivered') return 'delivered';
@@ -163,6 +190,7 @@ export function buildAdminBusinessIssue(params: {
     .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0];
 
   if (latestIssueEvent) {
+    const remediationStepKey = getRemediationStepKeyForIssueEvent(latestIssueEvent);
     return {
       state: 'issue',
       tone: 'attention',
@@ -172,7 +200,7 @@ export function buildAdminBusinessIssue(params: {
       categoryLabel: operatorEventCategoryLabels[latestIssueEvent.category],
       statusLabel: operatorEventStatusLabels[latestIssueEvent.status],
       eventType: latestIssueEvent.type,
-      remediationStepKey: null,
+      remediationStepKey,
     };
   }
 
