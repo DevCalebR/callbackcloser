@@ -348,6 +348,63 @@ export default async function AdminBusinessDetailPage({
   const validationSaved = getQueryValue(searchParams, 'validationSaved') === '1';
   const liveAcknowledged = getQueryValue(searchParams, 'liveAcknowledged');
   const error = getQueryValue(searchParams, 'error');
+  const ownerEmail = ownerState.email || business.notificationSettings?.ownerEmail || 'the saved owner email';
+  const stepFeedbackNotice = error
+    ? { variant: 'destructive' as const, message: error }
+    : ownerAction === 'connected'
+      ? {
+          variant: 'success' as const,
+          message: `Existing owner connected for ${ownerEmail}. Customer access should now reflect the linked account.`,
+        }
+      : ownerAction === 'invited'
+        ? {
+            variant: 'success' as const,
+            message: `Owner invitation sent to ${ownerEmail}. The owner step stays pending until they accept, then use Connect existing owner to finish linking.`,
+          }
+        : ownerAction === 'resent'
+          ? {
+              variant: 'success' as const,
+              message: `Owner invitation resent to ${ownerEmail}. The owner step stays pending until they accept, then use Connect existing owner to finish linking.`,
+            }
+          : provisioned
+            ? {
+                variant: 'success' as const,
+                message: 'Provisioning run finished. Review the current step evidence before moving forward.',
+              }
+            : synced
+              ? {
+                  variant: 'success' as const,
+                  message: `Webhook sync completed for ${synced}. Confirm the URLs in this step before marking it done.`,
+                }
+              : testSms
+                ? {
+                    variant: 'success' as const,
+                    message: 'Test SMS requested. Wait for the final delivery result in Recent activity before trusting the setup.',
+                  }
+                : validationSaved
+                  ? {
+                      variant: 'success' as const,
+                      message: 'Manual missed-call validation proof saved for this step.',
+                    }
+                  : liveAcknowledged
+                    ? {
+                        variant: 'success' as const,
+                        message:
+                          liveAcknowledged === 'warnings'
+                            ? 'Business marked live with explicit warning acknowledgment.'
+                            : 'Business marked live after launch checks.',
+                      }
+                    : statusSaved
+                      ? {
+                          variant: 'success' as const,
+                          message: `Provisioning status updated to ${statusSaved}.`,
+                        }
+                      : saved
+                        ? {
+                            variant: 'success' as const,
+                            message: `Setup state saved for ${selectedStep.label.toLowerCase()}.`,
+                          }
+                        : null;
 
   function renderAutomaticActions(step: TwilioSetupStep) {
     if (step.key === 'owner_connected') {
@@ -923,11 +980,11 @@ export default async function AdminBusinessDetailPage({
       {ownerAction ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           {ownerAction === 'connected'
-            ? 'Existing owner connected.'
+            ? `Existing owner connected for ${ownerEmail}.`
             : ownerAction === 'invited'
-              ? 'Owner invitation sent.'
+              ? `Owner invitation sent to ${ownerEmail}.`
               : ownerAction === 'resent'
-                ? 'Owner invitation resent.'
+                ? `Owner invitation resent to ${ownerEmail}.`
                 : 'Owner state updated.'}
         </div>
       ) : null}
@@ -1095,6 +1152,17 @@ export default async function AdminBusinessDetailPage({
           <CardDescription>Each step includes the current state, what to do next, automatic action buttons, and manual fallback fields when operator intervention is needed.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {stepFeedbackNotice ? (
+            <div
+              className={
+                stepFeedbackNotice.variant === 'destructive'
+                  ? 'rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive'
+                  : 'rounded-md border border-accent bg-accent/40 p-3 text-sm'
+              }
+            >
+              {stepFeedbackNotice.message}
+            </div>
+          ) : null}
           {setupFlow.steps.map((step) => {
             const panel = setupPanels.find((candidate) => candidate.key === step.key)!;
             return (

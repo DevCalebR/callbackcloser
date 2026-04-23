@@ -40,6 +40,8 @@ test('lead inbox stays list-only while lead detail is the main action workspace'
   assert.match(leadDetailPage, /Conversation history/);
   assert.match(leadDetailPage, /Qualification info/);
   assert.match(leadDetailPage, /Missed call details/);
+  assert.match(leadDetailPage, /const error = typeof searchParams\?\.error === 'string' \? searchParams\.error : undefined;/);
+  assert.match(leadDetailPage, /border-destructive\/30 bg-destructive\/5 p-3 text-sm text-destructive/);
 
   assert.match(conversationsPage, /href=\{`\/app\/leads\/\$\{selectedLead\.id\}\?from=%2Fapp%2Fconversations`\}/);
   assert.match(conversationsPage, /Open lead details/);

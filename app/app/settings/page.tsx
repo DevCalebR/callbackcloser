@@ -93,6 +93,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
   const twilioSynced = searchParams?.twilioSynced === '1';
   const adminTwilioSaved = searchParams?.adminTwilioSaved === '1';
   const twilioTestSms = searchParams?.twilioTestSms === '1';
+  const existingNumberIntent = searchParams?.existingNumberIntent === '1';
   const adminChangedRaw = typeof searchParams?.adminChanged === 'string' ? searchParams.adminChanged : '';
   const adminChanged = adminChangedRaw
     .split(',')
@@ -549,6 +550,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business settings saved.</div> : null}
       {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">A new business number was provisioned for the selected Twilio account mode.</div> : null}
+      {existingNumberIntent ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          Existing-number path saved. CallbackCloser will keep this business on the admin-assisted existing-number rollout until the Twilio account context and A2P path are reviewed.
+        </div>
+      ) : null}
       {twilioSynced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Webhook sync completed for the current business number.</div> : null}
       {twilioTestSms ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Test SMS requested. Wait for delivery before you treat the setup as launch-ready.</div> : null}
       {adminTwilioSaved ? (

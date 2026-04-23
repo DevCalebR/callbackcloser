@@ -448,12 +448,8 @@ export async function connectExistingTwilioNumberAction(formData: FormData) {
       twilioNumberSetupMode: 'EXISTING_NUMBER',
     },
   });
-  redirect(
-    '/app/settings?error=' +
-      encodeURIComponent(
-        'Keeping an existing number is still an admin-assisted launch step. CallbackCloser can attach it after the Twilio account context and A2P path are reviewed.'
-      )
-  );
+  revalidatePath('/app/settings');
+  redirect('/app/settings?existingNumberIntent=1');
 }
 
 export async function resyncTwilioWebhooksAction() {
