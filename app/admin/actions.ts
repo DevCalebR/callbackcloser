@@ -8,23 +8,26 @@ import {
   buildPendingOwnerClerkId,
   connectExistingBusinessOwner,
   findClerkUserByEmail,
+  getAdminOwnerState,
+  getTwilioWebhookSnapshot,
   inviteBusinessOwner,
   runAdminProvisioning,
   syncBusinessTwilioWebhooks,
   updateBusinessProvisioningStatus,
 } from '@/lib/admin-provisioning';
 import { deleteDeletableTestBusiness } from '@/lib/admin-business-lifecycle';
+import { buildAdminOnboardingConfidence, canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
+import { buildAdminMissedCallValidationTruth } from '@/lib/admin-operator-proof';
 import { requireAdmin } from '@/lib/admin';
-import { canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
 import {
   bulkDeleteTestDemoBusinesses,
   BULK_TEST_DATA_RESET_CONFIRMATION,
   DEMO_OWNER_CLERK_ID,
 } from '@/lib/admin-test-data-reset';
 import { logAuditEvent } from '@/lib/audit-log';
-import { buildTwilioSetupUpdateEventMetadata } from '@/lib/admin-operator-visibility';
+import { buildAdminTestSmsTruth, buildTwilioSetupUpdateEventMetadata } from '@/lib/admin-operator-visibility';
 import { db } from '@/lib/db';
-import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
+import { formatPhoneDetail, listBusinessOperatorEvents, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import {
@@ -34,13 +37,18 @@ import {
   adminConnectExistingOwnerSchema,
   adminDeleteBusinessSchema,
   adminInviteOwnerSchema,
+  adminMarkBusinessLiveSchema,
+  adminMissedCallValidationConfirmationSchema,
   adminSendTestSmsSchema,
+  adminSetupBasicsSchema,
   adminTwilioSetupSchema,
   adminBusinessUpdateSchema,
   adminProvisionBusinessSchema,
   adminProvisioningStatusSchema,
   adminWebhookSyncSchema,
 } from '@/lib/validators';
+import { createMessagingServiceForBusiness, createSubaccountForBusiness } from '@/lib/managed-twilio';
+import { buildTwilioSetupFlow } from '@/lib/twilio-setup';
 
 const DEFAULT_DEMO_NAME = 'CallbackCloser Demo';
 const DEFAULT_DEMO_TEXTING_NUMBER = '+15005550006';
@@ -55,6 +63,38 @@ function getAdminReturnPath(returnTo: string | null | undefined) {
   const trimmed = returnTo?.trim() || '';
   if (!trimmed.startsWith('/admin')) return null;
   return trimmed;
+}
+
+const TWILIO_SETUP_STEP_KEYS = new Set([
+  'owner_connected',
+  'account_mode',
+  'number_path',
+  'account_ready',
+  'messaging_service_ready',
+  'number_assigned',
+  'voice_webhook_synced',
+  'sms_webhook_synced',
+  'status_callback_synced',
+  'a2p_status_recorded',
+  'test_sms_delivered',
+  'missed_call_validated',
+  'safe_to_mark_live',
+]);
+
+function getReturnStep(formData: FormData) {
+  const value = getString(formData, 'returnStep');
+  return TWILIO_SETUP_STEP_KEYS.has(value) ? value : null;
+}
+
+function withReturnStepParam(
+  params: Record<string, string | number | boolean | null | undefined>,
+  returnStep: string | null
+) {
+  if (!returnStep) return params;
+  return {
+    ...params,
+    step: returnStep,
+  };
 }
 
 function appendParamsToAdminPath(
@@ -100,6 +140,7 @@ function buildAdminBusinessRedirectPath(
   params: Record<string, string | number | boolean | null | undefined> = {}
 ) {
   const search = new URLSearchParams();
+  const step = typeof params.step === 'string' && TWILIO_SETUP_STEP_KEYS.has(params.step) ? params.step : null;
 
   for (const [key, value] of Object.entries(params)) {
     if (value === null || value === undefined || value === '') continue;
@@ -107,13 +148,29 @@ function buildAdminBusinessRedirectPath(
   }
 
   const query = search.toString();
-  return query ? `/admin/${businessId}?${query}` : `/admin/${businessId}`;
+  const path = query ? `/admin/${businessId}?${query}` : `/admin/${businessId}`;
+  return step ? `${path}#step-${step}` : path;
 }
 
 async function revalidateAdminPaths(businessId: string) {
   revalidatePath('/admin');
   revalidatePath(`/admin/${businessId}`);
   revalidatePath(`/admin/${businessId}/workspace`);
+}
+
+function redirectToBusinessActionError(formData: FormData, message: string, returnStep = getReturnStep(formData)): never {
+  const businessId = getString(formData, 'businessId');
+  const returnTo = getString(formData, 'returnTo');
+
+  if (businessId) {
+    redirect(buildAdminBusinessRedirectPath(businessId, withReturnStepParam({ error: message }, returnStep)));
+  }
+
+  if (returnTo) {
+    redirect(appendParamsToAdminPath(returnTo, { error: message }, `/admin?error=${encodeURIComponent(message)}`));
+  }
+
+  redirect(`/admin?error=${encodeURIComponent(message)}`);
 }
 
 function normalizeOptionalE164Phone(value: string | null | undefined, label: string) {
@@ -131,6 +188,14 @@ function normalizeOptionalE164Phone(value: string | null | undefined, label: str
 function normalizeOptionalSid(value: string | null | undefined) {
   const trimmed = value?.trim() || '';
   return trimmed || null;
+}
+
+function getOptionalSidPrefixError(value: string | null, prefix: string, label: string) {
+  if (!value) return null;
+  if (!value.startsWith(prefix)) {
+    return `${label} must start with ${prefix}.`;
+  }
+  return null;
 }
 
 function maskSidForAudit(value: string | null | undefined) {
@@ -166,6 +231,85 @@ async function loadBusinessForLifecycleAction(businessId: string) {
       notificationSettings: true,
     },
   });
+}
+
+async function loadBusinessLaunchContext(businessId: string) {
+  const [business, successfulLeadCount, operatorEvents] = await Promise.all([
+    db.business.findUnique({
+      where: { id: businessId },
+      include: {
+        notificationSettings: true,
+      },
+    }),
+    db.lead.count({
+      where: {
+        businessId,
+        OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
+      },
+    }),
+    listBusinessOperatorEvents(businessId, 'all', 160),
+  ]);
+
+  if (!business) {
+    throw new Error('Business not found.');
+  }
+
+  const testSmsTruth = buildAdminTestSmsTruth(operatorEvents);
+  const [ownerState, webhookSnapshot] = await Promise.all([
+    getAdminOwnerState(business, business.notificationSettings),
+    getTwilioWebhookSnapshot(business),
+  ]);
+  const missedCallValidation = buildAdminMissedCallValidationTruth({
+    events: operatorEvents,
+    successfulLeadCount,
+  });
+  const setupFlow = buildTwilioSetupFlow({
+    business,
+    notificationSettings: business.notificationSettings,
+    ownerConnected: ownerState.connected,
+    successfulLeadCount,
+    testSmsState:
+      testSmsTruth.state === 'not_run'
+        ? 'not_started'
+        : testSmsTruth.state === 'pending'
+          ? 'pending_delivery'
+          : testSmsTruth.state,
+    webhookSnapshot,
+    missedCallValidation: {
+      complete: missedCallValidation.countsAsLaunchProof,
+      stateLabel: missedCallValidation.label,
+      detail: missedCallValidation.detail,
+      tone:
+        missedCallValidation.tone === 'success'
+          ? 'success'
+          : missedCallValidation.tone === 'attention'
+            ? 'attention'
+            : missedCallValidation.tone === 'pending'
+              ? 'pending'
+              : 'neutral',
+    },
+  });
+  const confidence = buildAdminOnboardingConfidence({
+    business,
+    notificationSettings: business.notificationSettings,
+    ownerConnected: ownerState.connected,
+    successfulLeadCount,
+    operatorEvents,
+    webhookSnapshot,
+    missedCallValidation,
+  });
+
+  return {
+    business,
+    confidence,
+    missedCallValidation,
+    setupFlow,
+    ownerState,
+    operatorEvents,
+    testSmsTruth,
+    webhookSnapshot,
+    successfulLeadCount,
+  };
 }
 
 export async function createDemoBusinessAction(formData: FormData) {
@@ -363,6 +507,7 @@ export async function createAdminBusinessAction(formData: FormData) {
 
 export async function saveAdminBusinessProfileAction(formData: FormData) {
   const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
 
   const parsed = adminBusinessUpdateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
@@ -403,9 +548,12 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
     redirect(
       buildAdminBusinessRedirectPath(
         data.businessId,
-        {
-          error: `Confirm clearing live fields before removing: ${criticalFieldClears.join(', ')}.`,
-        }
+        withReturnStepParam(
+          {
+            error: `Confirm clearing live fields before removing: ${criticalFieldClears.join(', ')}.`,
+          },
+          returnStep
+        )
       )
     );
   }
@@ -583,19 +731,26 @@ export async function saveAdminBusinessProfileAction(formData: FormData) {
   revalidatePath('/app/settings');
   revalidatePath('/app/call-flow');
   redirect(
-    buildAdminBusinessRedirectPath(data.businessId, {
-      saved: 1,
-      changed: changedFields.map((field) => field.key).join(','),
-    })
+    buildAdminBusinessRedirectPath(
+      data.businessId,
+      withReturnStepParam(
+        {
+          saved: 1,
+          changed: changedFields.map((field) => field.key).join(','),
+        },
+        returnStep
+      )
+    )
   );
 }
 
 export async function saveAdminTwilioSetupAction(formData: FormData) {
   const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
 
   const parsed = adminTwilioSetupSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid Twilio setup update.')}`);
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Invalid Twilio setup update.', returnStep);
   }
 
   const data = parsed.data;
@@ -604,7 +759,7 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   });
 
   if (!existingBusiness) {
-    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
   }
 
   const twilioAccountMode = data.twilioAccountMode as TwilioAccountMode;
@@ -617,6 +772,17 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   const a2pBrandSid = normalizeOptionalSid(data.a2pBrandSid);
   const a2pCampaignSid = normalizeOptionalSid(data.a2pCampaignSid);
   const a2pFailureReason = data.a2pFailureReason?.trim() || null;
+  const sidValidationError =
+    getOptionalSidPrefixError(twilioSubaccountSid, 'AC', 'Twilio subaccount SID') ||
+    getOptionalSidPrefixError(twilioPhoneNumberSid, 'PN', 'Twilio number SID') ||
+    getOptionalSidPrefixError(twilioMessagingServiceSid, 'MG', 'Messaging Service SID') ||
+    getOptionalSidPrefixError(a2pCustomerProfileSid, 'BU', 'A2P customer profile SID') ||
+    getOptionalSidPrefixError(a2pBrandSid, 'BN', 'A2P brand SID') ||
+    getOptionalSidPrefixError(a2pCampaignSid, 'QE', 'A2P campaign SID');
+
+  if (sidValidationError) {
+    redirect(buildAdminBusinessRedirectPath(data.businessId, withReturnStepParam({ error: sidValidationError }, returnStep)));
+  }
 
   const criticalFieldClears = [
     existingBusiness.twilioSubaccountSid && !twilioSubaccountSid && twilioAccountMode === TwilioAccountMode.BUSINESS_SUBACCOUNT
@@ -629,9 +795,15 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
 
   if (criticalFieldClears.length > 0 && !data.confirmCriticalFieldClears) {
     redirect(
-      buildAdminBusinessRedirectPath(data.businessId, {
-        error: `Confirm clearing live fields before removing: ${criticalFieldClears.join(', ')}.`,
-      })
+      buildAdminBusinessRedirectPath(
+        data.businessId,
+        withReturnStepParam(
+          {
+            error: `Confirm clearing live fields before removing: ${criticalFieldClears.join(', ')}.`,
+          },
+          returnStep
+        )
+      )
     );
   }
 
@@ -787,19 +959,310 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   revalidatePath('/app/settings');
   revalidatePath('/app/call-flow');
   redirect(
-    buildAdminBusinessRedirectPath(data.businessId, {
-      saved: 1,
-      changed: changedFields.map((field) => field.key).join(','),
-    })
+    buildAdminBusinessRedirectPath(
+      data.businessId,
+      withReturnStepParam(
+        {
+          saved: 1,
+          changed: changedFields.map((field) => field.key).join(','),
+        },
+        returnStep
+      )
+    )
   );
 }
 
+export async function saveAdminSetupBasicsAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
+
+  const parsed = adminSetupBasicsSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Invalid setup update.', returnStep);
+  }
+
+  const business = await db.business.findUnique({
+    where: { id: parsed.data.businessId },
+    include: {
+      notificationSettings: true,
+    },
+  });
+
+  if (!business) {
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
+  }
+
+  const ownerPhone = normalizeOptionalE164Phone(parsed.data.ownerPhone || '', 'Owner alert phone');
+  const forwardingNumber = normalizeOptionalE164Phone(parsed.data.forwardingNumber || '', 'Forwarding number');
+  const ownerEmail = parsed.data.ownerEmail?.trim().toLowerCase() || null;
+  const ownerName = parsed.data.ownerName?.trim() || null;
+
+  const changedFields = [
+    business.ownerName !== ownerName ? { key: 'ownerName', label: 'owner name', before: business.ownerName, after: ownerName } : null,
+    (business.notificationSettings?.ownerEmail || null) !== ownerEmail
+      ? {
+          key: 'ownerEmail',
+          label: 'owner email',
+          before: business.notificationSettings?.ownerEmail || null,
+          after: ownerEmail,
+        }
+      : null,
+    (business.notificationSettings?.ownerPhone || business.notifyPhone || null) !== ownerPhone
+      ? {
+          key: 'ownerPhone',
+          label: 'owner alert phone',
+          before: business.notificationSettings?.ownerPhone || business.notifyPhone || null,
+          after: ownerPhone,
+        }
+      : null,
+    business.forwardingNumber !== forwardingNumber
+      ? { key: 'forwardingNumber', label: 'forwarding number', before: business.forwardingNumber, after: forwardingNumber }
+      : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; before: string | null; after: string | null }>;
+
+  await db.business.update({
+    where: { id: business.id },
+    data: {
+      ownerName,
+      forwardingNumber: forwardingNumber || business.forwardingNumber,
+      notifyPhone: ownerPhone,
+      provisioningError: null,
+      provisioningLastRunAt: changedFields.length > 0 ? new Date() : business.provisioningLastRunAt,
+    },
+  });
+
+  await db.businessNotificationSettings.upsert({
+    where: { businessId: business.id },
+    create: {
+      businessId: business.id,
+      ownerEmail,
+      ownerPhone,
+      notifySms: business.notificationSettings?.notifySms ?? true,
+      notifyEmail: business.notificationSettings?.notifyEmail ?? true,
+      notifyInApp: business.notificationSettings?.notifyInApp ?? true,
+      urgentOnly: business.notificationSettings?.urgentOnly ?? false,
+    },
+    update: {
+      ownerEmail,
+      ownerPhone,
+    },
+  });
+
+  if (changedFields.length > 0) {
+    const remediationStepKey = returnStep === 'missed_call_validated' ? 'missed_call_validated' : 'owner_connected';
+
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'admin.setup_basics_updated',
+      category: 'ADMIN_ACTIONS',
+      status: 'SUCCESS',
+      summary: remediationStepKey === 'missed_call_validated' ? 'Missed-call validation details updated' : 'Owner setup details updated',
+      details: {
+        remediationStepKey,
+        changedFields: buildChangedFieldMetadata(changedFields),
+      },
+    });
+
+    logAuditEvent({
+      event: 'admin_setup_basics_saved',
+      actorType: 'user',
+      actorId: admin.userId,
+      businessId: business.id,
+      targetType: 'business',
+      targetId: business.id,
+      metadata: {
+        actorEmail: admin.email,
+        changedFields: buildChangedFieldMetadata(changedFields),
+        source: 'admin_setup_panels',
+      },
+    });
+  }
+
+  await revalidateAdminPaths(business.id);
+  redirect(
+    buildAdminBusinessRedirectPath(
+      business.id,
+      withReturnStepParam(
+        {
+          saved: 1,
+          changed: changedFields.map((field) => field.key).join(','),
+        },
+        returnStep
+      )
+    )
+  );
+}
+
+export async function createBusinessTwilioSubaccountAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const businessId = getString(formData, 'businessId');
+  const returnStep = getReturnStep(formData);
+
+  if (!businessId) {
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
+  }
+
+  const business = await db.business.findUnique({
+    where: { id: businessId },
+    select: {
+      id: true,
+      name: true,
+      twilioSubaccountSid: true,
+    },
+  });
+
+  if (!business) {
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
+  }
+
+  const correlationId = `admin-subaccount-${business.id}-${Date.now()}`;
+
+  try {
+    await createSubaccountForBusiness({ id: business.id, name: business.name }, correlationId);
+    await db.business.update({
+      where: { id: business.id },
+      data: {
+        provisioningError: null,
+        provisioningLastRunAt: new Date(),
+      },
+    });
+
+    logAuditEvent({
+      event: 'admin_twilio_subaccount_created',
+      actorType: 'user',
+      actorId: admin.userId,
+      businessId: business.id,
+      targetType: 'business',
+      targetId: business.id,
+      metadata: {
+        actorEmail: admin.email,
+        source: 'admin_setup_panels',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to create the Twilio subaccount.';
+    await db.business.update({
+      where: { id: business.id },
+      data: {
+        provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
+        provisioningError: message,
+        provisioningLastRunAt: new Date(),
+      },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.twilio_subaccount_failed',
+      category: 'PROVISIONING',
+      status: 'FAILED',
+      summary: 'Twilio subaccount creation failed',
+      details: {
+        remediationStepKey: 'account_ready',
+        error: message,
+      },
+    });
+
+    await revalidateAdminPaths(business.id);
+    redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ error: message }, returnStep)));
+  }
+
+  await revalidateAdminPaths(business.id);
+  redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ saved: 1 }, returnStep)));
+}
+
+export async function createBusinessMessagingServiceAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const businessId = getString(formData, 'businessId');
+  const returnStep = getReturnStep(formData);
+
+  if (!businessId) {
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
+  }
+
+  const business = await db.business.findUnique({
+    where: { id: businessId },
+    select: {
+      id: true,
+      name: true,
+      twilioAccountMode: true,
+      twilioSubaccountSid: true,
+      twilioMessagingServiceSid: true,
+    },
+  });
+
+  if (!business) {
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
+  }
+
+  const correlationId = `admin-messaging-service-${business.id}-${Date.now()}`;
+
+  try {
+    await createMessagingServiceForBusiness(
+      {
+        id: business.id,
+        name: business.name,
+        twilioAccountMode: business.twilioAccountMode,
+        twilioSubaccountSid: business.twilioSubaccountSid,
+        twilioMessagingServiceSid: business.twilioMessagingServiceSid,
+      },
+      correlationId
+    );
+    await db.business.update({
+      where: { id: business.id },
+      data: {
+        provisioningError: null,
+        provisioningLastRunAt: new Date(),
+      },
+    });
+
+    logAuditEvent({
+      event: 'admin_messaging_service_created',
+      actorType: 'user',
+      actorId: admin.userId,
+      businessId: business.id,
+      targetType: 'business',
+      targetId: business.id,
+      metadata: {
+        actorEmail: admin.email,
+        source: 'admin_setup_panels',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to create the Messaging Service.';
+    await db.business.update({
+      where: { id: business.id },
+      data: {
+        provisioningStatus: BusinessProvisioningStatus.NEEDS_ATTENTION,
+        provisioningError: message,
+        provisioningLastRunAt: new Date(),
+      },
+    });
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'provisioning.messaging_service_failed',
+      category: 'PROVISIONING',
+      status: 'FAILED',
+      summary: 'Messaging Service creation failed',
+      details: {
+        remediationStepKey: 'messaging_service_ready',
+        error: message,
+      },
+    });
+
+    await revalidateAdminPaths(business.id);
+    redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ error: message }, returnStep)));
+  }
+
+  await revalidateAdminPaths(business.id);
+  redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ saved: 1 }, returnStep)));
+}
+
 export async function inviteBusinessOwnerAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
 
   const parsed = adminInviteOwnerSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid owner invite request.')}`);
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Invalid owner invite request.', returnStep);
   }
 
   let redirectPath: string;
@@ -810,7 +1273,24 @@ export async function inviteBusinessOwnerAction(formData: FormData) {
       ownerName: parsed.data.ownerName || null,
     });
 
-    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerAction: result.state });
+    redirectPath = buildAdminBusinessRedirectPath(
+      parsed.data.businessId,
+      withReturnStepParam({ ownerAction: result.state }, returnStep)
+    );
+
+    logAuditEvent({
+      event: 'admin_business_owner_invited',
+      actorType: 'user',
+      actorId: admin.userId,
+      businessId: parsed.data.businessId,
+      targetType: 'business',
+      targetId: parsed.data.businessId,
+      metadata: {
+        actorEmail: admin.email,
+        ownerAction: result.state,
+        source: 'admin_setup_panels',
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Owner invite failed.';
     await db.business.update({
@@ -831,7 +1311,7 @@ export async function inviteBusinessOwnerAction(formData: FormData) {
       },
     });
 
-    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { error: message });
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, withReturnStepParam({ error: message }, returnStep));
   }
 
   await revalidateAdminPaths(parsed.data.businessId);
@@ -839,11 +1319,12 @@ export async function inviteBusinessOwnerAction(formData: FormData) {
 }
 
 export async function connectExistingBusinessOwnerAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
 
   const parsed = adminConnectExistingOwnerSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid owner connection request.')}`);
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Invalid owner connection request.', returnStep);
   }
 
   let redirectPath: string;
@@ -855,7 +1336,24 @@ export async function connectExistingBusinessOwnerAction(formData: FormData) {
       ownerClerkId: parsed.data.ownerClerkId || null,
     });
 
-    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { ownerAction: 'connected' });
+    redirectPath = buildAdminBusinessRedirectPath(
+      parsed.data.businessId,
+      withReturnStepParam({ ownerAction: 'connected' }, returnStep)
+    );
+
+    logAuditEvent({
+      event: 'admin_business_owner_connected',
+      actorType: 'user',
+      actorId: admin.userId,
+      businessId: parsed.data.businessId,
+      targetType: 'business',
+      targetId: parsed.data.businessId,
+      metadata: {
+        actorEmail: admin.email,
+        connectionMethod: parsed.data.ownerClerkId?.trim() ? 'clerk_user_id' : 'email_lookup',
+        source: 'admin_setup_panels',
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Owner connection failed.';
     await db.business.update({
@@ -876,7 +1374,7 @@ export async function connectExistingBusinessOwnerAction(formData: FormData) {
       },
     });
 
-    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { error: message });
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, withReturnStepParam({ error: message }, returnStep));
   }
 
   await revalidateAdminPaths(parsed.data.businessId);
@@ -885,10 +1383,11 @@ export async function connectExistingBusinessOwnerAction(formData: FormData) {
 
 export async function provisionBusinessAction(formData: FormData) {
   await requireAdmin();
+  const returnStep = getReturnStep(formData);
 
   const parsed = adminProvisionBusinessSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid provisioning request.')}`);
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Invalid provisioning request.', returnStep);
   }
 
   let redirectPath: string;
@@ -901,12 +1400,17 @@ export async function provisionBusinessAction(formData: FormData) {
     });
 
     redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, {
-      provisioned: 1,
-      mode: parsed.data.mode.toLowerCase(),
+      ...withReturnStepParam(
+        {
+          provisioned: 1,
+          mode: parsed.data.mode.toLowerCase(),
+        },
+        returnStep
+      ),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Provisioning failed.';
-    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, { error: message });
+    redirectPath = buildAdminBusinessRedirectPath(parsed.data.businessId, withReturnStepParam({ error: message }, returnStep));
   }
 
   await revalidateAdminPaths(parsed.data.businessId);
@@ -915,10 +1419,11 @@ export async function provisionBusinessAction(formData: FormData) {
 
 export async function resyncBusinessWebhooksAction(formData: FormData) {
   await requireAdmin();
+  const returnStep = getReturnStep(formData);
 
   const parsed = adminWebhookSyncSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid webhook sync request.')}`);
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Invalid webhook sync request.', returnStep);
   }
 
   const options =
@@ -926,6 +1431,8 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
       ? { voice: true, sms: false, status: false }
       : parsed.data.target === 'SMS'
         ? { voice: false, sms: true, status: false }
+        : parsed.data.target === 'STATUS'
+          ? { voice: false, sms: false, status: true }
         : { voice: true, sms: true, status: true };
 
   const business = await db.business.findUnique({
@@ -940,7 +1447,7 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
   });
 
   if (!business) {
-    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
   }
 
   let redirectPath: string;
@@ -952,7 +1459,10 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
         provisioningError: null,
       },
     });
-    redirectPath = buildAdminBusinessRedirectPath(business.id, { synced: parsed.data.target.toLowerCase() });
+    redirectPath = buildAdminBusinessRedirectPath(
+      business.id,
+      withReturnStepParam({ synced: parsed.data.target.toLowerCase() }, returnStep)
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Webhook sync failed.';
     await db.business.update({
@@ -974,43 +1484,206 @@ export async function resyncBusinessWebhooksAction(formData: FormData) {
       },
     });
 
-    redirectPath = buildAdminBusinessRedirectPath(business.id, { error: message });
+    redirectPath = buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ error: message }, returnStep));
   }
 
   await revalidateAdminPaths(business.id);
   redirect(redirectPath);
 }
 
+export async function confirmMissedCallValidationAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
+  const businessId = getString(formData, 'businessId');
+  const parsed = adminMissedCallValidationConfirmationSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Add a short validation note.', returnStep);
+  }
+
+  const business = await db.business.findUnique({
+    where: { id: parsed.data.businessId },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  if (!business) {
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
+  }
+
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'admin.missed_call_validation_confirmed',
+    category: 'ADMIN_ACTIONS',
+    status: 'SUCCESS',
+    summary: 'Missed-call flow manually confirmed',
+    details: {
+      remediationStepKey: 'missed_call_validated',
+      note: parsed.data.note,
+    },
+  });
+
+  logAuditEvent({
+    event: 'admin_missed_call_validation_confirmed',
+    actorType: 'user',
+    actorId: admin.userId,
+    businessId: business.id,
+    targetType: 'business',
+    targetId: business.id,
+    metadata: {
+      actorEmail: admin.email,
+      source: 'admin_setup_panels',
+      note: parsed.data.note,
+    },
+  });
+
+  await revalidateAdminPaths(business.id);
+  redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ validationSaved: 1 }, returnStep)));
+}
+
 export async function setBusinessProvisioningStatusAction(formData: FormData) {
   await requireAdmin();
+  const returnStep = getReturnStep(formData);
 
   const parsed = adminProvisioningStatusSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid provisioning status update.')}`);
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Invalid provisioning status update.', returnStep);
   }
 
   await updateBusinessProvisioningStatus(parsed.data.businessId, parsed.data.status as BusinessProvisioningStatus, null);
   await revalidateAdminPaths(parsed.data.businessId);
-  redirect(buildAdminBusinessRedirectPath(parsed.data.businessId, { statusSaved: parsed.data.status.toLowerCase() }));
+  redirect(
+    buildAdminBusinessRedirectPath(
+      parsed.data.businessId,
+      withReturnStepParam({ statusSaved: parsed.data.status.toLowerCase() }, returnStep)
+    )
+  );
+}
+
+export async function markBusinessLiveAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
+  const businessId = getString(formData, 'businessId');
+  const parsed = adminMarkBusinessLiveSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    redirect(
+      buildAdminBusinessRedirectPath(
+        businessId,
+        withReturnStepParam({ error: parsed.error.issues[0]?.message || 'Unable to mark the business live.' }, returnStep)
+      )
+    );
+  }
+
+  const { business, confidence } = await loadBusinessLaunchContext(parsed.data.businessId);
+
+  if (business.archivedAt) {
+    redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ error: 'Restore the archived business before marking it live.' }, returnStep)));
+  }
+
+  const blockers = confidence.blockers.map((blocker) => blocker.message);
+  const note = parsed.data.note?.trim() || null;
+
+  if (!confidence.canSafelyMarkLive && !parsed.data.acknowledgeWarnings) {
+    redirect(
+      buildAdminBusinessRedirectPath(
+        business.id,
+        withReturnStepParam(
+          {
+            error: blockers.length > 0 ? `Launch proof is still incomplete: ${blockers.join(' ')}` : 'Launch proof is still incomplete.',
+          },
+          returnStep
+        )
+      )
+    );
+  }
+
+  if (!confidence.canSafelyMarkLive && !note) {
+    redirect(
+      buildAdminBusinessRedirectPath(
+        business.id,
+        withReturnStepParam(
+          {
+            error: 'Add a short operator note before marking this business live with warnings.',
+          },
+          returnStep
+        )
+      )
+    );
+  }
+
+  await updateBusinessProvisioningStatus(business.id, BusinessProvisioningStatus.LIVE, null);
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: confidence.canSafelyMarkLive ? 'admin.go_live_marked_safe' : 'admin.go_live_marked_with_warnings',
+    category: 'ADMIN_ACTIONS',
+    status: confidence.canSafelyMarkLive ? 'SUCCESS' : 'WARNING',
+    summary: confidence.canSafelyMarkLive ? 'Business marked live after launch checks' : 'Business marked live with known warnings',
+    details: {
+      remediationStepKey: 'safe_to_mark_live',
+      note,
+      blockers,
+      acknowledgeWarnings: parsed.data.acknowledgeWarnings,
+      canSafelyMarkLive: confidence.canSafelyMarkLive,
+    },
+  });
+
+  logAuditEvent({
+    event: 'admin_business_marked_live',
+    actorType: 'user',
+    actorId: admin.userId,
+    businessId: business.id,
+    targetType: 'business',
+    targetId: business.id,
+    metadata: {
+      actorEmail: admin.email,
+      source: 'admin_setup_panels',
+      blockers,
+      canSafelyMarkLive: confidence.canSafelyMarkLive,
+      note,
+    },
+  });
+
+  await revalidateAdminPaths(business.id);
+  redirect(
+    buildAdminBusinessRedirectPath(
+      business.id,
+      withReturnStepParam(
+        {
+          statusSaved: 'live',
+          liveAcknowledged: confidence.canSafelyMarkLive ? 'safe' : 'warnings',
+        },
+        returnStep
+      )
+    )
+  );
 }
 
 export async function sendBusinessTestSmsAction(formData: FormData) {
   const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
 
   const parsed = adminSendTestSmsSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid test SMS request.')}`);
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Invalid test SMS request.', returnStep);
   }
 
   const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
   if (!business) {
-    redirect(`/admin?error=${encodeURIComponent('Business not found.')}`);
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
   }
 
   const destinationPhone = normalizeOptionalE164Phone(parsed.data.destinationPhone, 'Test SMS destination');
   const fromPhone = business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber;
   if (!fromPhone) {
-    redirect(buildAdminBusinessRedirectPath(business.id, { error: 'A business texting number is required before sending a test SMS.' }));
+    redirect(
+      buildAdminBusinessRedirectPath(
+        business.id,
+        withReturnStepParam({ error: 'A business texting number is required before sending a test SMS.' }, returnStep)
+      )
+    );
   }
 
   try {
@@ -1052,7 +1725,12 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
       });
       redirect(
         buildAdminBusinessRedirectPath(business.id, {
-          error: `Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`,
+          ...withReturnStepParam(
+            {
+              error: `Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`,
+            },
+            returnStep
+          ),
         })
       );
     }
@@ -1098,11 +1776,11 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
         error: message,
       },
     });
-    redirect(buildAdminBusinessRedirectPath(business.id, { error: message }));
+    redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ error: message }, returnStep)));
   }
 
   await revalidateAdminPaths(business.id);
-  redirect(buildAdminBusinessRedirectPath(business.id, { testSms: 1 }));
+  redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ testSms: 1 }, returnStep)));
 }
 
 export async function archiveBusinessAction(formData: FormData) {

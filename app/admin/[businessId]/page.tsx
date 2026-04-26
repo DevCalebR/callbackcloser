@@ -3,26 +3,34 @@ import { notFound } from 'next/navigation';
 
 import {
   archiveBusinessAction,
+  confirmMissedCallValidationAction,
   connectExistingBusinessOwnerAction,
+  createBusinessMessagingServiceAction,
+  createBusinessTwilioSubaccountAction,
   deleteTestBusinessAction,
   inviteBusinessOwnerAction,
+  markBusinessLiveAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
   restoreBusinessAction,
+  saveAdminSetupBasicsAction,
   saveAdminTwilioSetupAction,
   sendBusinessTestSmsAction,
   setBusinessProvisioningStatusAction,
 } from '@/app/admin/actions';
 import { AdminBusinessActivityTimeline } from '@/components/admin-business-activity-timeline';
-import { TwilioSetupChecklist } from '@/components/twilio-setup-checklist';
+import { AdminBusinessSetupStepCard } from '@/components/admin-business-setup-step-card';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
-import { isBusinessArchived } from '@/lib/admin-dashboard';
+import { buildAdminOnboardingConfidence, isBusinessArchived } from '@/lib/admin-dashboard';
+import { buildAdminMissedCallValidationTruth, buildAdminOperationalProofs } from '@/lib/admin-operator-proof';
+import { buildAdminNextStepGuide, buildAdminSetupPanels } from '@/lib/admin-setup-remediation';
 import {
   buildAdminBusinessIssue,
   buildAdminTestSmsTruth,
@@ -30,7 +38,6 @@ import {
 } from '@/lib/admin-operator-visibility';
 import { getAdminOwnerState, getTwilioWebhookSnapshot, listAdminTwilioNumbers } from '@/lib/admin-provisioning';
 import { requireAdmin } from '@/lib/admin';
-import { TwilioSetupTone, buildTwilioSetupFlow, twilioAccountModeOptions, twilioNumberSetupModeOptions } from '@/lib/twilio-setup';
 import { db } from '@/lib/db';
 import { formatDateTime } from '@/lib/lead-presenters';
 import { getManagedTextingNumber, managedTwilioStatusLabels } from '@/lib/managed-twilio-status';
@@ -42,6 +49,14 @@ import {
   type BusinessTimelineFilter,
 } from '@/lib/operator-events';
 import { formatPhoneForDisplay } from '@/lib/phone';
+import {
+  type TwilioSetupStep,
+  type TwilioSetupStepKey,
+  type TwilioSetupTone,
+  buildTwilioSetupFlow,
+  twilioAccountModeOptions,
+  twilioNumberSetupModeOptions,
+} from '@/lib/twilio-setup';
 
 type AdminTwilioDefaults = {
   businessId: string;
@@ -71,15 +86,69 @@ function getTimelineFilter(searchParams: Record<string, string | string[] | unde
   return 'all';
 }
 
-function buildTimelineFilterPath(businessId: string, filter: BusinessTimelineFilter) {
-  return filter === 'all' ? `/admin/${businessId}` : `/admin/${businessId}?timeline=${encodeURIComponent(filter)}`;
+function getActivityExpanded(searchParams: Record<string, string | string[] | undefined> | undefined) {
+  return getQueryValue(searchParams, 'activity') === 'all';
+}
+
+function buildTimelineFilterPath(
+  businessId: string,
+  filter: BusinessTimelineFilter,
+  step: TwilioSetupStepKey | null,
+  activityExpanded: boolean
+) {
+  const search = new URLSearchParams();
+  if (filter !== 'all') search.set('timeline', filter);
+  if (step) search.set('step', step);
+  if (activityExpanded) search.set('activity', 'all');
+  const query = search.toString();
+  return query ? `/admin/${businessId}?${query}` : `/admin/${businessId}`;
+}
+
+function buildStepPath(
+  businessId: string,
+  step: TwilioSetupStepKey,
+  timelineFilter: BusinessTimelineFilter,
+  activityExpanded: boolean
+) {
+  const search = new URLSearchParams();
+  if (timelineFilter !== 'all') {
+    search.set('timeline', timelineFilter);
+  }
+  search.set('step', step);
+  if (activityExpanded) {
+    search.set('activity', 'all');
+  }
+  return `/admin/${businessId}?${search.toString()}#step-${step}`;
+}
+
+function buildActivityPath(
+  businessId: string,
+  timelineFilter: BusinessTimelineFilter,
+  step: TwilioSetupStepKey | null,
+  expanded: boolean
+) {
+  const search = new URLSearchParams();
+  if (timelineFilter !== 'all') {
+    search.set('timeline', timelineFilter);
+  }
+  if (step) {
+    search.set('step', step);
+  }
+  if (expanded) {
+    search.set('activity', 'all');
+  }
+
+  const query = search.toString();
+  return query ? `/admin/${businessId}?${query}#recent-activity` : `/admin/${businessId}#recent-activity`;
 }
 
 function HiddenAdminTwilioFields({
   defaults,
+  returnStep,
   exclude = [],
 }: {
   defaults: AdminTwilioDefaults;
+  returnStep?: TwilioSetupStepKey | null;
   exclude?: Array<keyof AdminTwilioDefaults>;
 }) {
   return (
@@ -88,6 +157,7 @@ function HiddenAdminTwilioFields({
         if (exclude.includes(name as keyof AdminTwilioDefaults)) return null;
         return <input key={name} name={name} type="hidden" value={value} />;
       })}
+      {returnStep ? <input name="returnStep" type="hidden" value={returnStep} /> : null}
     </>
   );
 }
@@ -99,6 +169,19 @@ function getBadgeVariant(tone: TwilioSetupTone) {
   return 'secondary' as const;
 }
 
+function renderWebhookExpectation(label: string, value: string) {
+  return (
+    <div className="space-y-2 rounded-xl border bg-background/80 p-4 text-sm">
+      <p className="font-medium">{label}</p>
+      <code className="block overflow-x-auto rounded bg-background px-3 py-2 text-xs">{value}</code>
+    </div>
+  );
+}
+
+function getStepByKey(steps: TwilioSetupStep[], key: TwilioSetupStepKey) {
+  return steps.find((step) => step.key === key)!;
+}
+
 export default async function AdminBusinessDetailPage({
   params,
   searchParams,
@@ -108,7 +191,7 @@ export default async function AdminBusinessDetailPage({
 }) {
   await requireAdmin();
 
-  const [business, successfulLeadCount, operatorEvents] = await Promise.all([
+  const [businessRecord, successfulLeadCount, operatorEvents] = await Promise.all([
     db.business.findUnique({
       where: { id: params.businessId },
       include: {
@@ -124,9 +207,11 @@ export default async function AdminBusinessDetailPage({
     listBusinessOperatorEvents(params.businessId, 'all', 120),
   ]);
 
-  if (!business) notFound();
+  if (!businessRecord) notFound();
+  const business = businessRecord;
 
   const timelineFilter = getTimelineFilter(searchParams);
+  const activityExpanded = getActivityExpanded(searchParams);
   const testSmsTruth = buildAdminTestSmsTruth(operatorEvents);
   const [ownerState, webhookSnapshot, availableNumbers] = await Promise.all([
     getAdminOwnerState(business, business.notificationSettings),
@@ -141,6 +226,11 @@ export default async function AdminBusinessDetailPage({
         ? 'pending_delivery'
         : testSmsTruth.state;
   const managedTextingNumber = getManagedTextingNumber(business);
+  const ownerContact = business.notificationSettings?.ownerPhone || business.notifyPhone || null;
+  const missedCallValidation = buildAdminMissedCallValidationTruth({
+    events: operatorEvents,
+    successfulLeadCount,
+  });
   const setupFlow = buildTwilioSetupFlow({
     business,
     notificationSettings: business.notificationSettings,
@@ -148,6 +238,42 @@ export default async function AdminBusinessDetailPage({
     successfulLeadCount,
     testSmsState,
     webhookSnapshot,
+    missedCallValidation: {
+      complete: missedCallValidation.countsAsLaunchProof,
+      stateLabel: missedCallValidation.label,
+      detail: missedCallValidation.detail,
+      tone:
+        missedCallValidation.tone === 'success'
+          ? 'success'
+          : missedCallValidation.tone === 'attention'
+            ? 'attention'
+            : missedCallValidation.tone === 'pending'
+              ? 'pending'
+              : 'neutral',
+    },
+  });
+  const onboardingConfidence = buildAdminOnboardingConfidence({
+    business,
+    notificationSettings: business.notificationSettings,
+    ownerConnected: ownerState.connected,
+    successfulLeadCount,
+    operatorEvents,
+    webhookSnapshot,
+    missedCallValidation,
+  });
+  const { goLiveDecision, proofs } = buildAdminOperationalProofs({
+    ownerConnected: ownerState.connected,
+    ownerEmail: business.notificationSettings?.ownerEmail || null,
+    ownerPhone: ownerContact,
+    messagingServiceReady: Boolean(business.twilioMessagingServiceSid),
+    numberAssigned: Boolean(managedTextingNumber && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid)),
+    testSmsTruth,
+    missedCallValidation,
+    webhookSnapshot,
+    provisioningStatus: business.provisioningStatus,
+    canSafelyMarkLive: onboardingConfidence.canSafelyMarkLive,
+    blockers: onboardingConfidence.blockers.map((blocker) => blocker.message),
+    events: operatorEvents,
   });
   const lastIssue = buildAdminBusinessIssue({
     events: operatorEvents,
@@ -159,13 +285,23 @@ export default async function AdminBusinessDetailPage({
     },
   });
   const timelineCounts = countTimelineFilters(operatorEvents);
-  const visibleTimelineEvents = operatorEvents.filter((event) => matchesTimelineFilter(event, timelineFilter));
+  const rawStepParam = getQueryValue(searchParams, 'step');
+  const selectedStepKey =
+    rawStepParam && setupFlow.steps.some((step) => step.key === rawStepParam)
+      ? (rawStepParam as TwilioSetupStepKey)
+      : (lastIssue.remediationStepKey || setupFlow.banner.stepKey);
   const timelineFilterLinks = businessTimelineFilterOptions.map((option) => ({
     key: option.key,
     label: option.label,
-    href: buildTimelineFilterPath(business.id, option.key),
+    href: buildTimelineFilterPath(business.id, option.key, selectedStepKey, activityExpanded),
     count: timelineCounts.get(option.key) ?? 0,
   }));
+  const visibleTimelineEvents = operatorEvents.filter((event) => matchesTimelineFilter(event, timelineFilter));
+  const expandActivityHref = visibleTimelineEvents.length > 5 ? buildActivityPath(business.id, timelineFilter, selectedStepKey, true) : null;
+  const collapseActivityHref = activityExpanded ? buildActivityPath(business.id, timelineFilter, selectedStepKey, false) : null;
+  const lastIssueHref = lastIssue.remediationStepKey
+    ? buildStepPath(business.id, lastIssue.remediationStepKey, timelineFilter, activityExpanded)
+    : null;
   const defaults: AdminTwilioDefaults = {
     businessId: business.id,
     twilioAccountMode: business.twilioAccountMode,
@@ -180,6 +316,25 @@ export default async function AdminBusinessDetailPage({
     a2pFailureReason: business.a2pFailureReason || '',
     managedTwilioStatus: business.managedTwilioStatus,
   };
+  const setupPanels = buildAdminSetupPanels({
+    business,
+    setupFlow,
+    ownerState,
+    webhookSnapshot,
+    testSmsTruth,
+    onboardingConfidence,
+    missedCallValidation,
+    goLiveDecision,
+    proofs,
+  });
+  const nextStepGuide = buildAdminNextStepGuide({
+    setupFlow,
+    lastIssueStepKey: lastIssue.remediationStepKey,
+    panels: setupPanels,
+  });
+  const nextStep = getStepByKey(setupFlow.steps, nextStepGuide.key);
+  const nextStepHref = buildStepPath(business.id, nextStepGuide.key, timelineFilter, activityExpanded);
+  const selectedStep = getStepByKey(setupFlow.steps, selectedStepKey);
 
   const created = getQueryValue(searchParams, 'created') === '1';
   const saved = getQueryValue(searchParams, 'saved') === '1';
@@ -189,446 +344,602 @@ export default async function AdminBusinessDetailPage({
   const testSms = getQueryValue(searchParams, 'testSms') === '1';
   const archived = getQueryValue(searchParams, 'archived') === '1';
   const restored = getQueryValue(searchParams, 'restored') === '1';
+  const statusSaved = getQueryValue(searchParams, 'statusSaved');
+  const validationSaved = getQueryValue(searchParams, 'validationSaved') === '1';
+  const liveAcknowledged = getQueryValue(searchParams, 'liveAcknowledged');
   const error = getQueryValue(searchParams, 'error');
-
-  const bannerAction =
-    setupFlow.banner.stepKey === 'owner_connected' && !ownerState.connected ? (
-      <Link className={buttonVariants({ size: 'sm' })} href="#owner-step">
-        Connect owner
-      </Link>
-    ) : setupFlow.banner.stepKey === 'voice_webhook_synced' ||
-      setupFlow.banner.stepKey === 'sms_webhook_synced' ||
-      setupFlow.banner.stepKey === 'status_callback_synced' ? (
-      <form action={resyncBusinessWebhooksAction}>
-        <input type="hidden" name="businessId" value={business.id} />
-        <input type="hidden" name="target" value="ALL" />
-        <Button size="sm" type="submit">
-          Sync webhooks
-        </Button>
-      </form>
-    ) : setupFlow.banner.stepKey === 'safe_to_mark_live' && setupFlow.safeToMarkLive && business.provisioningStatus !== 'LIVE' ? (
-      <form action={setBusinessProvisioningStatusAction}>
-        <input type="hidden" name="businessId" value={business.id} />
-        <input type="hidden" name="status" value="LIVE" />
-        <Button size="sm" type="submit">
-          Mark live
-        </Button>
-      </form>
-    ) : (
-      <Link
-        className={buttonVariants({ size: 'sm', variant: 'outline' })}
-        href={
-          setupFlow.banner.stepKey === 'owner_connected'
-            ? '#owner-step'
-            : setupFlow.banner.stepKey === 'account_mode'
-              ? '#account-mode-step'
-              : setupFlow.banner.stepKey === 'number_path'
-                ? '#number-path-step'
-                : setupFlow.banner.stepKey === 'test_sms_delivered'
-                  ? '#test-sms-step'
-                  : '#admin-twilio-setup'
+  const ownerEmail = ownerState.email || business.notificationSettings?.ownerEmail || 'the saved owner email';
+  const stepFeedbackNotice = error
+    ? { variant: 'destructive' as const, message: error }
+    : ownerAction === 'connected'
+      ? {
+          variant: 'success' as const,
+          message: `Existing owner connected for ${ownerEmail}. Customer access should now reflect the linked account.`,
         }
-      >
-        Review step
-      </Link>
-    );
+      : ownerAction === 'invited'
+        ? {
+            variant: 'success' as const,
+            message: `Owner invitation sent to ${ownerEmail}. The owner step stays pending until they accept, then use Connect existing owner to finish linking.`,
+          }
+        : ownerAction === 'resent'
+          ? {
+              variant: 'success' as const,
+              message: `Owner invitation resent to ${ownerEmail}. The owner step stays pending until they accept, then use Connect existing owner to finish linking.`,
+            }
+          : provisioned
+            ? {
+                variant: 'success' as const,
+                message: 'Provisioning run finished. Review the current step evidence before moving forward.',
+              }
+            : synced
+              ? {
+                  variant: 'success' as const,
+                  message: `Webhook sync completed for ${synced}. Confirm the URLs in this step before marking it done.`,
+                }
+              : testSms
+                ? {
+                    variant: 'success' as const,
+                    message: 'Test SMS requested. Wait for the final delivery result in Recent activity before trusting the setup.',
+                  }
+                : validationSaved
+                  ? {
+                      variant: 'success' as const,
+                      message: 'Manual missed-call validation proof saved for this step.',
+                    }
+                  : liveAcknowledged
+                    ? {
+                        variant: 'success' as const,
+                        message:
+                          liveAcknowledged === 'warnings'
+                            ? 'Business marked live with explicit warning acknowledgment.'
+                            : 'Business marked live after launch checks.',
+                      }
+                    : statusSaved
+                      ? {
+                          variant: 'success' as const,
+                          message: `Provisioning status updated to ${statusSaved}.`,
+                        }
+                      : saved
+                        ? {
+                            variant: 'success' as const,
+                            message: `Setup state saved for ${selectedStep.label.toLowerCase()}.`,
+                          }
+                        : null;
 
-  const setupSteps = setupFlow.steps.map((step) => {
+  function renderAutomaticActions(step: TwilioSetupStep) {
     if (step.key === 'owner_connected') {
-      return {
-        ...step,
-        body: ownerState.connected ? (
-          <div className="space-y-3 text-sm text-muted-foreground" id="owner-step">
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge variant="success">{ownerState.statusLabel}</Badge>
-              <span>{ownerState.email || business.notificationSettings?.ownerEmail || 'Owner email not recorded'}</span>
+      return (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <form action={inviteBusinessOwnerAction} className="rounded-xl border bg-background/80 p-4">
+            <input name="businessId" type="hidden" value={business.id} />
+            <input name="returnStep" type="hidden" value={step.key} />
+            <div className="space-y-2">
+              <Label htmlFor="ownerInviteName">Owner name</Label>
+              <Input defaultValue={business.ownerName || ''} id="ownerInviteName" name="ownerName" />
             </div>
-            <p>{ownerState.detail}</p>
-          </div>
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]" id="owner-step">
-            <div className="rounded-xl border bg-background/80 p-4 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={ownerState.badgeVariant}>{ownerState.statusLabel}</Badge>
-                {ownerState.matchedUserId ? <Badge variant="outline">Existing account found</Badge> : null}
-              </div>
-              <p className="mt-3 text-muted-foreground">{ownerState.detail}</p>
-              {ownerState.email ? <p className="mt-2 text-xs text-muted-foreground">Owner email: {ownerState.email}</p> : null}
-              {ownerState.matchedUserId ? (
-                <p className="mt-2 text-xs text-muted-foreground">Matched Clerk user: {ownerState.matchedUserId}</p>
-              ) : null}
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="ownerInviteEmail">Owner email</Label>
+              <Input
+                defaultValue={business.notificationSettings?.ownerEmail || ''}
+                id="ownerInviteEmail"
+                name="ownerEmail"
+                placeholder="owner@business.com"
+                required
+                type="email"
+              />
             </div>
+            <p className="mt-3 text-xs text-muted-foreground">Use this when the owner does not already have a CallbackCloser login.</p>
+            <Button className="mt-4" size="sm" type="submit" variant="outline">
+              {ownerState.status === 'invitation_pending' ? 'Resend owner invite' : 'Invite owner by email'}
+            </Button>
+          </form>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <form action={inviteBusinessOwnerAction} className="rounded-xl border bg-background/80 p-4">
-                <input type="hidden" name="businessId" value={business.id} />
-                <div className="space-y-2">
-                  <Label htmlFor="ownerInviteName">Owner name</Label>
-                  <Input id="ownerInviteName" name="ownerName" defaultValue={business.ownerName || ''} />
-                </div>
-                <div className="mt-4 space-y-2">
-                  <Label htmlFor="ownerInviteEmail">Owner email</Label>
-                  <Input
-                    id="ownerInviteEmail"
-                    name="ownerEmail"
-                    type="email"
-                    defaultValue={business.notificationSettings?.ownerEmail || ''}
-                    placeholder="owner@business.com"
-                    required
-                  />
-                </div>
-                <p className="mt-3 text-xs text-muted-foreground">Use this when the owner does not already have a CallbackCloser login.</p>
-                <Button className="mt-4" size="sm" type="submit" variant="outline">
-                  {ownerState.status === 'invitation_pending' ? 'Resend owner invite' : 'Invite owner by email'}
-                </Button>
-              </form>
-
-              <form action={connectExistingBusinessOwnerAction} className="rounded-xl border bg-background/80 p-4">
-                <input type="hidden" name="businessId" value={business.id} />
-                {ownerState.matchedUserId ? <input type="hidden" name="ownerClerkId" value={ownerState.matchedUserId} /> : null}
-                <div className="space-y-2">
-                  <Label htmlFor="ownerConnectName">Owner name</Label>
-                  <Input id="ownerConnectName" name="ownerName" defaultValue={business.ownerName || ''} />
-                </div>
-                <div className="mt-4 space-y-2">
-                  <Label htmlFor="ownerConnectEmail">Owner email</Label>
-                  <Input
-                    id="ownerConnectEmail"
-                    name="ownerEmail"
-                    type="email"
-                    defaultValue={business.notificationSettings?.ownerEmail || ''}
-                    placeholder="owner@business.com"
-                    required
-                  />
-                </div>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Use this when the owner already has a CallbackCloser account and should be linked immediately.
-                </p>
-                <Button className="mt-4" size="sm" type="submit">
-                  Connect existing owner
-                </Button>
-              </form>
+          <form action={connectExistingBusinessOwnerAction} className="rounded-xl border bg-background/80 p-4">
+            <input name="businessId" type="hidden" value={business.id} />
+            <input name="returnStep" type="hidden" value={step.key} />
+            {ownerState.matchedUserId ? <input name="ownerClerkId" type="hidden" value={ownerState.matchedUserId} /> : null}
+            <div className="space-y-2">
+              <Label htmlFor="ownerConnectName">Owner name</Label>
+              <Input defaultValue={business.ownerName || ''} id="ownerConnectName" name="ownerName" />
             </div>
-          </div>
-        ),
-      };
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="ownerConnectEmail">Owner email</Label>
+              <Input
+                defaultValue={business.notificationSettings?.ownerEmail || ''}
+                id="ownerConnectEmail"
+                name="ownerEmail"
+                placeholder="owner@business.com"
+                required
+                type="email"
+              />
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Use this when the owner already has a CallbackCloser account and should be linked immediately.
+            </p>
+            <Button className="mt-4" size="sm" type="submit">
+              Connect existing owner
+            </Button>
+          </form>
+        </div>
+      );
     }
 
     if (step.key === 'account_mode') {
-      return {
-        ...step,
-        body: (
-          <form action={saveAdminTwilioSetupAction} className="space-y-4" id="account-mode-step">
-            <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioAccountMode']} />
-            <div className="grid gap-3 md:grid-cols-2">
-              {twilioAccountModeOptions.map((option) => (
-                <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
-                  <div className="flex items-start gap-3">
-                    <input defaultChecked={business.twilioAccountMode === option.value} name="twilioAccountMode" type="radio" value={option.value} />
-                    <div className="space-y-1">
-                      <p className="font-medium">{option.label}</p>
-                      <p className="text-muted-foreground">{option.description}</p>
-                    </div>
+      return (
+        <form action={saveAdminTwilioSetupAction} className="space-y-4">
+          <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioAccountMode']} returnStep={step.key} />
+          <div className="grid gap-3 md:grid-cols-2">
+            {twilioAccountModeOptions.map((option) => (
+              <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
+                <div className="flex items-start gap-3">
+                  <input defaultChecked={business.twilioAccountMode === option.value} name="twilioAccountMode" type="radio" value={option.value} />
+                  <div className="space-y-1">
+                    <p className="font-medium">{option.label}</p>
+                    <p className="text-muted-foreground">{option.description}</p>
                   </div>
-                </label>
-              ))}
-            </div>
-            <Button size="sm" type="submit">
-              Save account mode
-            </Button>
-          </form>
-        ),
-      };
+                </div>
+              </label>
+            ))}
+          </div>
+          <Button size="sm" type="submit">
+            Save account mode
+          </Button>
+        </form>
+      );
     }
 
     if (step.key === 'number_path') {
-      return {
-        ...step,
-        body: (
-          <form action={saveAdminTwilioSetupAction} className="space-y-4" id="number-path-step">
-            <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioNumberSetupMode']} />
-            <div className="grid gap-3 md:grid-cols-2">
-              {twilioNumberSetupModeOptions.map((option) => (
-                <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
-                  <div className="flex items-start gap-3">
-                    <input defaultChecked={business.twilioNumberSetupMode === option.value} name="twilioNumberSetupMode" type="radio" value={option.value} />
-                    <div className="space-y-1">
-                      <p className="font-medium">{option.label}</p>
-                      <p className="text-muted-foreground">{option.description}</p>
-                    </div>
+      return (
+        <form action={saveAdminTwilioSetupAction} className="space-y-4">
+          <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioNumberSetupMode']} returnStep={step.key} />
+          <div className="grid gap-3 md:grid-cols-2">
+            {twilioNumberSetupModeOptions.map((option) => (
+              <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
+                <div className="flex items-start gap-3">
+                  <input defaultChecked={business.twilioNumberSetupMode === option.value} name="twilioNumberSetupMode" type="radio" value={option.value} />
+                  <div className="space-y-1">
+                    <p className="font-medium">{option.label}</p>
+                    <p className="text-muted-foreground">{option.description}</p>
                   </div>
-                </label>
-              ))}
-            </div>
-            {business.twilioNumberSetupMode === 'EXISTING_NUMBER' ? (
-              <p className="text-sm text-muted-foreground">{setupFlow.existingNumberMessage}</p>
-            ) : null}
-            <Button size="sm" type="submit" variant="outline">
-              Save number path
-            </Button>
-          </form>
-        ),
-      };
+                </div>
+              </label>
+            ))}
+          </div>
+          <Button size="sm" type="submit" variant="outline">
+            Save number path
+          </Button>
+        </form>
+      );
     }
 
     if (step.key === 'account_ready') {
-      return {
-        ...step,
-        body: (
-          <form action={saveAdminTwilioSetupAction} className="space-y-4">
-            <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioSubaccountSid']} />
-            {business.twilioAccountMode === 'BUSINESS_SUBACCOUNT' ? (
-              <div className="space-y-2">
-                <Label htmlFor="adminTwilioSubaccountSid">Business subaccount SID</Label>
-                <Input id="adminTwilioSubaccountSid" name="twilioSubaccountSid" defaultValue={business.twilioSubaccountSid || ''} placeholder="AC..." />
-                <p className="text-xs text-muted-foreground">Paste an existing subaccount SID to reuse it, or leave it blank and let provisioning create one.</p>
-              </div>
-            ) : (
-              <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
-                Main account mode is active. This business will use the parent Twilio account directly.
-              </div>
-            )}
-            <Button size="sm" type="submit" variant="outline">
-              Save account target
-            </Button>
-          </form>
-        ),
-      };
+      if (business.twilioAccountMode === 'MAIN_ACCOUNT') {
+        return <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">Main account mode is active, so this step does not require a business subaccount.</div>;
+      }
+
+      return (
+        <form action={createBusinessTwilioSubaccountAction} className="space-y-3 rounded-xl border bg-background/80 p-4">
+          <input name="businessId" type="hidden" value={business.id} />
+          <input name="returnStep" type="hidden" value={step.key} />
+          <p className="text-sm text-muted-foreground">Create a dedicated Twilio subaccount for this business without leaving the admin page.</p>
+          <Button size="sm" type="submit">
+            Create subaccount automatically
+          </Button>
+        </form>
+      );
     }
 
     if (step.key === 'messaging_service_ready') {
-      return {
-        ...step,
-        body: (
-          <form action={saveAdminTwilioSetupAction} className="space-y-4">
-            <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioMessagingServiceSid']} />
-            <div className="space-y-2">
-              <Label htmlFor="adminMessagingServiceSid">Messaging Service SID</Label>
-              <Input id="adminMessagingServiceSid" name="twilioMessagingServiceSid" defaultValue={business.twilioMessagingServiceSid || ''} placeholder="MG..." />
-            </div>
-            <Button size="sm" type="submit" variant="outline">
-              Save Messaging Service
-            </Button>
-          </form>
-        ),
-      };
+      return (
+        <form action={createBusinessMessagingServiceAction} className="space-y-3 rounded-xl border bg-background/80 p-4">
+          <input name="businessId" type="hidden" value={business.id} />
+          <input name="returnStep" type="hidden" value={step.key} />
+          <p className="text-sm text-muted-foreground">Create the Twilio Messaging Service from CallbackCloser, then verify delivery with a test SMS.</p>
+          <Button size="sm" type="submit">
+            Create Messaging Service automatically
+          </Button>
+        </form>
+      );
     }
 
     if (step.key === 'number_assigned') {
-      return {
-        ...step,
-        body: (
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                <p className="font-medium">Current number</p>
-                <p className="mt-2 text-muted-foreground">
-                  {managedTextingNumber ? formatPhoneForDisplay(managedTextingNumber) : 'No business number recorded yet'}
-                </p>
-              </div>
-              <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                <p className="font-medium">Numbers visible in selected account</p>
-                <p className="mt-2 text-muted-foreground">
-                  {availableNumbers.error ? availableNumbers.error : `${availableNumbers.numbers.length} number${availableNumbers.numbers.length === 1 ? '' : 's'} in ${availableNumbers.sourceLabel || 'Twilio'}.`}
-                </p>
-              </div>
+      return (
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border bg-background/80 p-4 text-sm">
+              <p className="font-medium">Current number</p>
+              <p className="mt-2 text-muted-foreground">
+                {managedTextingNumber ? formatPhoneForDisplay(managedTextingNumber) : 'No business number recorded yet'}
+              </p>
             </div>
-
-            {business.twilioNumberSetupMode === 'NEW_NUMBER' ? (
-              <form action={provisionBusinessAction} className="flex flex-col gap-3 md:flex-row md:items-end">
-                <input type="hidden" name="businessId" value={business.id} />
-                <input type="hidden" name="mode" value="NEW_NUMBER" />
-                <div className="w-full md:max-w-xs">
-                  <Label htmlFor="adminAreaCode">Preferred area code</Label>
-                  <Input id="adminAreaCode" name="areaCode" inputMode="numeric" maxLength={3} placeholder="512" />
-                </div>
-                <Button size="sm" type="submit">
-                  {managedTextingNumber ? 'Re-run number provisioning' : 'Provision number'}
-                </Button>
-              </form>
-            ) : (
-              <form action={provisionBusinessAction} className="space-y-4">
-                <input type="hidden" name="businessId" value={business.id} />
-                <input type="hidden" name="mode" value="EXISTING_NUMBER" />
-                <div className="space-y-2">
-                  <Label htmlFor="existingNumberSidSelect">Choose an existing number in the selected account</Label>
-                  <Select id="existingNumberSidSelect" name="existingNumberSidSelect" defaultValue="">
-                    <option value="">Choose a number</option>
-                    {availableNumbers.numbers.map((number) => (
-                      <option key={number.sid} value={number.sid}>
-                        {(number.phoneNumber ? formatPhoneForDisplay(number.phoneNumber) : number.friendlyName || number.sid) ?? number.sid}
-                      </option>
-                    ))}
-                  </Select>
-                  <p className="text-xs text-muted-foreground">{setupFlow.existingNumberMessage}</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="existingNumberSidManual">Or paste a number SID manually</Label>
-                  <Input id="existingNumberSidManual" name="existingNumberSidManual" placeholder="PN..." />
-                </div>
-                <Button size="sm" type="submit">
-                  Attach existing number
-                </Button>
-              </form>
-            )}
-
-            <form action={saveAdminTwilioSetupAction} className="grid gap-4 md:grid-cols-2">
-              <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioPhoneNumber', 'twilioPhoneNumberSid']} />
-              <div className="space-y-2">
-                <Label htmlFor="adminTwilioPhoneNumber">Twilio number</Label>
-                <Input id="adminTwilioPhoneNumber" name="twilioPhoneNumber" defaultValue={managedTextingNumber || ''} placeholder="+15551234567" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="adminTwilioPhoneNumberSid">Twilio number SID</Label>
-                <Input
-                  id="adminTwilioPhoneNumberSid"
-                  name="twilioPhoneNumberSid"
-                  defaultValue={business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || ''}
-                  placeholder="PN..."
-                />
-              </div>
-              <div className="md:col-span-2">
-                <Button size="sm" type="submit" variant="outline">
-                  Save number mapping
-                </Button>
-              </div>
-            </form>
+            <div className="rounded-xl border bg-background/80 p-4 text-sm">
+              <p className="font-medium">Numbers visible in the selected account</p>
+              <p className="mt-2 text-muted-foreground">
+                {availableNumbers.error
+                  ? availableNumbers.error
+                  : `${availableNumbers.numbers.length} number${availableNumbers.numbers.length === 1 ? '' : 's'} available in ${availableNumbers.sourceLabel || 'Twilio'}.`}
+              </p>
+            </div>
           </div>
-        ),
-      };
+
+          {business.twilioNumberSetupMode === 'NEW_NUMBER' ? (
+            <form action={provisionBusinessAction} className="flex flex-col gap-3 rounded-xl border bg-background/80 p-4 md:flex-row md:items-end">
+              <input name="businessId" type="hidden" value={business.id} />
+              <input name="mode" type="hidden" value="NEW_NUMBER" />
+              <input name="returnStep" type="hidden" value={step.key} />
+              <div className="w-full md:max-w-xs">
+                <Label htmlFor="adminAreaCode">Preferred area code</Label>
+                <Input id="adminAreaCode" inputMode="numeric" maxLength={3} name="areaCode" placeholder="512" />
+              </div>
+              <Button size="sm" type="submit">
+                {managedTextingNumber ? 'Re-run number provisioning' : 'Provision number automatically'}
+              </Button>
+            </form>
+          ) : (
+            <form action={provisionBusinessAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+              <input name="businessId" type="hidden" value={business.id} />
+              <input name="mode" type="hidden" value="EXISTING_NUMBER" />
+              <input name="returnStep" type="hidden" value={step.key} />
+              <div className="space-y-2">
+                <Label htmlFor="existingNumberSidSelect">Choose an existing number in the selected account</Label>
+                <Select defaultValue="" id="existingNumberSidSelect" name="existingNumberSidSelect">
+                  <option value="">Choose a number</option>
+                  {availableNumbers.numbers.map((number) => (
+                    <option key={number.sid} value={number.sid}>
+                      {(number.phoneNumber ? formatPhoneForDisplay(number.phoneNumber) : number.friendlyName || number.sid) ?? number.sid}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="existingNumberSidManual">Or paste a number SID manually</Label>
+                <Input id="existingNumberSidManual" name="existingNumberSidManual" placeholder="PNXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+              </div>
+              <Button size="sm" type="submit">
+                Attach existing number automatically
+              </Button>
+            </form>
+          )}
+        </div>
+      );
     }
 
-    if (step.key === 'voice_webhook_synced') {
-      return {
-        ...step,
-        body: (
-          <form action={resyncBusinessWebhooksAction} className="flex flex-wrap gap-3">
-            <input type="hidden" name="businessId" value={business.id} />
-            <input type="hidden" name="target" value="ALL" />
-            <Button size="sm" type="submit">
-              Sync all webhooks
-            </Button>
-            <span className="text-sm text-muted-foreground">Voice, SMS, and status callback sync all happen together from this page.</span>
-          </form>
-        ),
-      };
+    if (step.key === 'voice_webhook_synced' || step.key === 'sms_webhook_synced' || step.key === 'status_callback_synced') {
+      const target = step.key === 'voice_webhook_synced' ? 'VOICE' : step.key === 'sms_webhook_synced' ? 'SMS' : 'STATUS';
+      const buttonLabel =
+        target === 'VOICE' ? 'Re-sync voice webhook' : target === 'SMS' ? 'Re-sync SMS webhook' : 'Re-sync status callback';
+
+      return (
+        <form action={resyncBusinessWebhooksAction} className="space-y-3 rounded-xl border bg-background/80 p-4">
+          <input name="businessId" type="hidden" value={business.id} />
+          <input name="target" type="hidden" value={target} />
+          <input name="returnStep" type="hidden" value={step.key} />
+          <p className="text-sm text-muted-foreground">Run the webhook repair for this exact endpoint. The expected CallbackCloser URL is shown below for manual fallback.</p>
+          <Button size="sm" type="submit">
+            {buttonLabel}
+          </Button>
+        </form>
+      );
     }
 
     if (step.key === 'a2p_status_recorded') {
-      return {
-        ...step,
-        body: (
-          <form action={saveAdminTwilioSetupAction} className="grid gap-4 md:grid-cols-2">
-            <HiddenAdminTwilioFields
-              defaults={defaults}
-              exclude={['managedTwilioStatus', 'a2pCustomerProfileSid', 'a2pBrandSid', 'a2pCampaignSid', 'a2pFailureReason']}
+      return (
+        <form action={saveAdminTwilioSetupAction} className="grid gap-4 rounded-xl border bg-background/80 p-4 md:grid-cols-2">
+          <HiddenAdminTwilioFields
+            defaults={defaults}
+            exclude={['managedTwilioStatus', 'a2pCustomerProfileSid', 'a2pBrandSid', 'a2pCampaignSid', 'a2pFailureReason']}
+            returnStep={step.key}
+          />
+          <div className="space-y-2">
+            <Label htmlFor="adminManagedTwilioStatus">Managed Twilio status</Label>
+            <Select defaultValue={business.managedTwilioStatus} id="adminManagedTwilioStatus" name="managedTwilioStatus">
+              {Object.entries(managedTwilioStatusLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="adminA2pCustomerProfileSid">Customer profile SID</Label>
+            <Input defaultValue={business.a2pCustomerProfileSid || ''} id="adminA2pCustomerProfileSid" name="a2pCustomerProfileSid" placeholder="BUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="adminA2pBrandSid">Brand SID</Label>
+            <Input defaultValue={business.a2pBrandSid || ''} id="adminA2pBrandSid" name="a2pBrandSid" placeholder="BNXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="adminA2pCampaignSid">Campaign SID</Label>
+            <Input defaultValue={business.a2pCampaignSid || ''} id="adminA2pCampaignSid" name="a2pCampaignSid" placeholder="QEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="adminA2pFailureReason">Blocker note</Label>
+            <Input
+              defaultValue={business.a2pFailureReason || ''}
+              id="adminA2pFailureReason"
+              name="a2pFailureReason"
+              placeholder="Record why launch is pending, blocked, or approved."
             />
-            <div className="space-y-2">
-              <Label htmlFor="adminManagedTwilioStatus">A2P status</Label>
-              <Select id="adminManagedTwilioStatus" name="managedTwilioStatus" defaultValue={business.managedTwilioStatus}>
-                {Object.entries(managedTwilioStatusLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="adminA2pCustomerProfileSid">Customer profile SID</Label>
-              <Input id="adminA2pCustomerProfileSid" name="a2pCustomerProfileSid" defaultValue={business.a2pCustomerProfileSid || ''} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="adminA2pBrandSid">Brand SID</Label>
-              <Input id="adminA2pBrandSid" name="a2pBrandSid" defaultValue={business.a2pBrandSid || ''} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="adminA2pCampaignSid">Campaign SID</Label>
-              <Input id="adminA2pCampaignSid" name="a2pCampaignSid" defaultValue={business.a2pCampaignSid || ''} />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="adminA2pFailureReason">A2P blocker note</Label>
-              <Input
-                id="adminA2pFailureReason"
-                name="a2pFailureReason"
-                defaultValue={business.a2pFailureReason || ''}
-                placeholder="Record why launch is pending, blocked, or approved."
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Button size="sm" type="submit" variant="outline">
-                Save A2P status
-              </Button>
-            </div>
-          </form>
-        ),
-      };
+          </div>
+          <div className="md:col-span-2">
+            <Button size="sm" type="submit" variant="outline">
+              Save A2P status
+            </Button>
+          </div>
+        </form>
+      );
     }
 
     if (step.key === 'test_sms_delivered') {
-      return {
-        ...step,
-        body: (
-          <form action={sendBusinessTestSmsAction} className="space-y-3" id="test-sms-step">
-            <input type="hidden" name="businessId" value={business.id} />
+      return (
+        <div className="space-y-4">
+          <form action={sendBusinessTestSmsAction} className="space-y-3 rounded-xl border bg-background/80 p-4">
+            <input name="businessId" type="hidden" value={business.id} />
+            <input name="returnStep" type="hidden" value={step.key} />
             <div className="space-y-2">
               <Label htmlFor="adminTwilioTestSmsDestination">Test SMS destination</Label>
               <Input
+                defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''}
                 id="adminTwilioTestSmsDestination"
                 name="destinationPhone"
-                defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''}
                 placeholder="+15551234567"
               />
             </div>
             <Button size="sm" type="submit">
-              Send test SMS
+              {testSmsTruth.state === 'not_run' ? 'Send test SMS' : 'Retry test SMS'}
             </Button>
           </form>
-        ),
-      };
+          <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="#recent-activity">
+            Open recent activity
+          </Link>
+        </div>
+      );
     }
 
     if (step.key === 'missed_call_validated') {
-      return {
-        ...step,
-        body: (
-            <div className="flex flex-wrap gap-3">
-            <Link className={buttonVariants({ size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
-              Open customer workspace
-            </Link>
-            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app/call-flow')}>
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <Link className={buttonVariants({ size: 'sm' })} href={buildAdminCustomerOpenHref(business.id, '/app/call-flow')}>
               Open customer call flow
             </Link>
+            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app')}>
+              Open customer workspace
+            </Link>
+            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="#recent-activity">
+              Open recent activity
+            </Link>
           </div>
-        ),
-      };
+          <form action={confirmMissedCallValidationAction} className="space-y-3 rounded-xl border bg-background/80 p-4">
+            <input name="businessId" type="hidden" value={business.id} />
+            <input name="returnStep" type="hidden" value={step.key} />
+            <div className="space-y-2">
+              <Label htmlFor="manualMissedCallValidationNote">Manual validation note</Label>
+              <Textarea
+                id="manualMissedCallValidationNote"
+                name="note"
+                placeholder="Example: Placed a missed call from my cell, saw the lead created, recovery SMS sent, and owner alert arrived on +1..."
+                rows={4}
+              />
+            </div>
+            <Button size="sm" type="submit" variant="outline">
+              Mark missed-call flow validated
+            </Button>
+          </form>
+        </div>
+      );
     }
 
     if (step.key === 'safe_to_mark_live') {
-      return {
-        ...step,
-        body: (
-          <div className="flex flex-wrap gap-3">
-            <form action={setBusinessProvisioningStatusAction}>
-              <input type="hidden" name="businessId" value={business.id} />
-              <input type="hidden" name="status" value="LIVE" />
-              <Button size="sm" type="submit" disabled={!setupFlow.safeToMarkLive || business.provisioningStatus === 'LIVE'}>
-                {business.provisioningStatus === 'LIVE' ? 'Already live' : 'Mark live'}
-              </Button>
-            </form>
-            <form action={setBusinessProvisioningStatusAction}>
-              <input type="hidden" name="businessId" value={business.id} />
-              <input type="hidden" name="status" value="PAUSED" />
-              <Button size="sm" type="submit" variant="outline">
-                Pause automation
-              </Button>
-            </form>
-          </div>
-        ),
-      };
+      return (
+        <div className="space-y-4">
+          <form action={markBusinessLiveAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+            <input name="businessId" type="hidden" value={business.id} />
+            <input name="returnStep" type="hidden" value={step.key} />
+            {!onboardingConfidence.canSafelyMarkLive ? (
+              <>
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                  <p className="font-medium text-destructive">Launch proof is still incomplete</p>
+                  <ul className="mt-2 space-y-2 text-destructive">
+                    {onboardingConfidence.blockers.map((blocker) => (
+                      <li key={blocker.message}>• {blocker.message}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="goLiveNote">Operator note</Label>
+                  <Textarea
+                    id="goLiveNote"
+                    name="note"
+                    placeholder="Record why this business is going live despite the current warning state."
+                    rows={4}
+                  />
+                </div>
+                <label className="flex items-start gap-2 rounded-xl border bg-background/80 p-3 text-sm">
+                  <input name="acknowledgeWarnings" type="checkbox" value="true" />
+                  <span>I understand this business is going live without complete proof and I am recording that decision explicitly.</span>
+                </label>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                The current launch proof is green. Review it once more, then mark the business live when you want automation active.
+              </p>
+            )}
+            <Button disabled={business.provisioningStatus === 'LIVE' && onboardingConfidence.canSafelyMarkLive} size="sm" type="submit">
+              {business.provisioningStatus === 'LIVE' && onboardingConfidence.canSafelyMarkLive
+                ? 'Already live'
+                : onboardingConfidence.canSafelyMarkLive
+                  ? 'Mark business live'
+                  : 'Mark live with warnings'}
+            </Button>
+          </form>
+
+          <form action={setBusinessProvisioningStatusAction}>
+            <input name="businessId" type="hidden" value={business.id} />
+            <input name="returnStep" type="hidden" value={step.key} />
+            <input name="status" type="hidden" value="PAUSED" />
+            <Button size="sm" type="submit" variant="outline">
+              Pause automation
+            </Button>
+          </form>
+        </div>
+      );
     }
 
-    return step;
-  });
+    return null;
+  }
+
+  function renderManualEntry(step: TwilioSetupStep) {
+    if (step.key === 'owner_connected') {
+      return (
+        <form action={saveAdminSetupBasicsAction} className="grid gap-4 rounded-xl border bg-background/80 p-4 md:grid-cols-2">
+          <input name="businessId" type="hidden" value={business.id} />
+          <input name="returnStep" type="hidden" value={step.key} />
+          <div className="space-y-2">
+            <Label htmlFor="manualOwnerName">Owner name</Label>
+            <Input defaultValue={business.ownerName || ''} id="manualOwnerName" name="ownerName" placeholder="Casey Owner" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="manualOwnerEmail">Owner email</Label>
+            <Input defaultValue={business.notificationSettings?.ownerEmail || ''} id="manualOwnerEmail" name="ownerEmail" placeholder="owner@business.com" type="email" />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="manualOwnerPhone">Owner alert phone</Label>
+            <Input defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''} id="manualOwnerPhone" name="ownerPhone" placeholder="+15551234567" />
+          </div>
+          <div className="md:col-span-2">
+            <Button size="sm" type="submit" variant="outline">
+              Save owner contact info
+            </Button>
+          </div>
+        </form>
+      );
+    }
+
+    if (step.key === 'account_ready') {
+      if (business.twilioAccountMode === 'MAIN_ACCOUNT') return null;
+
+      return (
+        <form action={saveAdminTwilioSetupAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+          <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioSubaccountSid']} returnStep={step.key} />
+          <div className="space-y-2">
+            <Label htmlFor="manualTwilioSubaccountSid">Business subaccount SID</Label>
+            <Input defaultValue={business.twilioSubaccountSid || ''} id="manualTwilioSubaccountSid" name="twilioSubaccountSid" placeholder="ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+            <p className="text-xs text-muted-foreground">Paste the subaccount SID if you created or verified it manually in Twilio.</p>
+          </div>
+          <Button size="sm" type="submit" variant="outline">
+            Save subaccount SID
+          </Button>
+        </form>
+      );
+    }
+
+    if (step.key === 'messaging_service_ready') {
+      return (
+        <form action={saveAdminTwilioSetupAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+          <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioMessagingServiceSid']} returnStep={step.key} />
+          <div className="space-y-2">
+            <Label htmlFor="manualMessagingServiceSid">Messaging Service SID</Label>
+            <Input defaultValue={business.twilioMessagingServiceSid || ''} id="manualMessagingServiceSid" name="twilioMessagingServiceSid" placeholder="MGXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+            <p className="text-xs text-muted-foreground">Paste the existing Messaging Service SID if setup happened outside CallbackCloser.</p>
+          </div>
+          <Button size="sm" type="submit" variant="outline">
+            Save Messaging Service SID
+          </Button>
+        </form>
+      );
+    }
+
+    if (step.key === 'number_assigned') {
+      return (
+        <form action={saveAdminTwilioSetupAction} className="grid gap-4 rounded-xl border bg-background/80 p-4 md:grid-cols-2">
+          <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioPhoneNumber', 'twilioPhoneNumberSid']} returnStep={step.key} />
+          <div className="space-y-2">
+            <Label htmlFor="manualTwilioPhoneNumber">Twilio number</Label>
+            <Input defaultValue={managedTextingNumber || ''} id="manualTwilioPhoneNumber" name="twilioPhoneNumber" placeholder="+15551234567" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="manualTwilioPhoneNumberSid">Twilio number SID</Label>
+            <Input
+              defaultValue={business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || ''}
+              id="manualTwilioPhoneNumberSid"
+              name="twilioPhoneNumberSid"
+              placeholder="PNXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <Button size="sm" type="submit" variant="outline">
+              Save number mapping
+            </Button>
+          </div>
+        </form>
+      );
+    }
+
+    if (step.key === 'voice_webhook_synced' || step.key === 'sms_webhook_synced' || step.key === 'status_callback_synced') {
+      const currentUrl =
+        step.key === 'voice_webhook_synced'
+          ? webhookSnapshot?.currentVoiceUrl || 'No current voice webhook URL read from Twilio.'
+          : step.key === 'sms_webhook_synced'
+            ? webhookSnapshot?.currentSmsUrl || 'No current SMS webhook URL read from Twilio.'
+            : webhookSnapshot?.currentStatusUrl || 'No current status callback URL read from Twilio.';
+      const expectedUrl =
+        step.key === 'voice_webhook_synced'
+          ? webhookSnapshot?.expectedVoiceUrl || 'Voice webhook expectation is not available yet.'
+          : step.key === 'sms_webhook_synced'
+            ? webhookSnapshot?.expectedSmsUrl || 'SMS webhook expectation is not available yet.'
+            : webhookSnapshot?.expectedStatusUrl || 'Status callback expectation is not available yet.';
+
+      return (
+        <div className="space-y-4">
+          <div className="grid gap-3 lg:grid-cols-2">
+            {renderWebhookExpectation('Current Twilio value', currentUrl)}
+            {renderWebhookExpectation('Expected CallbackCloser value', expectedUrl)}
+          </div>
+          <form action={saveAdminTwilioSetupAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+            <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioPhoneNumberSid']} returnStep={step.key} />
+            <div className="space-y-2">
+              <Label htmlFor={`manualNumberSid-${step.key}`}>Twilio number SID</Label>
+              <Input
+                defaultValue={business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || ''}
+                id={`manualNumberSid-${step.key}`}
+                name="twilioPhoneNumberSid"
+                placeholder="PNXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+              />
+              <p className="text-xs text-muted-foreground">If CallbackCloser is checking the wrong Twilio number, correct the saved number SID here before re-syncing.</p>
+            </div>
+            <Button size="sm" type="submit" variant="outline">
+              Update number SID
+            </Button>
+          </form>
+        </div>
+      );
+    }
+
+    if (step.key === 'missed_call_validated') {
+      return (
+        <form action={saveAdminSetupBasicsAction} className="grid gap-4 rounded-xl border bg-background/80 p-4 md:grid-cols-2">
+          <input name="businessId" type="hidden" value={business.id} />
+          <input name="returnStep" type="hidden" value={step.key} />
+          <div className="space-y-2">
+            <Label htmlFor="manualForwardingNumber">Forwarding number</Label>
+            <Input defaultValue={business.forwardingNumber || ''} id="manualForwardingNumber" name="forwardingNumber" placeholder="+15551234567" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="manualValidationOwnerPhone">Owner alert phone</Label>
+            <Input defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''} id="manualValidationOwnerPhone" name="ownerPhone" placeholder="+15551234567" />
+          </div>
+          <div className="md:col-span-2">
+            <Button size="sm" type="submit" variant="outline">
+              Save validation details
+            </Button>
+          </div>
+        </form>
+      );
+    }
+
+    return null;
+  }
 
   return (
     <div className="container space-y-6 py-8">
@@ -639,12 +950,12 @@ export default async function AdminBusinessDetailPage({
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-3xl font-semibold tracking-tight">{business.name} Twilio setup control panel</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">{business.name} setup control panel</h1>
               {isBusinessArchived(business) ? <Badge variant="outline">Archived</Badge> : null}
               <Badge variant={getBadgeVariant(setupFlow.banner.tone)}>{setupFlow.banner.title}</Badge>
             </div>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Shared setup flow for new-business provisioning and existing-business control. The first choice stays visible near the top: main Twilio account or business subaccount.
+              This page is the operator workflow for getting a business from incomplete setup to trustworthy live status. Each setup step below supports both automatic repair and manual fallback when Twilio work happens outside the app.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -660,32 +971,96 @@ export default async function AdminBusinessDetailPage({
             <Link className={buttonVariants({ variant: 'outline' })} href={`/admin/${business.id}/workspace`}>
               View support workspace snapshot
             </Link>
-            <Link className={buttonVariants({ variant: 'outline' })} href={buildAdminCustomerOpenHref(business.id, '/app/leads?view=attention')}>
-              Open customer leads
-            </Link>
           </div>
         </div>
       </div>
 
-      {created ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business workspace created and ready for the Twilio setup flow.</div> : null}
+      {created ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business workspace created and ready for setup.</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Setup state saved.</div> : null}
       {ownerAction ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           {ownerAction === 'connected'
-            ? 'Existing owner connected.'
+            ? `Existing owner connected for ${ownerEmail}.`
             : ownerAction === 'invited'
-              ? 'Owner invitation sent.'
+              ? `Owner invitation sent to ${ownerEmail}.`
               : ownerAction === 'resent'
-                ? 'Owner invitation resent.'
+                ? `Owner invitation resent to ${ownerEmail}.`
                 : 'Owner state updated.'}
         </div>
       ) : null}
-      {provisioned ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning run finished. Review the checklist below before moving on.</div> : null}
-      {synced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Webhook sync complete for {synced.toLowerCase()}.</div> : null}
-      {testSms ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Test SMS requested. Wait for delivery before treating this business as launch-ready.</div> : null}
+      {provisioned ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning run finished. Review the exact setup step before moving on.</div> : null}
+      {synced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Webhook sync complete for {synced}.</div> : null}
+      {testSms ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Test SMS requested. Wait for final delivery or failure before trusting the setup.</div> : null}
+      {statusSaved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Provisioning status updated to {statusSaved}.</div> : null}
+      {validationSaved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Manual missed-call validation proof saved.</div> : null}
+      {liveAcknowledged ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          {liveAcknowledged === 'warnings' ? 'Business marked live with explicit warning acknowledgment.' : 'Business marked live after launch checks.'}
+        </div>
+      ) : null}
       {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived safely. Automation is paused.</div> : null}
       {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored and ready for review.</div> : null}
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader className="gap-3">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-2">
+              <CardDescription>Onboarding confidence</CardDescription>
+              <CardTitle className="text-lg">{onboardingConfidence.summary}</CardTitle>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={onboardingConfidence.stateVariant}>{onboardingConfidence.stateLabel}</Badge>
+              <Badge variant={onboardingConfidence.readinessVariant}>{onboardingConfidence.readinessLabel}</Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium">Next action:</p>
+            <span className="text-muted-foreground">{onboardingConfidence.nextAction}</span>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-3 rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Blockers and warnings</p>
+              {onboardingConfidence.blockers.length > 0 ? (
+                <ul className="space-y-2 text-muted-foreground">
+                  {onboardingConfidence.blockers.map((blocker) => (
+                    <li key={blocker.message}>• {blocker.message}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground">No current blockers are recorded for the go-live decision.</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Link className={buttonVariants({ size: 'sm' })} href={nextStepHref}>
+                  Open next step
+                </Link>
+                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildStepPath(business.id, 'safe_to_mark_live', timelineFilter, activityExpanded)}>
+                  Open go-live step
+                </Link>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {proofs.map((proof) => (
+                <div key={proof.key} className="rounded-xl border bg-background/80 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium">{proof.label}</p>
+                    <Badge variant={getOperatorToneBadgeVariant(proof.tone)}>{proof.statusLabel}</Badge>
+                  </div>
+                  <p className="mt-2 text-muted-foreground">{proof.detail}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {proof.verifiedAt ? `Latest proof ${formatDateTime(proof.verifiedAt)}` : proof.sourceLabel || 'No proof timestamp yet'}
+                  </p>
+                  {proof.evidenceSummary ? <p className="mt-2 text-xs text-muted-foreground">{proof.evidenceSummary}</p> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="border-primary/20 bg-primary/5">
@@ -705,6 +1080,11 @@ export default async function AdminBusinessDetailPage({
             <p className="text-xs text-muted-foreground">
               {lastIssue.createdAt ? `Recorded ${formatDateTime(lastIssue.createdAt)}` : 'Derived from the current business state.'}
             </p>
+            {lastIssueHref ? (
+              <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={lastIssueHref}>
+                Open fix step
+              </Link>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -722,104 +1102,130 @@ export default async function AdminBusinessDetailPage({
             <p className="text-xs text-muted-foreground">
               {testSmsTruth.lastAttemptAt ? `Last attempt ${formatDateTime(testSmsTruth.lastAttemptAt)}` : 'No test SMS attempt recorded yet.'}
             </p>
-            <form action={sendBusinessTestSmsAction} className="space-y-3">
-              <input type="hidden" name="businessId" value={business.id} />
-              <div className="space-y-2">
-                <Label htmlFor="adminOperatorTestSmsDestination">Test SMS destination</Label>
-                <Input
-                  id="adminOperatorTestSmsDestination"
-                  name="destinationPhone"
-                  defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''}
-                  placeholder="+15551234567"
-                />
-              </div>
-              <Button size="sm" type="submit">
-                {testSmsTruth.state === 'not_run' ? 'Send test SMS' : 'Retry test SMS'}
-              </Button>
-            </form>
+            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={buildStepPath(business.id, 'test_sms_delivered', timelineFilter, activityExpanded)}>
+              Open testing step
+            </Link>
           </CardContent>
         </Card>
 
         <Card className="bg-card/90">
           <CardHeader className="pb-3">
-            <CardDescription>Current step</CardDescription>
-            <CardTitle className="text-lg">{setupFlow.banner.title}</CardTitle>
+            <CardDescription>Next step</CardDescription>
+            <CardTitle className="text-lg">{nextStepGuide.title}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={getBadgeVariant(setupFlow.banner.tone)}>
-                {setupFlow.banner.tone === 'success'
+              <Badge variant={getBadgeVariant(nextStep.tone)}>
+                {nextStep.tone === 'success'
                   ? 'Ready'
-                  : setupFlow.banner.tone === 'attention'
+                  : nextStep.tone === 'attention'
                     ? 'Blocked'
-                    : setupFlow.banner.tone === 'pending'
+                    : nextStep.tone === 'pending'
                       ? 'Pending'
                       : 'In review'}
               </Badge>
-              <code className="rounded bg-background px-2 py-1 text-xs">{setupFlow.banner.stepKey}</code>
+              <code className="rounded bg-background px-2 py-1 text-xs">{nextStepGuide.key}</code>
             </div>
-            <p className="text-muted-foreground">{setupFlow.banner.detail}</p>
-            <p className="text-xs text-muted-foreground">
-              This section stays stable so PR #2 can attach guided remediation and manual field entry to the same step key.
-            </p>
-            <div>{bannerAction}</div>
+            <p className="text-muted-foreground">{nextStepGuide.detail}</p>
+            <p className="text-xs text-muted-foreground">This card always opens the exact setup panel that should be worked next.</p>
+            <Link className={buttonVariants({ size: 'sm' })} href={nextStepHref}>
+              {nextStepGuide.ctaLabel}
+            </Link>
           </CardContent>
         </Card>
       </div>
 
       <div id="recent-activity">
-        <AdminBusinessActivityTimeline events={visibleTimelineEvents} activeFilter={timelineFilter} filterLinks={timelineFilterLinks} />
-      </div>
-
-      <div id="admin-twilio-setup">
-        <TwilioSetupChecklist
-          title="CallbackCloser Twilio launch flow"
-          description="Use the same guided checklist here that the business sees during setup, with the admin-only controls needed to actually finish provisioning."
-          banner={setupFlow.banner}
-          bannerAction={bannerAction}
-          steps={setupSteps}
-          advanced={
-            <Card className="bg-card/90" id="advanced">
-              <CardHeader>
-                <CardTitle>Advanced</CardTitle>
-                <CardDescription>Rare lifecycle actions stay out of the main setup path.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-3">
-                {isBusinessArchived(business) ? (
-                  <form action={restoreBusinessAction}>
-                    <input type="hidden" name="businessId" value={business.id} />
-                    <Button size="sm" type="submit">
-                      Restore business
-                    </Button>
-                  </form>
-                ) : (
-                  <form action={archiveBusinessAction}>
-                    <input type="hidden" name="businessId" value={business.id} />
-                    <input type="hidden" name="confirmationName" value={business.name} />
-                    <Button size="sm" type="submit" variant="outline">
-                      Archive business
-                    </Button>
-                  </form>
-                )}
-                {business.isTestBusiness ? (
-                  <form action={deleteTestBusinessAction}>
-                    <input type="hidden" name="businessId" value={business.id} />
-                    <input type="hidden" name="confirmationName" value={business.name} />
-                    <Button size="sm" type="submit" variant="destructive">
-                      Delete test business
-                    </Button>
-                  </form>
-                ) : null}
-              </CardContent>
-            </Card>
-          }
+        <AdminBusinessActivityTimeline
+          activeFilter={timelineFilter}
+          collapseHref={collapseActivityHref}
+          events={visibleTimelineEvents}
+          expandHref={expandActivityHref}
+          expanded={activityExpanded}
+          filterLinks={timelineFilterLinks}
         />
       </div>
+
+      <Card className="bg-card/90" id="admin-setup-steps">
+        <CardHeader>
+          <CardTitle>Setup steps</CardTitle>
+          <CardDescription>Each step includes the current state, what to do next, automatic action buttons, and manual fallback fields when operator intervention is needed.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {stepFeedbackNotice ? (
+            <div
+              className={
+                stepFeedbackNotice.variant === 'destructive'
+                  ? 'rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive'
+                  : 'rounded-md border border-accent bg-accent/40 p-3 text-sm'
+              }
+            >
+              {stepFeedbackNotice.message}
+            </div>
+          ) : null}
+          {setupFlow.steps.map((step) => {
+            const panel = setupPanels.find((candidate) => candidate.key === step.key)!;
+            return (
+              <AdminBusinessSetupStepCard
+                key={step.key}
+                automaticActions={renderAutomaticActions(step)}
+                currentState={panel.currentState}
+                explanation={panel.explanation}
+                href={buildStepPath(business.id, step.key, timelineFilter, activityExpanded)}
+                manualEntry={renderManualEntry(step)}
+                nextAction={panel.nextAction}
+                open={selectedStepKey === step.key}
+                step={step}
+                title={panel.title}
+                instructions={panel.instructions}
+                latestEvidence={panel.latestEvidence}
+                warnings={panel.warnings}
+                verification={panel.verification}
+              />
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card/90" id="advanced">
+        <CardHeader>
+          <CardTitle>Advanced</CardTitle>
+          <CardDescription>Destructive or lifecycle controls stay separate from the guided setup flow.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          {isBusinessArchived(business) ? (
+            <form action={restoreBusinessAction}>
+              <input name="businessId" type="hidden" value={business.id} />
+              <input name="confirmationName" type="hidden" value={business.name} />
+              <Button size="sm" type="submit">
+                Restore business
+              </Button>
+            </form>
+          ) : (
+            <form action={archiveBusinessAction}>
+              <input name="businessId" type="hidden" value={business.id} />
+              <input name="confirmationName" type="hidden" value={business.name} />
+              <Button size="sm" type="submit" variant="outline">
+                Archive business
+              </Button>
+            </form>
+          )}
+          {business.isTestBusiness ? (
+            <form action={deleteTestBusinessAction}>
+              <input name="businessId" type="hidden" value={business.id} />
+              <input name="confirmationName" type="hidden" value={business.name} />
+              <Button size="sm" type="submit" variant="destructive">
+                Delete test business
+              </Button>
+            </form>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Card className="bg-card/90">
         <CardHeader>
           <CardTitle>Setup snapshot</CardTitle>
-          <CardDescription>Plain-English context without the old dashboard clutter.</CardDescription>
+          <CardDescription>Short business context for the operator without burying the next step.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border bg-background/80 p-4 text-sm">

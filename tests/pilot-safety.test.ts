@@ -17,6 +17,17 @@ test('settings page no longer exposes shared Twilio number inventory', () => {
   assert.match(settingsPage, /Existing-number support stays honest/i);
 });
 
+test('existing-number selection reports a truthful setup state instead of a fake error', () => {
+  const settingsPage = read('app/app/settings/page.tsx');
+  const settingsAction = read('app/app/settings/actions.ts');
+
+  assert.match(settingsAction, /redirect\('\/app\/settings\?existingNumberIntent=1'\)/);
+  assert.doesNotMatch(settingsAction, /Keeping an existing number is still an admin-assisted launch step/);
+  assert.match(settingsPage, /const existingNumberIntent = searchParams\?\.existingNumberIntent === '1';/);
+  assert.match(settingsPage, /Existing-number path saved\./);
+  assert.match(settingsPage, /admin-assisted existing-number rollout/i);
+});
+
 test('onboarding page persists Twilio account mode before the shared setup flow continues', () => {
   const onboardingPage = read('app/app/onboarding/page.tsx');
   const onboardingAction = read('app/app/onboarding/actions.ts');

@@ -49,8 +49,10 @@ test('sms consent page includes required disclosures and trust links', () => {
   assert.match(smsConsentForm, /htmlFor="sms-consent-phone"/);
   assert.match(smsConsentForm, /name="phone"/);
   assert.match(smsConsentForm, /type="tel"/);
-  assert.match(smsConsentForm, /defaultChecked=\{false\}/);
-  assert.match(smsConsentForm, /Continue/);
+  assert.match(smsConsentForm, /checked=\{consentChecked\}/);
+  assert.match(smsConsentForm, /buildSmsConsentMailtoHref/);
+  assert.match(smsConsentForm, /Email support to confirm consent/);
+  assert.doesNotMatch(smsConsentForm, /type="button"/);
   assert.match(smsConsentForm, /Consent to receive SMS messages is not a condition of purchase/i);
   assert.doesNotMatch(smsConsent, /visual-only|Twilio review only|pilot reference|demo|public compliance reference|consent is recorded elsewhere/i);
   assert.doesNotMatch(

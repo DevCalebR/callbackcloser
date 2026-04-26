@@ -86,6 +86,7 @@ export default async function LeadDetailPage({
 
   if (!lead) notFound();
 
+  const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const saved = searchParams?.saved === '1';
   const returnPath = resolveSafeReturnPath(typeof searchParams?.from === 'string' ? searchParams.from : null);
   const messageIssues = lead.messages.filter((message) => isMessageDeliveryIssueStatus(message.status));
@@ -113,6 +114,7 @@ export default async function LeadDetailPage({
         <Badge variant="outline">Lead details</Badge>
       </div>
 
+      {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead updated.</div> : null}
       {messageIssues.length > 0 ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">

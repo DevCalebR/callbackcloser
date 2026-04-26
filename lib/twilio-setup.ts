@@ -234,8 +234,14 @@ export function buildTwilioSetupFlow(params: {
   successfulLeadCount: number;
   testSmsState: 'not_started' | 'pending_delivery' | 'delivered' | 'failed';
   webhookSnapshot: TwilioWebhookSnapshot | null;
+  missedCallValidation?: {
+    complete: boolean;
+    stateLabel: string;
+    detail: string;
+    tone: TwilioSetupTone;
+  } | null;
 }) {
-  const { business, notificationSettings, ownerConnected, successfulLeadCount, testSmsState, webhookSnapshot } = params;
+  const { business, notificationSettings, ownerConnected, successfulLeadCount, testSmsState, webhookSnapshot, missedCallValidation } = params;
   const accountMode = business.twilioAccountMode || TwilioAccountMode.BUSINESS_SUBACCOUNT;
   const numberSetupMode = business.twilioNumberSetupMode || TwilioNumberSetupMode.NEW_NUMBER;
   const managedSummary = getManagedTwilioStatusSummary(business);
@@ -253,7 +259,7 @@ export function buildTwilioSetupFlow(params: {
   const testSmsDelivered = testSmsState === 'delivered';
   const hasOwnerRouting = Boolean(ownerPhone || ownerEmail);
   const hasForwardingNumber = Boolean(business.forwardingNumber?.trim());
-  const missedCallValidated = successfulLeadCount > 0;
+  const missedCallValidated = missedCallValidation?.complete ?? successfulLeadCount > 0;
   const existingNumberMessage =
     'Existing-number support stays truthful here: CallbackCloser can only attach a number that already lives in the selected Twilio account context. Numbers that live elsewhere still need admin assistance.';
 
@@ -272,11 +278,14 @@ export function buildTwilioSetupFlow(params: {
   if (!hasOwnerRouting) liveBlockers.push('save an owner alert destination');
 
   const safeToMarkLive = liveBlockers.length === 0;
+  const liveWithWarnings = business.provisioningStatus === BusinessProvisioningStatus.LIVE && !safeToMarkLive;
   const liveGateDetail = safeToMarkLive
     ? business.provisioningStatus === BusinessProvisioningStatus.LIVE
       ? 'This business is already live and the current setup still clears the launch gate.'
       : 'This business clears the Twilio launch gate. It is safe to mark live.'
-    : `Before this business goes live, ${liveBlockers.join(', ')}.`;
+    : liveWithWarnings
+      ? `This business is already live, but the current launch gate is not clear: ${liveBlockers.join(', ')}.`
+      : `Before this business goes live, ${liveBlockers.join(', ')}.`;
 
   const steps: TwilioSetupStep[] = [
     {
@@ -406,24 +415,28 @@ export function buildTwilioSetupFlow(params: {
       key: 'missed_call_validated',
       label: '12. Missed-call flow validated',
       complete: missedCallValidated,
-      tone: buildTone(missedCallValidated),
-      stateLabel: missedCallValidated ? 'Validated' : 'Still needed',
-      detail: missedCallValidated
-        ? `${successfulLeadCount} missed-call test${successfulLeadCount === 1 ? '' : 's'} reached owner-notification visibility.`
-        : !hasForwardingNumber
-          ? 'Save the forwarding number first so the live call path is accurate before testing.'
-          : !hasOwnerRouting
-            ? 'Save an owner alert destination before the missed-call validation test.'
-            : 'Run one real missed call and confirm the owner alert and lead handoff both land correctly.',
+      tone: missedCallValidation?.tone ?? buildTone(missedCallValidated),
+      stateLabel: missedCallValidation?.stateLabel ?? (missedCallValidated ? 'Validated' : 'Still needed'),
+      detail:
+        missedCallValidation?.detail ??
+        (missedCallValidated
+          ? `${successfulLeadCount} missed-call test${successfulLeadCount === 1 ? '' : 's'} reached owner-notification visibility.`
+          : !hasForwardingNumber
+            ? 'Save the forwarding number first so the live call path is accurate before testing.'
+            : !hasOwnerRouting
+              ? 'Save an owner alert destination before the missed-call validation test.'
+              : 'Run one real missed call and confirm the owner alert and lead handoff both land correctly.'),
     },
     {
       key: 'safe_to_mark_live',
       label: '13. Safe to mark live',
-      complete: safeToMarkLive || business.provisioningStatus === BusinessProvisioningStatus.LIVE,
-      tone: safeToMarkLive || business.provisioningStatus === BusinessProvisioningStatus.LIVE ? 'success' : 'pending',
+      complete: safeToMarkLive,
+      tone: liveWithWarnings ? 'attention' : safeToMarkLive ? 'success' : 'pending',
       stateLabel:
         business.provisioningStatus === BusinessProvisioningStatus.LIVE
-          ? 'Live'
+          ? safeToMarkLive
+            ? 'Live'
+            : 'Live with warnings'
           : safeToMarkLive
             ? 'Ready'
             : 'Blocked',
