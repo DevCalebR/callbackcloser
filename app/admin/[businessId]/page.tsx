@@ -28,7 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
-import { buildAdminOnboardingConfidence, isBusinessArchived } from '@/lib/admin-dashboard';
+import { buildAdminOnboardingConfidence, canDeleteTestBusiness, getDeleteTestBusinessBlockedReason, isBusinessArchived } from '@/lib/admin-dashboard';
 import { buildAdminMissedCallValidationTruth, buildAdminOperationalProofs } from '@/lib/admin-operator-proof';
 import { buildAdminNextStepGuide, buildAdminSetupPanels } from '@/lib/admin-setup-remediation';
 import {
@@ -1210,7 +1210,7 @@ export default async function AdminBusinessDetailPage({
               </Button>
             </form>
           )}
-          {business.isTestBusiness ? (
+          {canDeleteTestBusiness(business) ? (
             <form action={deleteTestBusinessAction}>
               <input name="businessId" type="hidden" value={business.id} />
               <input name="confirmationName" type="hidden" value={business.name} />
@@ -1218,6 +1218,8 @@ export default async function AdminBusinessDetailPage({
                 Delete test business
               </Button>
             </form>
+          ) : business.isTestBusiness ? (
+            <p className="text-sm text-muted-foreground">{getDeleteTestBusinessBlockedReason(business)}</p>
           ) : null}
         </CardContent>
       </Card>

@@ -212,6 +212,10 @@ export const adminBulkDeleteTestBusinessesSchema = z.object({
   confirmationText: z.string().trim().min(1),
 });
 
+export const adminFounderDeleteAllBusinessesSchema = z.object({
+  confirmationText: z.string().trim().min(1),
+});
+
 export const businessTwilioAdminOverrideSchema = z.object({
   twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
   twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),

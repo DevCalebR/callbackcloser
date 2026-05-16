@@ -15,10 +15,14 @@ import {
   syncBusinessTwilioWebhooks,
   updateBusinessProvisioningStatus,
 } from '@/lib/admin-provisioning';
-import { deleteDeletableTestBusiness } from '@/lib/admin-business-lifecycle';
+import {
+  deleteAllBusinessesForFounderReset,
+  deleteDeletableTestBusiness,
+  FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION,
+} from '@/lib/admin-business-lifecycle';
 import { buildAdminOnboardingConfidence, canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
 import { buildAdminMissedCallValidationTruth } from '@/lib/admin-operator-proof';
-import { requireAdmin } from '@/lib/admin';
+import { requireAdmin, requireFounderAdmin } from '@/lib/admin';
 import {
   bulkDeleteTestDemoBusinesses,
   BULK_TEST_DATA_RESET_CONFIRMATION,
@@ -43,6 +47,7 @@ import {
   adminSetupBasicsSchema,
   adminTwilioSetupSchema,
   adminBusinessUpdateSchema,
+  adminFounderDeleteAllBusinessesSchema,
   adminProvisionBusinessSchema,
   adminProvisioningStatusSchema,
   adminWebhookSyncSchema,
@@ -1963,6 +1968,49 @@ export async function deleteTestBusinessAction(formData: FormData) {
 
   revalidatePath('/admin');
   redirect(clearBusinessSelectionFromReturnPath(parsed.data.returnTo, { deleted: 1 }, '/admin?deleted=1'));
+}
+
+export async function founderDeleteAllBusinessesAction(formData: FormData) {
+  const founder = await requireFounderAdmin();
+
+  const parsed = adminFounderDeleteAllBusinessesSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid founder reset request.')}`);
+  }
+
+  let redirectPath = '/admin';
+
+  try {
+    const result = await deleteAllBusinessesForFounderReset({
+      confirmation: parsed.data.confirmationText,
+    });
+
+    logAuditEvent({
+      event: 'admin_all_businesses_bulk_deleted',
+      actorType: 'user',
+      actorId: founder.userId,
+      targetType: 'business_collection',
+      targetId: 'all_current_businesses',
+      metadata: {
+        actorEmail: founder.email,
+        deletedCount: result.deletedCount,
+        deletedBusinessNames: result.deletedBusinessNames,
+        confirmationText: FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION,
+      },
+    });
+
+    revalidatePath('/admin');
+
+    redirectPath =
+      result.deletedCount > 0
+        ? `/admin?founderResetResult=deleted&founderResetDeleted=${encodeURIComponent(String(result.deletedCount))}`
+        : '/admin?founderResetResult=noop&founderResetDeleted=0';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to delete the current businesses.';
+    redirectPath = `/admin?error=${encodeURIComponent(message)}`;
+  }
+
+  redirect(redirectPath);
 }
 
 export async function bulkDeleteTestBusinessesAction(formData: FormData) {

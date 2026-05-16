@@ -6,16 +6,19 @@ function read(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 }
 
-test('bulk delete action keeps redirect outside the try/catch and returns plain admin UI states', () => {
+test('founder bulk delete action keeps redirect outside the try/catch and returns plain admin UI states', () => {
   const actions = read('app/admin/actions.ts');
   const adminPage = read('app/admin/page.tsx');
 
-  const actionSection = actions.slice(actions.indexOf('export async function bulkDeleteTestBusinessesAction'));
+  const actionStart = actions.indexOf('export async function founderDeleteAllBusinessesAction');
+  const nextActionStart = actions.indexOf('export async function bulkDeleteTestBusinessesAction');
+  const actionSection = actions.slice(actionStart, nextActionStart);
   const catchStart = actionSection.indexOf('} catch (error) {');
   const finalRedirectStart = actionSection.lastIndexOf('\n\n  redirect(redirectPath);');
   const catchSection = actionSection.slice(catchStart, finalRedirectStart);
 
-  assert.match(actions, /export async function bulkDeleteTestBusinessesAction/);
+  assert.match(actions, /export async function founderDeleteAllBusinessesAction/);
+  assert.match(actions, /const founder = await requireFounderAdmin\(\)/);
   assert.match(actions, /let redirectPath = '\/admin'/);
   assert.match(actions, /redirectPath = `\/admin\?error=\$\{encodeURIComponent\(message\)\}`/);
   assert.match(actions, /redirect\(redirectPath\);/);
@@ -23,8 +26,10 @@ test('bulk delete action keeps redirect outside the try/catch and returns plain 
   assert.notEqual(finalRedirectStart, -1);
   assert.doesNotMatch(catchSection, /redirect\(/);
 
-  assert.match(adminPage, /resetResult === 'deleted'/);
-  assert.match(adminPage, /Deleted \{resetDeleted\} test\/demo/);
-  assert.match(adminPage, /resetResult === 'noop'/);
-  assert.match(adminPage, /No test\/demo businesses were eligible for deletion/);
+  assert.match(adminPage, /admin\.isFounder \?/);
+  assert.match(adminPage, /founderResetResult === 'deleted'/);
+  assert.match(adminPage, /Deleted \{founderResetDeleted\} current/);
+  assert.match(adminPage, /founderResetResult === 'noop'/);
+  assert.match(adminPage, /No businesses were available for founder reset/);
+  assert.match(adminPage, /All businesses have been removed\. Create your first clean business workspace with Fast onboard\./);
 });
