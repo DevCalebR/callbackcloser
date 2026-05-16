@@ -2,17 +2,17 @@ import Link from 'next/link';
 
 import {
   archiveBusinessAction,
-  bulkDeleteTestBusinessesAction,
   createAdminBusinessAction,
   createDemoBusinessAction,
   deleteTestBusinessAction,
+  founderDeleteAllBusinessesAction,
   provisionBusinessAction,
   resyncBusinessWebhooksAction,
   restoreBusinessAction,
   sendBusinessTestSmsAction,
 } from '@/app/admin/actions';
 import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
-import { BULK_TEST_DATA_RESET_CONFIRMATION, listTestDemoBusinessesForReset } from '@/lib/admin-test-data-reset';
+import { FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION } from '@/lib/admin-business-lifecycle';
 import {
   adminBoardFilterOptions,
   buildAdminOnboardingConfidence,
@@ -121,13 +121,13 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const deleted = getQueryValue(searchParams, 'deleted') === '1';
   const error = getQueryValue(searchParams, 'error');
   const query = getQueryValue(searchParams, 'q')?.trim() || '';
-  const resetResult = getQueryValue(searchParams, 'resetResult');
-  const resetDeleted = Number(getQueryValue(searchParams, 'resetDeleted') || '0');
+  const founderResetResult = getQueryValue(searchParams, 'founderResetResult');
+  const founderResetDeleted = Number(getQueryValue(searchParams, 'founderResetDeleted') || '0');
   const restored = getQueryValue(searchParams, 'restored') === '1';
   const view = (getQueryValue(searchParams, 'view') as AdminBoardFilter | null) || 'all';
   const adminBusiness = await db.business.findUnique({ where: { ownerClerkId: admin.userId } });
 
-  const [businesses, businessPickerOptions, leadCounts, successfulLeadCounts, leadActivity, callActivity, messageActivity, latestOperatorIssues, latestTestSmsEvents, operatorSignals, confidenceEvents, resettableBusinesses] = await Promise.all([
+  const [businesses, businessPickerOptions, leadCounts, successfulLeadCounts, leadActivity, callActivity, messageActivity, latestOperatorIssues, latestTestSmsEvents, operatorSignals, confidenceEvents] = await Promise.all([
     query
       ? searchBusinessesForAdmin(query)
       : db.business.findMany({
@@ -271,7 +271,6 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       },
       take: 1400,
     }),
-    listTestDemoBusinessesForReset(),
   ]);
 
   const leadCountMap = new Map(leadCounts.map((item) => [item.businessId, item._count._all]));
@@ -467,7 +466,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
     { label: 'Ready for live', value: businessRows.filter((row) => row.onboardingConfidence.state === 'ready_to_go_live').length },
     { label: 'Live with warnings', value: businessRows.filter((row) => row.onboardingConfidence.state === 'live_with_warnings').length },
   ];
-  const resettableBusinessPreview = resettableBusinesses.slice(0, 4).map((business) => business.name);
+  const founderResetBusinessCount = businessPickerOptions.length;
+  const founderResetBusinessPreview = businessPickerOptions.slice(0, 4).map((business) => business.name);
 
   return (
     <div className="container space-y-6 py-8">
@@ -500,13 +500,13 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived. Permanent delete stays locked until the workspace is clearly demo/test.</div> : null}
       {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored to active triage.</div> : null}
       {deleted ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Demo/test business deleted permanently.</div> : null}
-      {resetResult === 'deleted' && Number.isFinite(resetDeleted) ? (
+      {founderResetResult === 'deleted' && Number.isFinite(founderResetDeleted) ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
-          Deleted {resetDeleted} test/demo {resetDeleted === 1 ? 'business' : 'businesses'}.
+          Deleted {founderResetDeleted} current {founderResetDeleted === 1 ? 'business' : 'businesses'}. You can create one clean business workspace now.
         </div>
       ) : null}
-      {resetResult === 'noop' ? (
-        <div className="rounded-md border bg-background/80 p-3 text-sm text-muted-foreground">No test/demo businesses were eligible for deletion.</div>
+      {founderResetResult === 'noop' ? (
+        <div className="rounded-md border bg-background/80 p-3 text-sm text-muted-foreground">No businesses were available for founder reset.</div>
       ) : null}
       {createdDemo && createdBusinessId ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
@@ -622,45 +622,55 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
         </Card>
       </div>
 
-      <Card className="border-destructive/30 bg-destructive/5">
-        <CardHeader>
-          <CardTitle>Reset test data</CardTitle>
-          <CardDescription>
-            Founder/admin-only destructive cleanup. This removes every current test/demo business and its business-owned data so you can restart from a clean slate.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-xl border bg-background/80 p-4 text-sm">
-            <p className="font-medium text-foreground">
-              {resettableBusinesses.length} test/demo {resettableBusinesses.length === 1 ? 'business' : 'businesses'} eligible for deletion
-            </p>
-            <p className="mt-2 text-muted-foreground">
-              Only businesses marked as test/demo or the dedicated simulator demo workspace are included. Real customer businesses stay untouched.
-            </p>
-            {resettableBusinessPreview.length > 0 ? (
-              <p className="mt-3 text-muted-foreground">
-                Preview: {resettableBusinessPreview.join(', ')}
-                {resettableBusinesses.length > resettableBusinessPreview.length ? ` and ${resettableBusinesses.length - resettableBusinessPreview.length} more.` : '.'}
+      {admin.isFounder ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardHeader>
+            <CardTitle>Founder reset</CardTitle>
+            <CardDescription>
+              One-time founder-only cleanup. Use this only because there are no real customer businesses yet. Normal real-customer lifecycle should still be archive or disable, not hard delete.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-xl border bg-background/80 p-4 text-sm">
+              <p className="font-medium text-foreground">
+                {founderResetBusinessCount} current {founderResetBusinessCount === 1 ? 'business' : 'businesses'} will be deleted
               </p>
-            ) : (
-              <p className="mt-3 text-muted-foreground">No test/demo businesses are currently eligible for cleanup.</p>
-            )}
-          </div>
-
-          <form action={bulkDeleteTestBusinessesAction} className="rounded-xl border border-destructive/30 bg-background/80 p-4">
-            <div className="space-y-2">
-              <Label htmlFor="confirmationText">Type {BULK_TEST_DATA_RESET_CONFIRMATION}</Label>
-              <Input id="confirmationText" name="confirmationText" autoComplete="off" placeholder={BULK_TEST_DATA_RESET_CONFIRMATION} />
+              <p className="mt-2 text-muted-foreground">
+                This permanently deletes every current business record, including archived ones, so you can restart from one clean workspace.
+              </p>
+              {founderResetBusinessPreview.length > 0 ? (
+                <p className="mt-3 text-muted-foreground">
+                  Preview: {founderResetBusinessPreview.join(', ')}
+                  {founderResetBusinessCount > founderResetBusinessPreview.length
+                    ? ` and ${founderResetBusinessCount - founderResetBusinessPreview.length} more.`
+                    : '.'}
+                </p>
+              ) : (
+                <p className="mt-3 text-muted-foreground">No businesses are currently present.</p>
+              )}
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              This is irreversible. Deleting a business also removes its business-scoped leads, calls, messages, notifications, operator events, settings, and related demo data through the existing schema cascades.
-            </p>
-            <Button className="mt-4" type="submit" variant="destructive" disabled={resettableBusinesses.length === 0}>
-              Delete all test/demo businesses
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+
+            <form action={founderDeleteAllBusinessesAction} className="rounded-xl border border-destructive/30 bg-background/80 p-4">
+              <div className="space-y-2">
+                <Label htmlFor="founderResetConfirmationText">Type {FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION}</Label>
+                <Input
+                  id="founderResetConfirmationText"
+                  name="confirmationText"
+                  autoComplete="off"
+                  placeholder={FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION}
+                />
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                This is irreversible. Deleting a business also removes its leads, calls, messages, owner notifications, business settings, operator events,
+                simulator runs, SMS consent records, and other business-owned data through the existing schema cascades.
+              </p>
+              <Button className="mt-4" type="submit" variant="destructive" disabled={founderResetBusinessCount === 0}>
+                Delete all current businesses
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="bg-card/90">
         <CardHeader>
@@ -853,9 +863,11 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
           {visibleRows.length === 0 ? (
             <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-              {selectedBusinessId
-                ? 'That business is no longer available on the board. Clear the selection and pick another workspace.'
-                : 'No businesses matched this view. Try a different filter or search for the exact business ID, owner email, or Twilio number.'}
+              {businessPickerOptions.length === 0
+                ? 'All businesses have been removed. Create your first clean business workspace with Fast onboard.'
+                : selectedBusinessId
+                  ? 'That business is no longer available on the board. Clear the selection and pick another workspace.'
+                  : 'No businesses matched this view. Try a different filter or search for the exact business ID, owner email, or Twilio number.'}
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border">

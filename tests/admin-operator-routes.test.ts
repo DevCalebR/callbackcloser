@@ -19,9 +19,9 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminHome, /Operator control panel/);
   assert.match(adminHome, /Fast onboard/);
   assert.match(adminHome, /Create business workspace/);
-  assert.match(adminHome, /Reset test data/);
-  assert.match(adminHome, /Delete all test\/demo businesses/);
-  assert.match(adminHome, /BULK_TEST_DATA_RESET_CONFIRMATION/);
+  assert.match(adminHome, /Founder reset/);
+  assert.match(adminHome, /Delete all current businesses/);
+  assert.match(adminHome, /FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION/);
   assert.match(adminHome, /Business triage board/);
   assert.match(adminHome, /Go-live blocker/);
   assert.match(adminHome, /Test SMS/);
@@ -29,7 +29,7 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminHome, /Delete demo\/test business permanently/);
   assert.match(adminHome, /Type business name to permanently delete/);
   assert.match(adminHome, /Open customer leads/);
-  assert.match(adminActions, /export async function bulkDeleteTestBusinessesAction/);
+  assert.match(adminActions, /export async function founderDeleteAllBusinessesAction/);
   assert.match(adminActions, /export async function saveAdminTwilioSetupAction/);
   assert.match(adminActions, /export async function saveAdminSetupBasicsAction/);
   assert.match(adminActions, /export async function createBusinessTwilioSubaccountAction/);
@@ -67,6 +67,8 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /Open customer settings/);
   assert.match(adminDetail, /Open customer call flow/);
   assert.match(adminDetail, /View support workspace snapshot/);
+  assert.match(adminDetail, /canDeleteTestBusiness\(business\)/);
+  assert.match(adminDetail, /getDeleteTestBusinessBlockedReason\(business\)/);
   assert.match(adminHome, /Open blocker step/);
   assert.match(activityTimeline, /Recent activity/);
   assert.match(activityTimeline, /Show more activity/);

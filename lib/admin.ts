@@ -17,6 +17,12 @@ function isAllowedAdminUser(params: { userId: string; email: string | null }) {
   return (founderUserId && params.userId === founderUserId) || (params.email ? adminEmailAllowlist.has(params.email) : false);
 }
 
+export function isFounderUserId(userId: string | null | undefined, env: Readonly<Record<string, string | undefined>> = process.env) {
+  const founderUserId = env.FOUNDER_CLERK_USER_ID?.trim();
+  if (!founderUserId || !userId) return false;
+  return userId === founderUserId;
+}
+
 export async function getAdminSession() {
   const { userId } = await auth();
   if (!userId) {
@@ -33,6 +39,7 @@ export async function getAdminSession() {
     userId,
     email: primaryEmail,
     isAdmin: isAllowedAdminUser({ userId, email: primaryEmail }),
+    isFounder: isFounderUserId(userId),
   };
 }
 
@@ -49,5 +56,16 @@ export async function requireAdmin() {
   return {
     userId: session.userId,
     email: session.email,
+    isFounder: session.isFounder,
   };
+}
+
+export async function requireFounderAdmin() {
+  const admin = await requireAdmin();
+
+  if (!admin.isFounder) {
+    redirect('/admin?error=Founder-only+cleanup+action.');
+  }
+
+  return admin;
 }
