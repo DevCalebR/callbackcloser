@@ -374,7 +374,7 @@ enum TwilioNumberSetupMode {
 enum MessagingComplianceType {
   UNKNOWN
   LOCAL_A2P
-  TOLL_FREE
+  TOLL_FREE_VERIFICATION
 }
 
 enum TollFreeVerificationStatus {

@@ -4,7 +4,10 @@ import { MAX_AVERAGE_JOB_VALUE } from '@/lib/business-settings';
 
 const twilioAccountModeSchema = z.enum(['MAIN_ACCOUNT', 'BUSINESS_SUBACCOUNT']);
 const twilioNumberSetupModeSchema = z.enum(['NEW_NUMBER', 'EXISTING_NUMBER']);
-const messagingComplianceTypeSchema = z.enum(['UNKNOWN', 'LOCAL_A2P', 'TOLL_FREE']);
+const messagingComplianceTypeSchema = z.preprocess(
+  (value) => (value === 'TOLL_FREE' ? 'TOLL_FREE_VERIFICATION' : value),
+  z.enum(['UNKNOWN', 'LOCAL_A2P', 'TOLL_FREE_VERIFICATION'])
+);
 const tollFreeVerificationStatusSchema = z.enum(['NOT_STARTED', 'PENDING', 'APPROVED', 'REJECTED', 'NEEDS_UPDATE', 'NOT_APPLICABLE']);
 const averageJobValueSchema = z.preprocess(
   (value) => {

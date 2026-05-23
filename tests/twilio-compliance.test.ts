@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { MessagingComplianceType } from '@prisma/client';
 
+import { businessTwilioAdminOverrideSchema } from '../lib/validators.ts';
 import {
   getMessagingComplianceSidValidationError,
   getOptionalTwilioSidError,
@@ -11,7 +12,7 @@ import {
 
 test('toll-free compliance accepts BU verification SIDs without A2P identifiers', () => {
   const error = getMessagingComplianceSidValidationError({
-    messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+    messagingComplianceType: MessagingComplianceType.TOLL_FREE_VERIFICATION,
     a2pCustomerProfileSid: null,
     a2pBrandSid: null,
     a2pCampaignSid: null,
@@ -23,7 +24,7 @@ test('toll-free compliance accepts BU verification SIDs without A2P identifiers'
 
 test('toll-free compliance ignores missing brand and campaign SIDs', () => {
   const error = getMessagingComplianceSidValidationError({
-    messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+    messagingComplianceType: MessagingComplianceType.TOLL_FREE_VERIFICATION,
     a2pCustomerProfileSid: null,
     a2pBrandSid: null,
     a2pCampaignSid: null,
@@ -35,7 +36,7 @@ test('toll-free compliance ignores missing brand and campaign SIDs', () => {
 
 test('invalid toll-free verification SIDs return a friendly validation error', () => {
   const error = getMessagingComplianceSidValidationError({
-    messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+    messagingComplianceType: MessagingComplianceType.TOLL_FREE_VERIFICATION,
     a2pCustomerProfileSid: null,
     a2pBrandSid: null,
     a2pCampaignSid: null,
@@ -61,4 +62,22 @@ test('shared helpers keep generic Twilio SID validation strict', () => {
   assert.equal(getOptionalTwilioSidError('PN123', 'PN', 'Twilio number SID'), 'Twilio number SID must be a valid Twilio SID starting with PN.');
   assert.equal(getOptionalTwilioSidError('PNd2b9b67869f08c15f570d9f81d920dad', 'PN', 'Twilio number SID'), null);
   assert.equal(normalizeOptionalSid('   '), null);
+});
+
+test('settings save schema accepts toll-free verification enum and normalizes stale toll-free enum values', () => {
+  const valid = businessTwilioAdminOverrideSchema.safeParse({
+    messagingComplianceType: 'TOLL_FREE_VERIFICATION',
+    tollFreeVerificationStatus: 'APPROVED',
+    tollFreeVerificationSid: 'BUd2b9b67869f08c15f570d9f81d920dad',
+  });
+  const legacy = businessTwilioAdminOverrideSchema.safeParse({
+    messagingComplianceType: 'TOLL_FREE',
+    tollFreeVerificationStatus: 'APPROVED',
+    tollFreeVerificationSid: 'BUd2b9b67869f08c15f570d9f81d920dad',
+  });
+
+  assert.equal(valid.success, true);
+  assert.equal(valid.success && valid.data.messagingComplianceType, 'TOLL_FREE_VERIFICATION');
+  assert.equal(legacy.success, true);
+  assert.equal(legacy.success && legacy.data.messagingComplianceType, 'TOLL_FREE_VERIFICATION');
 });

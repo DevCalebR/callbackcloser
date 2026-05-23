@@ -151,7 +151,7 @@ test('failed review produces an attention-required summary', () => {
 test('verified toll-free setup becomes messaging-ready without A2P identifiers', () => {
   const summary = getManagedTwilioStatusSummary(
     createManagedBusiness({
-      messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+      messagingComplianceType: MessagingComplianceType.TOLL_FREE_VERIFICATION,
       managedTwilioStatus: ManagedTwilioStatus.DRAFT,
       twilioSubaccountSid: null,
       twilioAccountMode: TwilioAccountMode.MAIN_ACCOUNT,

@@ -141,7 +141,7 @@ test('messaging compliance step switches to toll-free verification copy', () => 
     business: createBusiness({
       twilioAccountMode: TwilioAccountMode.MAIN_ACCOUNT,
       twilioSubaccountSid: null,
-      messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+      messagingComplianceType: MessagingComplianceType.TOLL_FREE_VERIFICATION,
       managedTwilioStatus: ManagedTwilioStatus.DRAFT,
       a2pCustomerProfileSid: null,
       a2pBrandSid: null,

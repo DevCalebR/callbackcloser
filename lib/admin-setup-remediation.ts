@@ -438,7 +438,7 @@ export function buildAdminSetupPanels(params: {
           return 'Number type has not been selected yet.';
         }
 
-        if (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE) {
+        if (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION) {
           return business.tollFreeVerificationNote
             ? `Current note: ${business.tollFreeVerificationNote}`
             : business.tollFreeVerificationSid
@@ -456,7 +456,7 @@ export function buildAdminSetupPanels(params: {
       nextAction:
         business.messagingComplianceType === MessagingComplianceType.UNKNOWN
           ? 'Choose the number type first, then record the actual messaging compliance state.'
-          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? 'Record the actual toll-free verification state and any known verification SID or blocker note.'
           : 'Record the actual messaging compliance state and any known Twilio identifiers or blocker note.',
       instructions:
@@ -466,7 +466,7 @@ export function buildAdminSetupPanels(params: {
               'Once the number type is selected, save the compliance state that matches reality.',
               'Record any known verification SID, A2P identifiers, or blocker note so the next operator has context.',
             ]
-          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? [
               'Confirm that this business is using a toll-free number.',
               'Save the toll-free verification state that matches reality.',
@@ -482,7 +482,7 @@ export function buildAdminSetupPanels(params: {
       verification:
         business.messagingComplianceType === MessagingComplianceType.UNKNOWN
           ? ['The number type should be selected before launch readiness is evaluated.']
-          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? [
               'The saved status should match the real Twilio toll-free verification state.',
               'If verified, the step should show Verified.',
@@ -492,7 +492,7 @@ export function buildAdminSetupPanels(params: {
       latestEvidence:
         business.messagingComplianceType === MessagingComplianceType.UNKNOWN
           ? ['No number type is selected yet.']
-          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? [
               business.tollFreeVerificationSid ? `Verification SID: ${business.tollFreeVerificationSid}` : 'No toll-free verification SID saved.',
               business.tollFreeVerificationNote ? `Blocker note: ${business.tollFreeVerificationNote}` : 'No toll-free blocker note saved.',
@@ -505,7 +505,7 @@ export function buildAdminSetupPanels(params: {
       warnings:
         business.messagingComplianceType === MessagingComplianceType.UNKNOWN
           ? []
-          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? business.tollFreeVerificationNote
             ? [business.tollFreeVerificationNote]
             : []
@@ -522,12 +522,12 @@ export function buildAdminSetupPanels(params: {
                 helpText: 'Choose the path that matches the actual texting number before evaluating readiness.',
               },
             ]
-          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? [
               {
                 key: 'messagingComplianceType',
                 label: 'Number type',
-                placeholder: 'TOLL_FREE',
+                placeholder: 'TOLL_FREE_VERIFICATION',
                 helpText: 'Choose the path that matches the actual texting number.',
               },
               {
@@ -588,7 +588,7 @@ export function buildAdminSetupPanels(params: {
               },
             ],
       automaticActionLabel:
-        business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+        business.messagingComplianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? 'Save toll-free verification status'
           : business.messagingComplianceType === MessagingComplianceType.LOCAL_A2P
             ? 'Save A2P status'

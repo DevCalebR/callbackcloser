@@ -170,7 +170,7 @@ test('next-step guidance supports toll-free verification and unknown number type
     business: createBusiness({
       twilioAccountMode: TwilioAccountMode.MAIN_ACCOUNT,
       twilioSubaccountSid: null,
-      messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+      messagingComplianceType: MessagingComplianceType.TOLL_FREE_VERIFICATION,
       managedTwilioStatus: ManagedTwilioStatus.DRAFT,
       a2pCustomerProfileSid: null,
       a2pBrandSid: null,
@@ -454,7 +454,7 @@ test('toll-free businesses can reach ready-for-live without A2P metadata', () =>
     business: createBusiness({
       twilioAccountMode: TwilioAccountMode.MAIN_ACCOUNT,
       twilioSubaccountSid: null,
-      messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+      messagingComplianceType: MessagingComplianceType.TOLL_FREE_VERIFICATION,
       managedTwilioStatus: ManagedTwilioStatus.DRAFT,
       a2pCustomerProfileSid: null,
       a2pBrandSid: null,
