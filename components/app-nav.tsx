@@ -53,13 +53,6 @@ export function AppNav({
           ) : (
             <Badge variant="outline">Not live yet</Badge>
           )}
-          {business ? (
-            <Badge variant={business.subscriptionStatus === 'ACTIVE' ? 'success' : 'outline'}>
-              {business.subscriptionStatus.toLowerCase()}
-            </Badge>
-          ) : (
-            <Badge variant="outline">onboarding</Badge>
-          )}
         </div>
         <nav className="hidden items-center gap-2 md:flex">
           {navItems.map((item) => (

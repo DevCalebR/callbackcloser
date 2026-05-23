@@ -9,16 +9,17 @@ function read(relativePath: string) {
 
 test('lead inbox stays list-only while lead detail is the main action workspace', () => {
   const appHomePage = read('app/app/page.tsx');
+  const homeDashboard = read('components/home-dashboard.tsx');
   const leadsPage = read('app/app/leads/page.tsx');
   const leadDetailPage = read('app/app/leads/[leadId]/page.tsx');
   const conversationsPage = read('app/app/conversations/page.tsx');
 
-  assert.match(appHomePage, /Who needs follow-up right now\?/);
-  assert.match(appHomePage, /LeadConversionSummaryCard/);
-  assert.match(appHomePage, /getLeadOutcomeSummary/);
-  assert.match(appHomePage, /Leads needing attention first/);
-  assert.match(appHomePage, /Recent leads/);
+  assert.match(appHomePage, /HomeDashboard/);
+  assert.match(appHomePage, /buildRecoveryMetrics/);
   assert.match(appHomePage, /return `\/app\/leads\/\$\{leadId\}\?from=%2Fapp`/);
+  assert.match(homeDashboard, /Missed-call leads that need action/);
+  assert.match(homeDashboard, /Leads needing attention first/);
+  assert.match(homeDashboard, /Today&apos;s recovery queue/);
 
   assert.match(leadsPage, /Lead inbox/);
   assert.match(leadsPage, /LeadConversionSummaryCard/);

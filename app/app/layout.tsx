@@ -11,17 +11,32 @@ import { getCustomerSystemStatus } from '@/lib/system-status';
 
 export const dynamic = 'force-dynamic';
 
+function getDashboardStatusPresentation(status: ReturnType<typeof getCustomerSystemStatus>) {
+  if (status.key === 'live') {
+    return {
+      label: 'Live: recovering missed calls',
+      badgeVariant: 'success' as const,
+    };
+  }
+
+  return {
+    label: 'Setup in progress',
+    badgeVariant: 'secondary' as const,
+  };
+}
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   if (isPortfolioDemoMode()) {
     const demoBusiness = getPortfolioDemoBusiness();
     const demoSystemStatus = getCustomerSystemStatus(demoBusiness, 1);
+    const dashboardStatus = getDashboardStatusPresentation(demoSystemStatus);
     return (
       <div className="min-h-screen">
         <AppNav
           business={demoBusiness}
           demoMode
-          systemStatusLabel={demoSystemStatus.label}
-          systemStatusVariant={demoSystemStatus.badgeVariant}
+          systemStatusLabel={dashboardStatus.label}
+          systemStatusVariant={dashboardStatus.badgeVariant}
         />
         <main className="container py-8">{children}</main>
       </div>
@@ -41,13 +56,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? await db.lead.count({ where: { businessId: business.id, OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }] } })
     : 0;
   const systemStatus = business ? getCustomerSystemStatus(business, successfulLeadCount) : null;
+  const dashboardStatus = systemStatus ? getDashboardStatusPresentation(systemStatus) : null;
 
   return (
       <div className="min-h-screen">
         <AppNav
           business={business}
-          systemStatusLabel={systemStatus?.label ?? 'Not live yet'}
-          systemStatusVariant={systemStatus?.badgeVariant ?? 'outline'}
+          systemStatusLabel={dashboardStatus?.label ?? 'Setup in progress'}
+          systemStatusVariant={dashboardStatus?.badgeVariant ?? 'outline'}
         />
         {adminCustomerContext && business ? (
           <div className="border-b bg-primary/5">
