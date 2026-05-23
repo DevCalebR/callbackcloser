@@ -4,12 +4,14 @@ import {
   LeadReadiness,
   LeadStatus,
   ManagedTwilioStatus,
+  MessagingComplianceType,
   MessageDirection,
   MessageParticipant,
   OwnerNotificationChannel,
   OwnerNotificationStatus,
   SmsConversationState,
   SubscriptionStatus,
+  TollFreeVerificationStatus,
 } from '@prisma/client';
 
 import { db } from '../lib/db.ts';
@@ -55,8 +57,10 @@ export async function seedTenantFixtures() {
       stripeSubscriptionId: `sub_${seed.replace(/-/g, '').slice(0, 10)}a`,
       stripePriceId: 'price_starter_fixture',
       subscriptionStatus: SubscriptionStatus.ACTIVE,
+      messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
       managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
       managedTwilioStatusUpdatedAt: now,
+      tollFreeVerificationStatus: TollFreeVerificationStatus.NOT_STARTED,
       twilioWebhookSyncedAt: now,
     },
   });
@@ -82,8 +86,10 @@ export async function seedTenantFixtures() {
       stripeSubscriptionId: `sub_${seed.replace(/-/g, '').slice(0, 10)}b`,
       stripePriceId: 'price_growth_fixture',
       subscriptionStatus: SubscriptionStatus.PAST_DUE,
+      messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
       managedTwilioStatus: ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION,
       managedTwilioStatusUpdatedAt: now,
+      tollFreeVerificationStatus: TollFreeVerificationStatus.NOT_STARTED,
       twilioWebhookSyncedAt: now,
     },
   });

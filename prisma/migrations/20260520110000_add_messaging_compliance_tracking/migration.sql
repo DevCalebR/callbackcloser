@@ -1,0 +1,3 @@
+-- Historical placeholder.
+-- The local database already records this migration name.
+-- Messaging compliance columns now land in 20260523103000_add_messaging_compliance_fields.

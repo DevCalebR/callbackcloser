@@ -1,6 +1,7 @@
 import {
   BusinessProvisioningStatus,
   ManagedTwilioStatus,
+  MessagingComplianceType,
   OperatorEventStatus,
   OwnerNotificationStatus,
   type Business,
@@ -41,11 +42,15 @@ type DashboardBusiness = Pick<
   | 'twilioPhoneNumber'
   | 'twilioWebhookSyncedAt'
   | 'managedTwilioStatus'
+  | 'messagingComplianceType'
   | 'a2pCustomerProfileSid'
   | 'a2pBrandSid'
   | 'a2pCampaignSid'
   | 'a2pFailureReason'
   | 'a2pApprovedAt'
+  | 'tollFreeVerificationStatus'
+  | 'tollFreeVerificationSid'
+  | 'tollFreeVerificationNote'
   | 'subscriptionStatus'
   | 'stripePriceId'
   | 'updatedAt'
@@ -142,7 +147,7 @@ export type AdminTestSmsConfidenceState = 'not_started' | 'pending_delivery' | '
 export const adminBoardFilterOptions: AdminBoardFilterOption[] = [
   { key: 'all', label: 'All' },
   { key: 'needs_attention', label: 'Needs attention' },
-  { key: 'pending_a2p', label: 'Pending A2P' },
+  { key: 'pending_a2p', label: 'Pending compliance' },
   { key: 'not_fully_provisioned', label: 'Not fully provisioned' },
   { key: 'live', label: 'Live' },
   { key: 'paused', label: 'Paused' },
@@ -314,7 +319,25 @@ export function buildAdminNextStep(params: {
     };
   }
 
-  if (business.managedTwilioStatus === ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION) {
+  if (managedSummary.complianceTypeUnknown) {
+    return {
+      title: 'Number type still needs selection',
+      detail: 'Messaging is wired up, but the business still needs a number type selected before compliance readiness can be evaluated.',
+      tone: 'pending',
+      actionLabel: 'Choose number type',
+    };
+  }
+
+  if (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE && !managedSummary.complianceStarted) {
+    return {
+      title: 'Toll-free verification still needs recording',
+      detail: 'Messaging is wired up, but toll-free verification still needs to be recorded before compliant live texting can launch.',
+      tone: 'pending',
+      actionLabel: 'Review toll-free verification',
+    };
+  }
+
+  if (managedSummary.complianceType === MessagingComplianceType.LOCAL_A2P && business.managedTwilioStatus === ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION) {
     return {
       title: 'Business verification still needed',
       detail: 'Messaging is wired up, but the A2P business details still need to be completed before compliant live texting can launch.',
@@ -323,7 +346,7 @@ export function buildAdminNextStep(params: {
     };
   }
 
-  if (business.managedTwilioStatus === ManagedTwilioStatus.BRAND_SUBMITTED) {
+  if (managedSummary.complianceType === MessagingComplianceType.LOCAL_A2P && business.managedTwilioStatus === ManagedTwilioStatus.BRAND_SUBMITTED) {
     return {
       title: 'A2P brand submitted',
       detail: 'Brand review is in progress. No action is needed unless Twilio requests changes.',
@@ -332,7 +355,7 @@ export function buildAdminNextStep(params: {
     };
   }
 
-  if (business.managedTwilioStatus === ManagedTwilioStatus.CAMPAIGN_SUBMITTED) {
+  if (managedSummary.complianceType === MessagingComplianceType.LOCAL_A2P && business.managedTwilioStatus === ManagedTwilioStatus.CAMPAIGN_SUBMITTED) {
     return {
       title: 'A2P campaign still pending',
       detail: 'The campaign is waiting on Twilio or carrier review. No action is needed yet.',
@@ -341,10 +364,19 @@ export function buildAdminNextStep(params: {
     };
   }
 
+  if (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE && managedSummary.compliancePendingReview) {
+    return {
+      title: 'Toll-free verification still pending',
+      detail: 'Toll-free verification is waiting on Twilio review. No action is needed unless Twilio requests changes.',
+      tone: 'pending',
+      actionLabel: 'Wait for verification',
+    };
+  }
+
   if (managedSummary.attentionRequired) {
     return {
       title: 'Compliance review needs attention',
-      detail: business.a2pFailureReason || managedSummary.nextStep,
+      detail: business.a2pFailureReason || business.tollFreeVerificationNote || managedSummary.nextStep,
       tone: 'attention',
       actionLabel: 'Review compliance notes',
     };
@@ -431,8 +463,7 @@ export function buildAdminOnboardingConfidence(params: {
     webhookSnapshot && !webhookSnapshot.error
       ? webhookSnapshot.voiceSynced && webhookSnapshot.smsSynced && webhookSnapshot.statusSynced
       : Boolean(business.twilioWebhookSyncedAt);
-  const compliancePending =
-    managedSummary.onboardingReady && !managedSummary.complianceReady && !managedSummary.attentionRequired;
+  const compliancePending = managedSummary.onboardingReady && managedSummary.compliancePendingReview;
   const latestTestSmsState = getAdminTestSmsConfidenceState(operatorEvents);
   const hasTestSmsSuccess = latestTestSmsState === 'delivered';
   const hasPendingTestSmsDelivery = latestTestSmsState === 'pending_delivery';
@@ -449,11 +480,17 @@ export function buildAdminOnboardingConfidence(params: {
   if (nextStep.tone === 'attention') {
     blockers.push({ level: 'error', message: nextStep.detail });
   }
-  if (managedSummary.attentionRequired && business.a2pFailureReason) {
-    blockers.push({ level: 'error', message: business.a2pFailureReason });
+  if (managedSummary.attentionRequired && (business.a2pFailureReason || business.tollFreeVerificationNote)) {
+    blockers.push({ level: 'error', message: business.a2pFailureReason || business.tollFreeVerificationNote || managedSummary.nextStep });
   }
   if (compliancePending) {
-    blockers.push({ level: 'warning', message: 'A2P review is still pending. No operator action is needed unless Twilio asks for changes.' });
+    blockers.push({
+      level: 'warning',
+      message:
+        managedSummary.complianceType === MessagingComplianceType.TOLL_FREE
+          ? 'Toll-free verification is still pending. No operator action is needed unless Twilio asks for changes.'
+          : 'A2P review is still pending. No operator action is needed unless Twilio asks for changes.',
+    });
   }
   if (readyForTest && latestTestSmsState === 'not_started') {
     blockers.push({ level: 'warning', message: 'Run an admin test SMS from the business line before treating this onboarding as launch-ready.' });
@@ -560,10 +597,14 @@ export function buildAdminOnboardingConfidence(params: {
     },
     {
       key: 'a2p',
-      label: 'A2P / readiness acknowledged',
+      label: 'Messaging compliance acknowledged',
       complete: managedSummary.complianceReady,
       variant: milestoneVariant({ complete: managedSummary.complianceReady, blocking: managedSummary.attentionRequired }),
-      detail: managedSummary.complianceReady ? 'A2P approval is recorded.' : managedSummary.nextStep,
+      detail: managedSummary.complianceReady
+        ? managedSummary.complianceType === MessagingComplianceType.TOLL_FREE
+          ? 'Toll-free verification is recorded as verified.'
+          : 'A2P approval is recorded.'
+        : managedSummary.nextStep,
     },
     {
       key: 'test_sms',
@@ -624,12 +665,15 @@ export function buildAdminOnboardingConfidence(params: {
       summary: 'Something is broken or incomplete enough that the founder should stop and repair it before testing.',
     },
     waiting_on_a2p: {
-      stateLabel: 'Waiting on A2P',
+      stateLabel: 'Waiting on compliance',
       stateVariant: 'secondary',
       readinessLabel: 'Waiting on external approval',
       readinessVariant: 'secondary',
-      nextAction: 'Wait for Twilio approval',
-      summary: 'Infrastructure is in place, but compliant messaging is still waiting on Twilio or carrier review.',
+      nextAction: managedSummary.complianceType === MessagingComplianceType.TOLL_FREE ? 'Wait for toll-free verification' : 'Wait for Twilio approval',
+      summary:
+        managedSummary.complianceType === MessagingComplianceType.TOLL_FREE
+          ? 'Infrastructure is in place, but compliant messaging is still waiting on toll-free verification.'
+          : 'Infrastructure is in place, but compliant messaging is still waiting on Twilio or carrier review.',
     },
     ready_for_test: {
       stateLabel: 'Ready for test',
@@ -714,11 +758,7 @@ export function matchesAdminBoardFilter(
   }
 
   if (filter === 'pending_a2p') {
-    return (
-      business.managedTwilioStatus === ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION ||
-      business.managedTwilioStatus === ManagedTwilioStatus.BRAND_SUBMITTED ||
-      business.managedTwilioStatus === ManagedTwilioStatus.CAMPAIGN_SUBMITTED
-    );
+    return managedSummary.compliancePendingReview;
   }
 
   if (filter === 'not_fully_provisioned') {

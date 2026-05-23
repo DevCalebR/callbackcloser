@@ -1,4 +1,4 @@
-import { ManagedTwilioStatus, TwilioAccountMode, type Business } from '@prisma/client';
+import { ManagedTwilioStatus, MessagingComplianceType, TwilioAccountMode, type Business } from '@prisma/client';
 
 import { db } from '@/lib/db';
 import {
@@ -28,11 +28,15 @@ type ManagedTwilioBusiness = Pick<
   | 'twilioPhoneNumberSid'
   | 'twilioPhoneNumber'
   | 'managedTwilioStatus'
+  | 'messagingComplianceType'
   | 'a2pCustomerProfileSid'
   | 'a2pBrandSid'
   | 'a2pCampaignSid'
   | 'a2pFailureReason'
   | 'a2pApprovedAt'
+  | 'tollFreeVerificationStatus'
+  | 'tollFreeVerificationSid'
+  | 'tollFreeVerificationNote'
   | 'twilioWebhookSyncedAt'
 >;
 
@@ -113,6 +117,7 @@ export async function updateManagedTwilioStatus(
       | 'a2pCustomerProfileSid'
       | 'a2pBrandSid'
       | 'a2pCampaignSid'
+      | 'messagingComplianceType'
     >
   > = {}
 ) {
@@ -565,6 +570,7 @@ export async function provisionManagedTwilioForBusiness(
   });
 
   await updateManagedTwilioStatus(business.id, nextStatus, {
+    messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
     twilioSubaccountSid: subaccountSid,
     twilioMessagingServiceSid: messagingServiceSid,
     twilioPrimaryNumberSid: syncedNumber.phoneNumberSid,

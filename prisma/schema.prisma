@@ -35,12 +35,16 @@ model Business {
   twilioPrimaryPhoneNumber    String?            @unique
   twilioAccountMode           TwilioAccountMode  @default(BUSINESS_SUBACCOUNT)
   twilioNumberSetupMode       TwilioNumberSetupMode @default(NEW_NUMBER)
+  messagingComplianceType     MessagingComplianceType @default(UNKNOWN)
   a2pCustomerProfileSid       String?            @unique
   a2pBrandSid                 String?            @unique
   a2pCampaignSid              String?            @unique
   managedTwilioStatus         ManagedTwilioStatus @default(DRAFT)
   managedTwilioStatusUpdatedAt DateTime?
   a2pFailureReason            String?
+  tollFreeVerificationStatus  TollFreeVerificationStatus @default(NOT_STARTED)
+  tollFreeVerificationSid     String?
+  tollFreeVerificationNote    String?
   twilioProvisioningStartedAt DateTime?
   twilioProvisionedAt         DateTime?
   a2pSubmittedAt              DateTime?
@@ -365,6 +369,21 @@ enum TwilioAccountMode {
 enum TwilioNumberSetupMode {
   NEW_NUMBER
   EXISTING_NUMBER
+}
+
+enum MessagingComplianceType {
+  UNKNOWN
+  LOCAL_A2P
+  TOLL_FREE
+}
+
+enum TollFreeVerificationStatus {
+  NOT_STARTED
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_UPDATE
+  NOT_APPLICABLE
 }
 
 enum BusinessProvisioningStatus {

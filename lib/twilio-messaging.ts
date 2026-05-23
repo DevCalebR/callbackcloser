@@ -1,4 +1,4 @@
-import { ManagedTwilioStatus, MessageParticipant, Prisma } from '@prisma/client';
+import { ManagedTwilioStatus, MessageParticipant, MessagingComplianceType, Prisma, TollFreeVerificationStatus } from '@prisma/client';
 
 import { db } from '@/lib/db';
 import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
@@ -135,11 +135,15 @@ export async function sendAndPersistOutboundMessage(params: {
       twilioPhoneNumberSid: null,
       twilioMessagingServiceSid: params.messagingServiceSid ?? null,
       twilioWebhookSyncedAt: null,
+      messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
       a2pFailureReason: params.a2pFailureReason ?? null,
       a2pApprovedAt: null,
       a2pCampaignSid: null,
       a2pBrandSid: null,
       a2pCustomerProfileSid: null,
+      tollFreeVerificationStatus: TollFreeVerificationStatus.NOT_STARTED,
+      tollFreeVerificationSid: null,
+      tollFreeVerificationNote: null,
     });
 
     const reason =

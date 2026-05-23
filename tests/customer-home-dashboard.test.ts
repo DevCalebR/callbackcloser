@@ -97,6 +97,9 @@ test('customer home dashboard keeps setup state compact and demo actions fronten
   assert.match(appHomePage, /label: 'Phone line connected'/);
   assert.match(homeDashboard, /Finish setup/);
   assert.match(homeDashboard, /Test recovery flow/);
+  assert.match(homeDashboard, /lg:grid-cols-\[minmax\(0,1fr\)_360px\]/);
+  assert.match(homeDashboard, /lg:sticky lg:top-6 lg:self-start/);
+  assert.match(homeDashboard, /variant="outline"/);
   assert.match(homeDashboard, /frontend-only demo action/);
   assert.match(homeDashboard, /do not affect production data/);
   assert.doesNotMatch(homeDashboard, /Run test missed call/);

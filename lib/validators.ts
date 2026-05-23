@@ -4,6 +4,8 @@ import { MAX_AVERAGE_JOB_VALUE } from '@/lib/business-settings';
 
 const twilioAccountModeSchema = z.enum(['MAIN_ACCOUNT', 'BUSINESS_SUBACCOUNT']);
 const twilioNumberSetupModeSchema = z.enum(['NEW_NUMBER', 'EXISTING_NUMBER']);
+const messagingComplianceTypeSchema = z.enum(['UNKNOWN', 'LOCAL_A2P', 'TOLL_FREE']);
+const tollFreeVerificationStatusSchema = z.enum(['NOT_STARTED', 'PENDING', 'APPROVED', 'REJECTED', 'NEEDS_UPDATE', 'NOT_APPLICABLE']);
 const averageJobValueSchema = z.preprocess(
   (value) => {
     if (typeof value !== 'string') return value;
@@ -89,10 +91,14 @@ export const adminBusinessUpdateSchema = adminBusinessDraftSchema.extend({
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
   twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  messagingComplianceType: messagingComplianceTypeSchema.default('UNKNOWN'),
   a2pCustomerProfileSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pBrandSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pCampaignSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pFailureReason: z.string().trim().max(500).optional().or(z.literal('')),
+  tollFreeVerificationStatus: tollFreeVerificationStatusSchema.default('NOT_STARTED'),
+  tollFreeVerificationSid: z.string().trim().max(64).optional().or(z.literal('')),
+  tollFreeVerificationNote: z.string().trim().max(500).optional().or(z.literal('')),
   managedTwilioStatus: z
     .enum([
       'DRAFT',
@@ -194,10 +200,14 @@ export const adminTwilioSetupSchema = z.object({
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
   twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  messagingComplianceType: messagingComplianceTypeSchema.default('UNKNOWN'),
   a2pCustomerProfileSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pBrandSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pCampaignSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pFailureReason: z.string().trim().max(500).optional().or(z.literal('')),
+  tollFreeVerificationStatus: tollFreeVerificationStatusSchema.default('NOT_STARTED'),
+  tollFreeVerificationSid: z.string().trim().max(64).optional().or(z.literal('')),
+  tollFreeVerificationNote: z.string().trim().max(500).optional().or(z.literal('')),
   managedTwilioStatus: z
     .enum([
       'DRAFT',
@@ -240,10 +250,14 @@ export const businessTwilioAdminOverrideSchema = z.object({
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
   twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  messagingComplianceType: messagingComplianceTypeSchema.default('UNKNOWN'),
   a2pCustomerProfileSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pBrandSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pCampaignSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pFailureReason: z.string().trim().max(500).optional().or(z.literal('')),
+  tollFreeVerificationStatus: tollFreeVerificationStatusSchema.default('NOT_STARTED'),
+  tollFreeVerificationSid: z.string().trim().max(64).optional().or(z.literal('')),
+  tollFreeVerificationNote: z.string().trim().max(500).optional().or(z.literal('')),
   managedTwilioStatus: z
     .enum([
       'DRAFT',

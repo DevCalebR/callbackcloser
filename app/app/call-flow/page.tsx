@@ -45,7 +45,16 @@ export default async function CallFlowPage() {
         ? { key: 'messaging', label: 'Messaging infrastructure', detail: managedTwilioSummary.nextStep }
         : null,
       !managedTwilioSummary.complianceReady
-        ? { key: 'compliance', label: 'A2P approval', detail: managedTwilioSummary.description }
+        ? {
+            key: 'compliance',
+            label:
+              managedTwilioSummary.complianceType === 'TOLL_FREE'
+                ? 'Toll-free verification'
+                : managedTwilioSummary.complianceTypeUnknown
+                  ? 'Number type'
+                  : 'A2P approval',
+            detail: managedTwilioSummary.description,
+          }
         : null,
       !business.notifyPhone || ownerNotifyPhoneOptedOut
         ? {
@@ -89,7 +98,15 @@ export default async function CallFlowPage() {
     },
     {
       key: 'compliance',
-      label: managedTwilioSummary.complianceReady ? 'A2P approved' : 'A2P approval in progress',
+      label: managedTwilioSummary.complianceReady
+        ? managedTwilioSummary.complianceType === 'TOLL_FREE'
+          ? 'Toll-free verification complete'
+          : 'A2P approved'
+        : managedTwilioSummary.complianceType === 'TOLL_FREE'
+          ? 'Toll-free verification in progress'
+          : managedTwilioSummary.complianceTypeUnknown
+            ? 'Number type still needed'
+            : 'A2P approval in progress',
       detail: managedTwilioSummary.description,
       complete: managedTwilioSummary.complianceReady,
     },
@@ -130,7 +147,11 @@ export default async function CallFlowPage() {
         title: 'The caller gets a text right away',
         detail: managedTwilioSummary.complianceReady
           ? 'The conversation collects the service type, urgency, ZIP, callback timing, and optional name without extra admin work.'
-          : 'The automated SMS handoff stays pending until the managed Twilio setup and A2P approval are complete.',
+          : managedTwilioSummary.complianceType === 'TOLL_FREE'
+            ? 'The automated SMS handoff stays pending until the managed Twilio setup and toll-free verification are complete.'
+            : managedTwilioSummary.complianceTypeUnknown
+              ? 'The automated SMS handoff stays pending until the number type is selected and messaging compliance is recorded.'
+              : 'The automated SMS handoff stays pending until the managed Twilio setup and A2P approval are complete.',
       },
     {
       title: 'You get the handoff ready to call',
@@ -210,7 +231,7 @@ export default async function CallFlowPage() {
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             {readiness.ready ? (
               <div className="rounded-xl border border-accent/40 bg-accent/20 p-4">
-                Routing, notifications, billing, managed setup, and A2P approval look ready. Run the missed-call test and confirm the owner alert lands.
+                Routing, notifications, billing, managed setup, and messaging compliance look ready. Run the missed-call test and confirm the owner alert lands.
               </div>
             ) : (
               <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-destructive">

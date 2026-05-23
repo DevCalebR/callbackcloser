@@ -24,11 +24,15 @@ type AdminBusinessSummary = Pick<
     | 'twilioMessagingServiceSid'
     | 'twilioWebhookSyncedAt'
     | 'managedTwilioStatus'
+    | 'messagingComplianceType'
     | 'a2pCustomerProfileSid'
     | 'a2pBrandSid'
     | 'a2pCampaignSid'
     | 'a2pFailureReason'
     | 'a2pApprovedAt'
+    | 'tollFreeVerificationStatus'
+    | 'tollFreeVerificationSid'
+    | 'tollFreeVerificationNote'
 >;
 
 type NotificationSettingsSummary = Pick<
@@ -345,7 +349,7 @@ export function buildAdminProvisioningChecklist({
     },
     {
       key: 'a2p_registration',
-      label: 'A2P registration ready',
+      label: 'Messaging compliance ready',
       complete: managedSummary.complianceReady,
       detail: managedSummary.complianceReady ? managedSummary.description : managedSummary.nextStep,
     },

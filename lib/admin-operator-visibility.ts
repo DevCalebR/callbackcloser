@@ -261,10 +261,14 @@ const stepKeyByChangedField: Partial<Record<string, TwilioSetupStepKey>> = {
   twilioMessagingServiceSid: 'messaging_service_ready',
   twilioPhoneNumber: 'number_assigned',
   twilioPhoneNumberSid: 'number_assigned',
+  messagingComplianceType: 'a2p_status_recorded',
   a2pCustomerProfileSid: 'a2p_status_recorded',
   a2pBrandSid: 'a2p_status_recorded',
   a2pCampaignSid: 'a2p_status_recorded',
   a2pFailureReason: 'a2p_status_recorded',
+  tollFreeVerificationStatus: 'a2p_status_recorded',
+  tollFreeVerificationSid: 'a2p_status_recorded',
+  tollFreeVerificationNote: 'a2p_status_recorded',
   managedTwilioStatus: 'a2p_status_recorded',
 };
 
@@ -278,7 +282,7 @@ const stepSummaryByKey: Record<TwilioSetupStepKey, string> = {
   voice_webhook_synced: 'Voice webhook step updated',
   sms_webhook_synced: 'SMS webhook step updated',
   status_callback_synced: 'Status callback step updated',
-  a2p_status_recorded: 'A2P status updated',
+  a2p_status_recorded: 'Messaging compliance updated',
   test_sms_delivered: 'Test SMS step updated',
   missed_call_validated: 'Missed-call validation updated',
   safe_to_mark_live: 'Live gate updated',

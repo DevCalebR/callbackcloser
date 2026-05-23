@@ -1,6 +1,13 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
-import { BusinessProvisioningStatus, ManagedTwilioStatus, TwilioAccountMode, TwilioNumberSetupMode } from '@prisma/client';
+import {
+  BusinessProvisioningStatus,
+  ManagedTwilioStatus,
+  MessagingComplianceType,
+  TollFreeVerificationStatus,
+  TwilioAccountMode,
+  TwilioNumberSetupMode,
+} from '@prisma/client';
 
 import { saveOnboardingAction } from '@/app/app/onboarding/actions';
 import { TwilioSetupChecklist } from '@/components/twilio-setup-checklist';
@@ -53,12 +60,16 @@ export default async function OnboardingPage({
       twilioPrimaryPhoneNumber: null,
       twilioPhoneNumber: null,
       twilioWebhookSyncedAt: null,
+      messagingComplianceType: MessagingComplianceType.UNKNOWN,
       managedTwilioStatus: ManagedTwilioStatus.DRAFT,
       a2pCustomerProfileSid: null,
       a2pBrandSid: null,
       a2pCampaignSid: null,
       a2pFailureReason: null,
       a2pApprovedAt: null,
+      tollFreeVerificationStatus: TollFreeVerificationStatus.NOT_STARTED,
+      tollFreeVerificationSid: null,
+      tollFreeVerificationNote: null,
     },
     notificationSettings: null,
     ownerConnected: true,

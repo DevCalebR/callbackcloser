@@ -1,6 +1,7 @@
 import {
   BusinessProvisioningStatus,
   ManagedTwilioStatus,
+  MessagingComplianceType,
   TwilioAccountMode,
   TwilioNumberSetupMode,
   type Business,
@@ -27,11 +28,15 @@ type SetupBusiness = Pick<
   | 'twilioPhoneNumber'
   | 'twilioWebhookSyncedAt'
   | 'managedTwilioStatus'
+  | 'messagingComplianceType'
   | 'a2pCustomerProfileSid'
   | 'a2pBrandSid'
   | 'a2pCampaignSid'
   | 'a2pFailureReason'
   | 'a2pApprovedAt'
+  | 'tollFreeVerificationStatus'
+  | 'tollFreeVerificationSid'
+  | 'tollFreeVerificationNote'
 >;
 
 type SetupNotificationSettings = Pick<BusinessNotificationSettings, 'ownerPhone' | 'ownerEmail'> | null;
@@ -184,18 +189,26 @@ function buildWebhookState(snapshot: TwilioWebhookSnapshot | null, type: 'voice'
   };
 }
 
-function formatA2pDetail(business: SetupBusiness) {
+function formatMessagingComplianceDetail(business: SetupBusiness) {
   const managedSummary = getManagedTwilioStatusSummary(business);
-  const hasRecordedStatus =
-    business.managedTwilioStatus !== ManagedTwilioStatus.DRAFT ||
-    Boolean(
-      business.a2pCustomerProfileSid || business.a2pBrandSid || business.a2pCampaignSid || business.a2pFailureReason || business.a2pApprovedAt
-    );
+  const complianceType = managedSummary.complianceType;
 
-  if (!hasRecordedStatus) {
+  if (managedSummary.complianceTypeUnknown) {
     return {
       complete: false,
-      detail: 'Record whether A2P is not started, pending review, approved, or blocked so launch status stays truthful.',
+      detail: 'Choose number type before messaging compliance can be evaluated.',
+      stateLabel: 'Choose number type',
+      tone: 'pending' as const,
+    };
+  }
+
+  if (!managedSummary.complianceStarted) {
+    return {
+      complete: false,
+      detail:
+        complianceType === MessagingComplianceType.TOLL_FREE
+          ? 'Record whether toll-free verification is not started, pending review, verified, or blocked so launch status stays truthful.'
+          : 'Record whether A2P is not started, pending review, approved, or blocked so launch status stays truthful.',
       stateLabel: 'Needs update',
       tone: 'pending' as const,
     };
@@ -204,8 +217,13 @@ function formatA2pDetail(business: SetupBusiness) {
   if (managedSummary.complianceReady) {
     return {
       complete: true,
-      detail: business.a2pApprovedAt ? `Recorded as approved on ${business.a2pApprovedAt.toLocaleDateString()}.` : 'Recorded as approved for live messaging.',
-      stateLabel: 'Approved',
+      detail:
+        complianceType === MessagingComplianceType.LOCAL_A2P && business.a2pApprovedAt
+          ? `Recorded as approved on ${business.a2pApprovedAt.toLocaleDateString()}.`
+          : complianceType === MessagingComplianceType.TOLL_FREE
+            ? 'Recorded as verified for live messaging.'
+            : 'Recorded as approved for live messaging.',
+      stateLabel: complianceType === MessagingComplianceType.TOLL_FREE ? 'Verified' : 'Approved',
       tone: 'success' as const,
     };
   }
@@ -213,7 +231,7 @@ function formatA2pDetail(business: SetupBusiness) {
   if (managedSummary.attentionRequired) {
     return {
       complete: true,
-      detail: business.a2pFailureReason || managedSummary.description,
+      detail: managedSummary.description,
       stateLabel: 'Needs attention',
       tone: 'attention' as const,
     };
@@ -255,7 +273,7 @@ export function buildTwilioSetupFlow(params: {
   const voiceWebhook = buildWebhookState(webhookSnapshot, 'voice');
   const smsWebhook = buildWebhookState(webhookSnapshot, 'sms');
   const statusWebhook = buildWebhookState(webhookSnapshot, 'status');
-  const a2p = formatA2pDetail(business);
+  const messagingCompliance = formatMessagingComplianceDetail(business);
   const testSmsDelivered = testSmsState === 'delivered';
   const hasOwnerRouting = Boolean(ownerPhone || ownerEmail);
   const hasForwardingNumber = Boolean(business.forwardingNumber?.trim());
@@ -271,7 +289,15 @@ export function buildTwilioSetupFlow(params: {
   if (!voiceWebhook.synced) liveBlockers.push('sync the voice webhook');
   if (!smsWebhook.synced) liveBlockers.push('sync the SMS webhook');
   if (!statusWebhook.synced) liveBlockers.push('sync the status callback');
-  if (!managedSummary.complianceReady) liveBlockers.push('clear A2P approval');
+  if (!managedSummary.complianceReady) {
+    liveBlockers.push(
+      managedSummary.complianceTypeUnknown
+        ? 'choose the number type'
+        : managedSummary.complianceType === MessagingComplianceType.TOLL_FREE
+          ? 'clear toll-free verification'
+          : 'clear A2P approval'
+    );
+  }
   if (!testSmsDelivered) liveBlockers.push('deliver a test SMS');
   if (!missedCallValidated) liveBlockers.push('validate the missed-call flow');
   if (!hasForwardingNumber) liveBlockers.push('save the forwarding number');
@@ -383,11 +409,11 @@ export function buildTwilioSetupFlow(params: {
     },
     {
       key: 'a2p_status_recorded',
-      label: '10. A2P status recorded',
-      complete: a2p.complete,
-      tone: a2p.tone,
-      stateLabel: a2p.stateLabel,
-      detail: a2p.detail,
+      label: '10. Messaging compliance status',
+      complete: messagingCompliance.complete,
+      tone: messagingCompliance.tone,
+      stateLabel: messagingCompliance.stateLabel,
+      detail: messagingCompliance.detail,
     },
     {
       key: 'test_sms_delivered',
@@ -453,7 +479,7 @@ export function buildTwilioSetupFlow(params: {
             : nextIncompleteStep.key === 'number_path'
               ? 'Choose the number path before provisioning'
               : nextIncompleteStep.key === 'a2p_status_recorded' && managedSummary.complianceReady === false
-                ? 'Keep A2P status accurate before launch'
+                ? 'Keep messaging compliance accurate before launch'
                 : nextIncompleteStep.key === 'test_sms_delivered'
                   ? 'Send the live test text next'
                   : nextIncompleteStep.key === 'missed_call_validated'

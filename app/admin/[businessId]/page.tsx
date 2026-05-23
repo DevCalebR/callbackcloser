@@ -20,6 +20,7 @@ import {
 } from '@/app/admin/actions';
 import { AdminBusinessActivityTimeline } from '@/components/admin-business-activity-timeline';
 import { AdminBusinessSetupStepCard } from '@/components/admin-business-setup-step-card';
+import { MessagingComplianceFields } from '@/components/messaging-compliance-fields';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,7 +41,12 @@ import { getAdminOwnerState, getTwilioWebhookSnapshot, listAdminTwilioNumbers } 
 import { requireAdmin } from '@/lib/admin';
 import { db } from '@/lib/db';
 import { formatDateTime } from '@/lib/lead-presenters';
-import { getManagedTextingNumber, managedTwilioStatusLabels } from '@/lib/managed-twilio-status';
+import {
+  getManagedTextingNumber,
+  managedTwilioStatusLabels,
+  messagingComplianceTypeLabels,
+  tollFreeVerificationStatusLabels,
+} from '@/lib/managed-twilio-status';
 import {
   businessTimelineFilterOptions,
   countTimelineFilters,
@@ -66,10 +72,14 @@ type AdminTwilioDefaults = {
   twilioPhoneNumber: string;
   twilioPhoneNumberSid: string;
   twilioMessagingServiceSid: string;
+  messagingComplianceType: string;
   a2pCustomerProfileSid: string;
   a2pBrandSid: string;
   a2pCampaignSid: string;
   a2pFailureReason: string;
+  tollFreeVerificationStatus: string;
+  tollFreeVerificationSid: string;
+  tollFreeVerificationNote: string;
   managedTwilioStatus: string;
 };
 
@@ -310,10 +320,14 @@ export default async function AdminBusinessDetailPage({
     twilioPhoneNumber: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || '',
     twilioPhoneNumberSid: business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || '',
     twilioMessagingServiceSid: business.twilioMessagingServiceSid || '',
+    messagingComplianceType: business.messagingComplianceType,
     a2pCustomerProfileSid: business.a2pCustomerProfileSid || '',
     a2pBrandSid: business.a2pBrandSid || '',
     a2pCampaignSid: business.a2pCampaignSid || '',
     a2pFailureReason: business.a2pFailureReason || '',
+    tollFreeVerificationStatus: business.tollFreeVerificationStatus,
+    tollFreeVerificationSid: business.tollFreeVerificationSid || '',
+    tollFreeVerificationNote: business.tollFreeVerificationNote || '',
     managedTwilioStatus: business.managedTwilioStatus,
   };
   const setupPanels = buildAdminSetupPanels({
@@ -624,48 +638,42 @@ export default async function AdminBusinessDetailPage({
 
     if (step.key === 'a2p_status_recorded') {
       return (
-        <form action={saveAdminTwilioSetupAction} className="grid gap-4 rounded-xl border bg-background/80 p-4 md:grid-cols-2">
+        <form action={saveAdminTwilioSetupAction} className="rounded-xl border bg-background/80 p-4">
           <HiddenAdminTwilioFields
             defaults={defaults}
-            exclude={['managedTwilioStatus', 'a2pCustomerProfileSid', 'a2pBrandSid', 'a2pCampaignSid', 'a2pFailureReason']}
+            exclude={[
+              'messagingComplianceType',
+              'managedTwilioStatus',
+              'a2pCustomerProfileSid',
+              'a2pBrandSid',
+              'a2pCampaignSid',
+              'a2pFailureReason',
+              'tollFreeVerificationStatus',
+              'tollFreeVerificationSid',
+              'tollFreeVerificationNote',
+            ]}
             returnStep={step.key}
           />
-          <div className="space-y-2">
-            <Label htmlFor="adminManagedTwilioStatus">Managed Twilio status</Label>
-            <Select defaultValue={business.managedTwilioStatus} id="adminManagedTwilioStatus" name="managedTwilioStatus">
-              {Object.entries(managedTwilioStatusLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="adminA2pCustomerProfileSid">Customer profile SID</Label>
-            <Input defaultValue={business.a2pCustomerProfileSid || ''} id="adminA2pCustomerProfileSid" name="a2pCustomerProfileSid" placeholder="BUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="adminA2pBrandSid">Brand SID</Label>
-            <Input defaultValue={business.a2pBrandSid || ''} id="adminA2pBrandSid" name="a2pBrandSid" placeholder="BNXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="adminA2pCampaignSid">Campaign SID</Label>
-            <Input defaultValue={business.a2pCampaignSid || ''} id="adminA2pCampaignSid" name="a2pCampaignSid" placeholder="QEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="adminA2pFailureReason">Blocker note</Label>
-            <Input
-              defaultValue={business.a2pFailureReason || ''}
-              id="adminA2pFailureReason"
-              name="a2pFailureReason"
-              placeholder="Record why launch is pending, blocked, or approved."
-            />
-          </div>
-          <div className="md:col-span-2">
-            <Button size="sm" type="submit" variant="outline">
-              Save A2P status
-            </Button>
-          </div>
+          <MessagingComplianceFields
+            idPrefix="admin"
+            initialMessagingComplianceType={business.messagingComplianceType}
+            initialManagedTwilioStatus={business.managedTwilioStatus}
+            initialA2pCustomerProfileSid={business.a2pCustomerProfileSid || ''}
+            initialA2pBrandSid={business.a2pBrandSid || ''}
+            initialA2pCampaignSid={business.a2pCampaignSid || ''}
+            initialA2pFailureReason={business.a2pFailureReason || ''}
+            initialTollFreeVerificationStatus={business.tollFreeVerificationStatus}
+            initialTollFreeVerificationSid={business.tollFreeVerificationSid || ''}
+            initialTollFreeVerificationNote={business.tollFreeVerificationNote || ''}
+            complianceTypeOptions={Object.entries(messagingComplianceTypeLabels).map(([value, label]) => ({ value, label }))}
+            managedTwilioStatusOptions={Object.entries(managedTwilioStatusLabels).map(([value, label]) => ({ value, label }))}
+            tollFreeVerificationStatusOptions={Object.entries(tollFreeVerificationStatusLabels).map(([value, label]) => ({
+              value,
+              label,
+            }))}
+            showSubmitButton
+            submitButtonVariant="outline"
+          />
         </form>
       );
     }

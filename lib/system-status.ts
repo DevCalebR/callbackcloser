@@ -1,4 +1,4 @@
-import { ManagedTwilioStatus, type Business, type SubscriptionStatus } from '@prisma/client';
+import { type Business, type SubscriptionStatus } from '@prisma/client';
 
 import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 
@@ -13,11 +13,15 @@ type StatusBusiness = Pick<
   | 'twilioPhoneNumberSid'
   | 'twilioMessagingServiceSid'
   | 'twilioWebhookSyncedAt'
+  | 'messagingComplianceType'
   | 'a2pFailureReason'
   | 'a2pApprovedAt'
   | 'a2pCampaignSid'
   | 'a2pBrandSid'
   | 'a2pCustomerProfileSid'
+  | 'tollFreeVerificationStatus'
+  | 'tollFreeVerificationSid'
+  | 'tollFreeVerificationNote'
   | 'subscriptionStatus'
   | 'forwardingNumber'
   | 'notifyPhone'
@@ -57,10 +61,9 @@ export function getCustomerSystemStatus(business: StatusBusiness, successfulLead
 }
 
 export function getAdminBusinessStatus(business: StatusBusiness, successfulLeadCount: number) {
-  if (
-    business.managedTwilioStatus === ManagedTwilioStatus.PAUSED_NONCOMPLIANT ||
-    business.managedTwilioStatus === ManagedTwilioStatus.FAILED_REVIEW
-  ) {
+  const managedSummary = getManagedTwilioStatusSummary(business);
+
+  if (managedSummary.attentionRequired) {
     return {
       key: 'blocked' as const,
       label: 'Blocked',
