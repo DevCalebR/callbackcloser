@@ -36,7 +36,8 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminActions, /export async function createBusinessMessagingServiceAction/);
   assert.match(adminActions, /export async function confirmMissedCallValidationAction/);
   assert.match(adminActions, /export async function markBusinessLiveAction/);
-  assert.match(adminActions, /must start with \$\{prefix\}/);
+  assert.match(adminActions, /getOptionalTwilioSidError/);
+  assert.match(adminActions, /getMessagingComplianceSidValidationError/);
   assert.match(adminActions, /const admin = await requireAdmin\(\)/);
   assert.match(adminHome, /View support workspace snapshot/);
   assert.match(businessPicker, /Jump to business/);

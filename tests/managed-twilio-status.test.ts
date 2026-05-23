@@ -162,7 +162,7 @@ test('verified toll-free setup becomes messaging-ready without A2P identifiers',
       twilioMessagingServiceSid: 'MG999',
       twilioWebhookSyncedAt: new Date('2026-04-16T12:00:00.000Z'),
       tollFreeVerificationStatus: TollFreeVerificationStatus.APPROVED,
-      tollFreeVerificationSid: 'tfv_123',
+      tollFreeVerificationSid: 'BUd2b9b67869f08c15f570d9f81d920dad',
     })
   );
 

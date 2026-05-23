@@ -4,6 +4,7 @@ import {
   BusinessProvisioningStatus,
   ManagedTwilioStatus,
   MessagingComplianceType,
+  Prisma,
   SubscriptionStatus,
   TollFreeVerificationStatus,
   TwilioAccountMode,
@@ -41,6 +42,12 @@ import { buildAdminTestSmsTruth, buildTwilioSetupUpdateEventMetadata } from '@/l
 import { db } from '@/lib/db';
 import { formatPhoneDetail, listBusinessOperatorEvents, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
+import {
+  getBusinessTwilioSaveErrorMessage,
+  getMessagingComplianceSidValidationError,
+  getOptionalTwilioSidError,
+  normalizeOptionalSid,
+} from '@/lib/twilio-compliance';
 import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
 import {
   adminArchiveBusinessSchema,
@@ -196,19 +203,6 @@ function normalizeOptionalE164Phone(value: string | null | undefined, label: str
   }
 
   return normalized;
-}
-
-function normalizeOptionalSid(value: string | null | undefined) {
-  const trimmed = value?.trim() || '';
-  return trimmed || null;
-}
-
-function getOptionalSidPrefixError(value: string | null, prefix: string, label: string) {
-  if (!value) return null;
-  if (!value.startsWith(prefix)) {
-    return `${label} must start with ${prefix}.`;
-  }
-  return null;
 }
 
 function maskSidForAudit(value: string | null | undefined) {
@@ -778,7 +772,14 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   const twilioAccountMode = data.twilioAccountMode as TwilioAccountMode;
   const twilioNumberSetupMode = data.twilioNumberSetupMode as TwilioNumberSetupMode;
   const twilioSubaccountSid = twilioAccountMode === TwilioAccountMode.MAIN_ACCOUNT ? null : normalizeOptionalSid(data.twilioSubaccountSid);
-  const twilioPhoneNumber = normalizeOptionalE164Phone(data.twilioPhoneNumber || '', 'Twilio number');
+  let twilioPhoneNumber: string | null;
+
+  try {
+    twilioPhoneNumber = normalizeOptionalE164Phone(data.twilioPhoneNumber || '', 'Twilio number');
+  } catch (error) {
+    redirectToBusinessActionError(formData, getBusinessTwilioSaveErrorMessage(error) || 'Unable to save Twilio setup.', returnStep);
+  }
+
   const twilioPhoneNumberSid = normalizeOptionalSid(data.twilioPhoneNumberSid);
   const twilioMessagingServiceSid = normalizeOptionalSid(data.twilioMessagingServiceSid);
   const messagingComplianceType = data.messagingComplianceType as MessagingComplianceType;
@@ -790,12 +791,16 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   const tollFreeVerificationSid = normalizeOptionalSid(data.tollFreeVerificationSid);
   const tollFreeVerificationNote = data.tollFreeVerificationNote?.trim() || null;
   const sidValidationError =
-    getOptionalSidPrefixError(twilioSubaccountSid, 'AC', 'Twilio subaccount SID') ||
-    getOptionalSidPrefixError(twilioPhoneNumberSid, 'PN', 'Twilio number SID') ||
-    getOptionalSidPrefixError(twilioMessagingServiceSid, 'MG', 'Messaging Service SID') ||
-    getOptionalSidPrefixError(a2pCustomerProfileSid, 'BU', 'A2P customer profile SID') ||
-    getOptionalSidPrefixError(a2pBrandSid, 'BN', 'A2P brand SID') ||
-    getOptionalSidPrefixError(a2pCampaignSid, 'QE', 'A2P campaign SID');
+    getOptionalTwilioSidError(twilioSubaccountSid, 'AC', 'Twilio subaccount SID') ||
+    getOptionalTwilioSidError(twilioPhoneNumberSid, 'PN', 'Twilio number SID') ||
+    getOptionalTwilioSidError(twilioMessagingServiceSid, 'MG', 'Messaging Service SID') ||
+    getMessagingComplianceSidValidationError({
+      messagingComplianceType,
+      a2pCustomerProfileSid,
+      a2pBrandSid,
+      a2pCampaignSid,
+      tollFreeVerificationSid,
+    });
 
   if (sidValidationError) {
     redirect(buildAdminBusinessRedirectPath(data.businessId, withReturnStepParam({ error: sidValidationError }, returnStep)));
@@ -946,53 +951,60 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
       : null,
   ].filter(Boolean) as Array<{ key: string; label: string; before: string | null; after: string | null }>;
 
-  await db.business.update({
-    where: { id: data.businessId },
-    data: {
-      twilioAccountMode,
-      twilioNumberSetupMode,
-      twilioSubaccountSid,
-      managedTwilioStatus: data.managedTwilioStatus as ManagedTwilioStatus,
-      managedTwilioStatusUpdatedAt: managedTwilioStatusChanged ? new Date() : existingBusiness.managedTwilioStatusUpdatedAt,
-      twilioPhoneNumber,
-      twilioPrimaryPhoneNumber: twilioPhoneNumber,
-      twilioPhoneNumberSid,
-      twilioPrimaryNumberSid: twilioPhoneNumberSid,
-      twilioMessagingServiceSid,
-      messagingComplianceType,
-      a2pCustomerProfileSid,
-      a2pBrandSid,
-      a2pCampaignSid,
-      a2pFailureReason,
-      tollFreeVerificationStatus,
-      tollFreeVerificationSid,
-      tollFreeVerificationNote,
-      a2pSubmittedAt:
-        managedTwilioStatusChanged &&
-        messagingComplianceType === MessagingComplianceType.LOCAL_A2P &&
-        ['AWAITING_BUSINESS_VERIFICATION', 'BRAND_SUBMITTED', 'CAMPAIGN_SUBMITTED'].includes(data.managedTwilioStatus)
-          ? existingBusiness.a2pSubmittedAt || new Date()
-          : existingBusiness.a2pSubmittedAt,
-      a2pApprovedAt:
-        messagingComplianceType === MessagingComplianceType.LOCAL_A2P &&
-        data.managedTwilioStatus === ManagedTwilioStatus.COMPLIANT_LIVE
-          ? existingBusiness.a2pApprovedAt || new Date()
-          : managedTwilioStatusChanged
-            ? null
-            : existingBusiness.a2pApprovedAt,
-      ...(twilioMappingChanged ? { twilioWebhookSyncedAt: null } : {}),
-      ...(
-        twilioMappingChanged ||
-        a2pMetadataChanged ||
-        tollFreeMetadataChanged ||
-        messagingComplianceTypeChanged ||
-        managedTwilioStatusChanged
-          ? { provisioningLastRunAt: new Date() }
-          : {}
-      ),
-      provisioningError: null,
-    },
-  });
+  try {
+    await db.business.update({
+      where: { id: data.businessId },
+      data: {
+        twilioAccountMode,
+        twilioNumberSetupMode,
+        twilioSubaccountSid,
+        managedTwilioStatus: data.managedTwilioStatus as ManagedTwilioStatus,
+        managedTwilioStatusUpdatedAt: managedTwilioStatusChanged ? new Date() : existingBusiness.managedTwilioStatusUpdatedAt,
+        twilioPhoneNumber,
+        twilioPrimaryPhoneNumber: twilioPhoneNumber,
+        twilioPhoneNumberSid,
+        twilioPrimaryNumberSid: twilioPhoneNumberSid,
+        twilioMessagingServiceSid,
+        messagingComplianceType,
+        a2pCustomerProfileSid,
+        a2pBrandSid,
+        a2pCampaignSid,
+        a2pFailureReason,
+        tollFreeVerificationStatus,
+        tollFreeVerificationSid,
+        tollFreeVerificationNote,
+        a2pSubmittedAt:
+          managedTwilioStatusChanged &&
+          messagingComplianceType === MessagingComplianceType.LOCAL_A2P &&
+          ['AWAITING_BUSINESS_VERIFICATION', 'BRAND_SUBMITTED', 'CAMPAIGN_SUBMITTED'].includes(data.managedTwilioStatus)
+            ? existingBusiness.a2pSubmittedAt || new Date()
+            : existingBusiness.a2pSubmittedAt,
+        a2pApprovedAt:
+          messagingComplianceType === MessagingComplianceType.LOCAL_A2P &&
+          data.managedTwilioStatus === ManagedTwilioStatus.COMPLIANT_LIVE
+            ? existingBusiness.a2pApprovedAt || new Date()
+            : managedTwilioStatusChanged
+              ? null
+              : existingBusiness.a2pApprovedAt,
+        ...(twilioMappingChanged ? { twilioWebhookSyncedAt: null } : {}),
+        ...(
+          twilioMappingChanged ||
+          a2pMetadataChanged ||
+          tollFreeMetadataChanged ||
+          messagingComplianceTypeChanged ||
+          managedTwilioStatusChanged
+            ? { provisioningLastRunAt: new Date() }
+            : {}
+        ),
+        provisioningError: null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Error) {
+      redirectToBusinessActionError(formData, getBusinessTwilioSaveErrorMessage(error) || 'Unable to save Twilio setup.', returnStep);
+    }
+    throw error;
+  }
 
   if (changedFields.length > 0) {
     const setupUpdateEvent = buildTwilioSetupUpdateEventMetadata(changedFields);

@@ -148,7 +148,7 @@ test('messaging compliance step switches to toll-free verification copy', () => 
       a2pCampaignSid: null,
       a2pApprovedAt: null,
       tollFreeVerificationStatus: TollFreeVerificationStatus.PENDING,
-      tollFreeVerificationSid: 'tfv_123',
+      tollFreeVerificationSid: 'BUd2b9b67869f08c15f570d9f81d920dad',
     }),
     notificationSettings: createNotificationSettings(),
     ownerConnected: true,

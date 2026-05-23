@@ -43,7 +43,7 @@ model Business {
   managedTwilioStatusUpdatedAt DateTime?
   a2pFailureReason            String?
   tollFreeVerificationStatus  TollFreeVerificationStatus @default(NOT_STARTED)
-  tollFreeVerificationSid     String?            @unique
+  tollFreeVerificationSid     String?
   tollFreeVerificationNote    String?
   twilioProvisioningStartedAt DateTime?
   twilioProvisionedAt         DateTime?
