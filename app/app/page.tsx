@@ -1,21 +1,21 @@
-import Link from 'next/link';
 import { LeadReadiness, LeadStatus } from '@prisma/client';
 
-import { CustomerLeadRow } from '@/components/customer-lead-row';
-import { LeadConversionSummaryCard } from '@/components/lead-conversion-summary-card';
-import { Badge } from '@/components/ui/badge';
-import { buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { HomeDashboard, type DashboardLeadCard } from '@/components/home-dashboard';
 import { requireBusiness } from '@/lib/auth';
 import { listAllDashboardLeadsForBusiness } from '@/lib/business-access';
+import { buildRecoveryMetrics } from '@/lib/dashboard-home';
 import { db } from '@/lib/db';
-import { getLeadOutcomeSummary } from '@/lib/lead-outcomes';
-import { getLeadLastActivityAt, isLeadOpenStatus } from '@/lib/lead-presenters';
+import { formatRelativeTime, getLeadLastActivityAt, isLeadOpenStatus } from '@/lib/lead-presenters';
+import { formatPhoneForDisplay } from '@/lib/phone';
 import { getPortfolioDemoBusiness, getPortfolioDemoLeads, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getCustomerSystemStatus } from '@/lib/system-status';
 
 function buildLeadDetailHref(leadId: string) {
   return `/app/leads/${leadId}?from=%2Fapp`;
+}
+
+function buildConversationHref(leadId: string) {
+  return `/app/conversations?leadId=${leadId}`;
 }
 
 function getAttentionPriority(lead: {
@@ -47,23 +47,107 @@ function getAttentionPriority(lead: {
   };
 }
 
-export default async function AppHomePage() {
+function getCustomerName(lead: {
+  callerName: string | null;
+  contactName: string | null;
+  callerPhoneNormalized: string | null;
+  callerPhone: string;
+}) {
+  return lead.callerName || lead.contactName || formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone);
+}
+
+function getRecommendedNextAction(lead: {
+  status: LeadStatus;
+  readiness: LeadReadiness;
+  lastInboundAt: Date | null;
+}) {
+  if (lead.status === LeadStatus.BOOKED) return 'Booked. Keep this lead as proof of recovered revenue.';
+  if (lead.status === LeadStatus.LOST) return 'No further action needed unless the customer comes back.';
+  if (lead.status === LeadStatus.CONTACTED) return 'Follow up again and confirm whether the job is booked.';
+  if (lead.readiness === LeadReadiness.URGENT) return 'Call now.';
+  if (lead.status === LeadStatus.NOTIFIED || lead.status === LeadStatus.QUALIFIED) return 'Call now.';
+  if (lead.lastInboundAt) return 'Reply by text, then call if the customer is ready.';
+  return 'Call now.';
+}
+
+function toLeadCard(
+  lead: {
+    id: string;
+    callerName: string | null;
+    contactName: string | null;
+    callerPhoneNormalized: string | null;
+    callerPhone: string;
+    serviceType: string | null;
+    serviceRequested: string | null;
+    urgency: string | null;
+    location: string | null;
+    zipCode: string | null;
+    summary: string | null;
+    status: LeadStatus;
+    readiness: LeadReadiness;
+    qualifiedAt: Date | null;
+    notifiedAt: Date | null;
+    ownerNotifiedAt: Date | null;
+    createdAt: Date;
+    lastInteractionAt: Date | null;
+    lastInboundAt: Date | null;
+  },
+  demoMode: boolean,
+): DashboardLeadCard {
+  return {
+    id: lead.id,
+    customerName: getCustomerName(lead),
+    serviceNeeded: lead.serviceType || lead.serviceRequested || 'Service needed not captured yet',
+    urgencyLabel: lead.urgency || (lead.readiness === LeadReadiness.URGENT ? 'Urgent' : lead.readiness === LeadReadiness.QUALIFIED ? 'Qualified' : 'Needs reply'),
+    locationLabel: lead.location || lead.zipCode || 'Location pending',
+    timeSinceMissedCall: formatRelativeTime(lead.createdAt),
+    summary:
+      lead.summary ||
+      'CallbackCloser is still collecting the AI summary for this lead. Open the conversation or call back to keep the lead moving.',
+    recommendedNextAction: getRecommendedNextAction(lead),
+    status: lead.status,
+    countsAsRecovered:
+      lead.status === LeadStatus.BOOKED ||
+      lead.status === LeadStatus.CONTACTED ||
+      lead.status === LeadStatus.NOTIFIED ||
+      lead.status === LeadStatus.QUALIFIED ||
+      lead.readiness !== LeadReadiness.PENDING ||
+      Boolean(lead.qualifiedAt || lead.notifiedAt || lead.ownerNotifiedAt),
+    callHref: `tel:${lead.callerPhoneNormalized || lead.callerPhone}`,
+    sendTextHref: buildConversationHref(lead.id),
+    leadHref: buildLeadDetailHref(lead.id),
+    sourceLabel: demoMode ? 'Demo lead' : null,
+  };
+}
+
+function getDateKey(value: Date, timeZone: string) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(value);
+}
+
+export default async function AppHomePage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const demoMode = isPortfolioDemoMode();
   const business = demoMode ? getPortfolioDemoBusiness() : await requireBusiness();
 
   const [allLeads, notificationSettings] = demoMode
-    ? [
-        getPortfolioDemoLeads(null),
-        null,
-      ]
+    ? [getPortfolioDemoLeads(null), null]
     : await Promise.all([
         listAllDashboardLeadsForBusiness(business.id),
         db.businessNotificationSettings.findUnique({ where: { businessId: business.id } }),
       ]);
 
   const successfulLeadCount = allLeads.filter((lead) => lead.ownerNotifiedAt || lead.notifiedAt).length;
-  const outcomeSummary = getLeadOutcomeSummary(allLeads);
   const systemStatus = getCustomerSystemStatus(business, successfulLeadCount);
+  const metrics = buildRecoveryMetrics(allLeads);
+
   const attentionLeads = allLeads
     .filter((lead) => isLeadOpenStatus(lead.status))
     .sort((left, right) => {
@@ -80,11 +164,21 @@ export default async function AppHomePage() {
 
       return rightPriority.activityAt - leftPriority.activityAt;
     })
-    .slice(0, 5);
-  const recentLeads = [...allLeads]
-    .sort((left, right) => getLeadLastActivityAt(right).getTime() - getLeadLastActivityAt(left).getTime())
-    .slice(0, 6);
+    .slice(0, 5)
+    .map((lead) => toLeadCard(lead, demoMode));
 
+  const queueAnchor =
+    demoMode && allLeads.length > 0
+      ? new Date(Math.max(...allLeads.map((lead) => lead.createdAt.getTime())))
+      : new Date();
+  const queueDateKey = getDateKey(queueAnchor, business.timezone);
+  const queueLeads = [...allLeads]
+    .filter((lead) => getDateKey(lead.createdAt, business.timezone) === queueDateKey)
+    .sort((left, right) => getLeadLastActivityAt(right).getTime() - getLeadLastActivityAt(left).getTime())
+    .slice(0, 6)
+    .map((lead) => toLeadCard(lead, demoMode));
+
+  const phoneLineConnected = Boolean(business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber);
   const ownerAlertsReady = Boolean(
     business.notifyPhone ||
       notificationSettings?.ownerPhone ||
@@ -92,104 +186,56 @@ export default async function AppHomePage() {
       (notificationSettings?.notifyEmail && notificationSettings.ownerEmail),
   );
 
-  const healthItems = [
+  const setupChecklistItems = [
     {
-      label: 'Texting',
-      value: systemStatus.key === 'live' ? 'Active' : 'Finishing setup',
-      detail: systemStatus.description,
+      key: 'phone-line',
+      label: 'Phone line connected',
+      detail: phoneLineConnected
+        ? 'CallbackCloser has a business line ready for missed-call recovery.'
+        : 'Connect the business line that should trigger missed-call recovery.',
+      state: phoneLineConnected ? ('complete' as const) : ('pending' as const),
     },
     {
-      label: 'Phone line',
-      value: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber ? 'Connected' : 'Needs setup',
-      detail: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber ? 'Your business line is attached to CallbackCloser.' : 'Finish phone setup in Settings before going live.',
+      key: 'owner-alerts',
+      label: 'Owner alerts ready',
+      detail: ownerAlertsReady
+        ? 'The owner alert route is ready for qualified lead handoffs.'
+        : 'Add an owner phone or email so lead handoffs land in the right place.',
+      state: ownerAlertsReady ? ('complete' as const) : ('pending' as const),
     },
     {
-      label: 'Owner alerts',
-      value: ownerAlertsReady ? 'Ready' : 'Needs setup',
-      detail: ownerAlertsReady ? 'Lead alerts can reach you quickly when a missed call turns into a lead.' : 'Add an owner alert number or email in Settings.',
+      key: 'texting-activation',
+      label: 'Texting activation in progress',
+      detail:
+        systemStatus.key === 'live'
+          ? 'Texting is live and recovering missed calls now.'
+          : systemStatus.description,
+      state:
+        systemStatus.key === 'live'
+          ? ('complete' as const)
+          : systemStatus.key === 'activating'
+            ? ('in_progress' as const)
+            : ('pending' as const),
     },
   ];
 
+  const feedback = {
+    error: typeof searchParams?.error === 'string' ? searchParams.error : null,
+    saved: searchParams?.saved === '1',
+  };
+
   return (
-    <div className="space-y-8">
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-3">
-          <Badge variant="outline">Customer dashboard</Badge>
-          <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight">Who needs follow-up right now?</h1>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Open the lead that needs attention, take action, and move on. This page keeps the next calls obvious.
-            </p>
-          </div>
-        </div>
-        <Link className={buttonVariants()} href="/app/leads?view=attention">
-          Open lead inbox
-        </Link>
-      </section>
-
-      <LeadConversionSummaryCard
-        description="Keep the win/loss numbers obvious without opening a separate analytics dashboard."
-        summary={outcomeSummary}
-      />
-
-      <section className="grid gap-6 xl:grid-cols-[1.4fr_0.85fr]">
-        <Card className="bg-card/95">
-          <CardHeader>
-            <CardTitle>Leads needing attention first</CardTitle>
-            <CardDescription>These are the leads most likely to need a callback or outcome update next.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {attentionLeads.length === 0 ? (
-              <div className="rounded-2xl border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
-                No open leads need action right now.
-              </div>
-            ) : (
-              attentionLeads.map((lead) => <CustomerLeadRow key={lead.id} lead={lead} href={buildLeadDetailHref(lead.id)} compact />)
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>System health</CardTitle>
-            <CardDescription>Only the simple status checks that matter for day-to-day use.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {healthItems.map((item) => (
-              <div key={item.label} className="rounded-2xl border bg-background/80 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <Badge variant={item.value === 'Needs setup' ? 'outline' : 'secondary'}>{item.value}</Badge>
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section>
-        <Card className="bg-card/95">
-          <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <CardTitle>Recent leads</CardTitle>
-              <CardDescription>Everything that came through recently, whether it still needs action or not.</CardDescription>
-            </div>
-            <Link className={buttonVariants({ variant: 'outline' })} href="/app/leads">
-              View all leads
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {recentLeads.length === 0 ? (
-              <div className="rounded-2xl border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
-                Leads will show up here as soon as CallbackCloser captures a missed call.
-              </div>
-            ) : (
-              recentLeads.map((lead) => <CustomerLeadRow key={lead.id} lead={lead} href={buildLeadDetailHref(lead.id)} />)
-            )}
-          </CardContent>
-        </Card>
-      </section>
-    </div>
+    <HomeDashboard
+      attentionLeads={attentionLeads}
+      feedback={feedback}
+      finishActivationHref="/app/settings#twilio-setup-flow"
+      hasRealLeadData={allLeads.length > 0}
+      isDemoMode={demoMode}
+      metrics={metrics}
+      queueLeads={queueLeads}
+      setupChecklistItems={setupChecklistItems}
+      showSetupChecklist={systemStatus.key !== 'live'}
+      simulatorHref="/simulator"
+    />
   );
 }
