@@ -400,9 +400,11 @@ Creating a dedicated simulator workspace:
    - `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`
    - `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`
    - In Clerk Dashboard, allow both URLs on the deployed origin.
-6. Run Prisma migrations against your production database:
-   - Either via CI/CD step: `npx prisma migrate deploy`
-   - Or manually once after deploy
+6. Vercel deploys should use the repo build command `npm run vercel-build`:
+   - This runs `npm run db:generate`
+   - Then `npm run db:deploy`
+   - Then `npm run build`
+   - If the Vercel dashboard overrides the build command, set it to `npm run vercel-build`
 7. Configure Stripe webhook to the Vercel domain.
 8. Configure Twilio phone number webhooks (or buy the number through the app after deploy).
    - Helper: `npm run webhooks:print` (redacts the shared token by default)
@@ -439,8 +441,9 @@ Use this checklist before sending paid traffic to `callbackcloser.com` or allowi
    - `npm run typecheck`
    - `npm run build`
 3. Confirm Vercel production env vars match `docs/PRODUCTION_ENV.md`.
-4. Apply production Prisma migrations:
-   - `npx prisma migrate deploy`
+4. Confirm the deploy path applies Prisma migrations before runtime:
+   - repo build command: `npm run vercel-build`
+   - exact migration step inside it: `npm run db:deploy`
    - optional smoke: `npm run db:smoke`
 5. Confirm Stripe production setup:
    - live products/prices exist

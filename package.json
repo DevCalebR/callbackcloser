@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "npm run db:generate && npm run db:deploy && npm run build",
     "start": "next start",
     "test": "tsx --test tests/*.test.ts",
     "test:twilio": "tsx --test tests/twilio-*.test.ts",

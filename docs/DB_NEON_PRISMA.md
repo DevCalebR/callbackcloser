@@ -69,6 +69,22 @@ Recommended:
 - Preview uses preview/staging Neon DB URLs (pooled + direct)
 - Production uses production Neon DB URLs (pooled + direct)
 
+### Vercel build command
+
+This repo expects Vercel to use:
+
+```txt
+npm run vercel-build
+```
+
+That script runs, in order:
+
+1. `npm run db:generate`
+2. `npm run db:deploy`
+3. `npm run build`
+
+This keeps Prisma Client generation explicit and applies additive Prisma migrations through `DIRECT_DATABASE_URL` before `next build` completes.
+
 ## Common Mistake to Avoid
 
 Using the pooled `-pooler` URL for Prisma migrations can cause migration problems or connection behavior issues. Keep migrations on `DIRECT_DATABASE_URL` (direct endpoint) and runtime on `DATABASE_URL` (pooled endpoint).
