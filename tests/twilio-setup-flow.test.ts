@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BusinessProvisioningStatus, ManagedTwilioStatus, TwilioAccountMode, TwilioNumberSetupMode } from '@prisma/client';
+import {
+  BusinessProvisioningStatus,
+  ManagedTwilioStatus,
+  MessagingComplianceType,
+  TollFreeVerificationStatus,
+  TwilioAccountMode,
+  TwilioNumberSetupMode,
+} from '@prisma/client';
 
 import { buildTwilioSetupFlow } from '../lib/twilio-setup.ts';
 
@@ -20,12 +27,16 @@ function createBusiness(overrides: Record<string, unknown> = {}) {
     twilioPrimaryPhoneNumber: '+15550001111',
     twilioPhoneNumber: '+15550001111',
     twilioWebhookSyncedAt: new Date('2026-04-20T00:00:00.000Z'),
+    messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
     managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
     a2pCustomerProfileSid: 'BU_TEST_PROFILE',
     a2pBrandSid: 'BN_TEST_BRAND',
     a2pCampaignSid: 'QE_TEST_CAMPAIGN',
     a2pFailureReason: null,
     a2pApprovedAt: new Date('2026-04-20T00:00:00.000Z'),
+    tollFreeVerificationStatus: TollFreeVerificationStatus.NOT_STARTED,
+    tollFreeVerificationSid: null,
+    tollFreeVerificationNote: null,
     ...overrides,
   };
 }
@@ -123,4 +134,51 @@ test('existing-number path messaging stays truthful about admin assistance', () 
   const numberPathStep = flow.steps.find((step) => step.key === 'number_path');
   assert.match(numberPathStep?.detail || '', /admin-assisted/i);
   assert.match(numberPathStep?.detail || '', /selected Twilio account context/i);
+});
+
+test('messaging compliance step switches to toll-free verification copy', () => {
+  const flow = buildTwilioSetupFlow({
+    business: createBusiness({
+      twilioAccountMode: TwilioAccountMode.MAIN_ACCOUNT,
+      twilioSubaccountSid: null,
+      messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+      a2pCustomerProfileSid: null,
+      a2pBrandSid: null,
+      a2pCampaignSid: null,
+      a2pApprovedAt: null,
+      tollFreeVerificationStatus: TollFreeVerificationStatus.PENDING,
+      tollFreeVerificationSid: 'tfv_123',
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 0,
+    testSmsState: 'not_started',
+    webhookSnapshot: createWebhookSnapshot(),
+  });
+
+  const complianceStep = flow.steps.find((step) => step.key === 'a2p_status_recorded');
+  assert.equal(complianceStep?.label, '10. Messaging compliance status');
+  assert.match(complianceStep?.detail || '', /toll-free verification/i);
+});
+
+test('unknown number type keeps the live gate blocked', () => {
+  const flow = buildTwilioSetupFlow({
+    business: createBusiness({
+      messagingComplianceType: MessagingComplianceType.UNKNOWN,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+      a2pCustomerProfileSid: null,
+      a2pBrandSid: null,
+      a2pCampaignSid: null,
+      a2pApprovedAt: null,
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 1,
+    testSmsState: 'delivered',
+    webhookSnapshot: createWebhookSnapshot(),
+  });
+
+  assert.equal(flow.safeToMarkLive, false);
+  assert.match(flow.liveGateDetail, /choose the number type/i);
 });

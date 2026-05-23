@@ -4,8 +4,10 @@ import test from 'node:test';
 import {
   BusinessProvisioningStatus,
   ManagedTwilioStatus,
+  MessagingComplianceType,
   OperatorEventStatus,
   SubscriptionStatus,
+  TollFreeVerificationStatus,
   TwilioAccountMode,
   TwilioNumberSetupMode,
 } from '@prisma/client';
@@ -44,12 +46,16 @@ function createBusiness(overrides: Record<string, unknown> = {}) {
     twilioPrimaryPhoneNumber: '+15550001111',
     twilioPhoneNumber: '+15550001111',
     twilioWebhookSyncedAt: new Date('2026-04-15T00:00:00.000Z'),
+    messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
     managedTwilioStatus: ManagedTwilioStatus.CAMPAIGN_SUBMITTED,
     a2pCustomerProfileSid: 'BU_TEST_PROFILE',
     a2pBrandSid: 'BN_TEST_BRAND',
     a2pCampaignSid: 'QE_TEST_CAMPAIGN',
     a2pFailureReason: null,
     a2pApprovedAt: null,
+    tollFreeVerificationStatus: TollFreeVerificationStatus.NOT_STARTED,
+    tollFreeVerificationSid: null,
+    tollFreeVerificationNote: null,
     subscriptionStatus: SubscriptionStatus.ACTIVE,
     stripePriceId: 'price_callbackcloser_pro',
     updatedAt: new Date('2026-04-15T00:00:00.000Z'),
@@ -143,6 +149,41 @@ test('next-step guidance stays explicit for owner setup and pending A2P review',
 
   assert.equal(pendingA2p.title, 'A2P campaign still pending');
   assert.equal(pendingA2p.tone, 'pending');
+});
+
+test('next-step guidance supports toll-free verification and unknown number type', () => {
+  const unknownType = buildAdminNextStep({
+    business: createBusiness({
+      messagingComplianceType: MessagingComplianceType.UNKNOWN,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+      a2pCustomerProfileSid: null,
+      a2pBrandSid: null,
+      a2pCampaignSid: null,
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+  });
+
+  assert.equal(unknownType.title, 'Number type still needs selection');
+
+  const pendingTollFree = buildAdminNextStep({
+    business: createBusiness({
+      twilioAccountMode: TwilioAccountMode.MAIN_ACCOUNT,
+      twilioSubaccountSid: null,
+      messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+      a2pCustomerProfileSid: null,
+      a2pBrandSid: null,
+      a2pCampaignSid: null,
+      tollFreeVerificationStatus: TollFreeVerificationStatus.PENDING,
+      tollFreeVerificationSid: 'tfv_123',
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+  });
+
+  assert.equal(pendingTollFree.title, 'Toll-free verification still pending');
+  assert.equal(pendingTollFree.tone, 'pending');
 });
 
 test('board filters and delete guard stay conservative', () => {
@@ -406,6 +447,40 @@ test('onboarding confidence stays honest when A2P is pending or live has warning
   assert.equal(liveWithWarnings.state, 'live_with_warnings');
   assert.equal(liveWithWarnings.canSafelyMarkLive, false);
   assert.equal(liveWithWarnings.readinessLabel, 'Live with warnings');
+});
+
+test('toll-free businesses can reach ready-for-live without A2P metadata', () => {
+  const confidence = buildAdminOnboardingConfidence({
+    business: createBusiness({
+      twilioAccountMode: TwilioAccountMode.MAIN_ACCOUNT,
+      twilioSubaccountSid: null,
+      messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+      a2pCustomerProfileSid: null,
+      a2pBrandSid: null,
+      a2pCampaignSid: null,
+      a2pApprovedAt: null,
+      tollFreeVerificationStatus: TollFreeVerificationStatus.APPROVED,
+      tollFreeVerificationSid: 'tfv_123',
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 1,
+    operatorEvents: [
+      {
+        type: 'admin.test_sms_delivered',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+    missedCallValidation: {
+      countsAsLaunchProof: true,
+      detail: 'Recent event sequence proves the missed-call flow reached the owner alert path.',
+    },
+  });
+
+  assert.equal(confidence.state, 'ready_to_go_live');
+  assert.equal(confidence.canSafelyMarkLive, true);
 });
 
 test('historical warning events do not keep a clean live business in live-with-warnings', () => {

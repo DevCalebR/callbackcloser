@@ -1,10 +1,11 @@
-import { TwilioAccountMode, type Business } from '@prisma/client';
+import { MessagingComplianceType, TwilioAccountMode, type Business } from '@prisma/client';
 
 import type { AdminOnboardingConfidence } from '@/lib/admin-dashboard';
 import type { AdminGoLiveDecisionTruth, AdminMissedCallValidationTruth, AdminOperationalProof } from '@/lib/admin-operator-proof';
 import type { AdminTestSmsTruth } from '@/lib/admin-operator-visibility';
 import type { AdminOwnerState, TwilioWebhookSnapshot } from '@/lib/admin-provisioning-presenters';
 import { formatDateTime } from '@/lib/lead-presenters';
+import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import type { TwilioSetupFlow, TwilioSetupStep, TwilioSetupStepKey } from '@/lib/twilio-setup';
 
 type SetupBusiness = Pick<
@@ -19,11 +20,17 @@ type SetupBusiness = Pick<
   | 'twilioPhoneNumber'
   | 'twilioPrimaryNumberSid'
   | 'twilioPhoneNumberSid'
+  | 'twilioWebhookSyncedAt'
+  | 'messagingComplianceType'
   | 'a2pCustomerProfileSid'
   | 'a2pBrandSid'
   | 'a2pCampaignSid'
   | 'a2pFailureReason'
   | 'managedTwilioStatus'
+  | 'a2pApprovedAt'
+  | 'tollFreeVerificationStatus'
+  | 'tollFreeVerificationSid'
+  | 'tollFreeVerificationNote'
 >;
 
 export type AdminSetupManualField = {
@@ -423,60 +430,169 @@ export function buildAdminSetupPanels(params: {
     },
     {
       key: 'a2p_status_recorded',
-      title: 'A2P readiness',
-      currentState: business.a2pFailureReason
-        ? `Current note: ${business.a2pFailureReason}`
-        : business.a2pCampaignSid || business.a2pBrandSid || business.a2pCustomerProfileSid
-          ? `Current saved A2P state: ${business.managedTwilioStatus}`
-          : 'No A2P readiness details are saved yet.',
-      explanation: 'This step is where the operator records what Twilio compliance state the business is actually in. It is the source of truth for whether launch can proceed.',
-      nextAction: 'Record the actual A2P/compliance state and any known Twilio identifiers or blocker note.',
-      instructions: [
-        'Check Twilio or your rollout notes for the current A2P/compliance state.',
-        'Save the readiness status that best matches reality.',
-        'If Twilio already gave you a customer profile, brand, or campaign SID, paste it here.',
-        'If the business is blocked, record the blocker in plain English so the next operator does not have to guess.',
-      ],
-      verification: ['The saved status should match the real Twilio state.', 'If approved, the step should show Approved.', 'If blocked, the blocker note should explain why.'],
-      latestEvidence: [
-        business.a2pCustomerProfileSid ? `Customer profile SID: ${business.a2pCustomerProfileSid}` : 'No customer profile SID saved.',
-        business.a2pBrandSid ? `Brand SID: ${business.a2pBrandSid}` : 'No brand SID saved.',
-        business.a2pCampaignSid ? `Campaign SID: ${business.a2pCampaignSid}` : 'No campaign SID saved.',
-      ],
-      warnings: business.a2pFailureReason ? [business.a2pFailureReason] : [],
-      manualFields: [
-        {
-          key: 'managedTwilioStatus',
-          label: 'Managed Twilio status',
-          placeholder: 'COMPLIANT_LIVE',
-          helpText: 'Choose the state that matches the actual Twilio readiness.',
-        },
-        {
-          key: 'a2pCustomerProfileSid',
-          label: 'A2P customer profile SID',
-          placeholder: 'BUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-          helpText: 'Optional if Twilio already issued one.',
-        },
-        {
-          key: 'a2pBrandSid',
-          label: 'A2P brand SID',
-          placeholder: 'BNXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-          helpText: 'Optional if Twilio already issued one.',
-        },
-        {
-          key: 'a2pCampaignSid',
-          label: 'A2P campaign SID',
-          placeholder: 'QEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-          helpText: 'Optional if Twilio already issued one.',
-        },
-        {
-          key: 'a2pFailureReason',
-          label: 'Blocker note',
-          placeholder: 'Record why launch is pending or blocked.',
-          helpText: 'Use plain English so the next step is obvious.',
-        },
-      ],
-      automaticActionLabel: 'Save A2P status',
+      title: 'Messaging compliance',
+      currentState: (() => {
+        const managedSummary = getManagedTwilioStatusSummary(business);
+
+        if (managedSummary.complianceTypeUnknown) {
+          return 'Number type has not been selected yet.';
+        }
+
+        if (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE) {
+          return business.tollFreeVerificationNote
+            ? `Current note: ${business.tollFreeVerificationNote}`
+            : business.tollFreeVerificationSid
+              ? `Current toll-free verification state: ${business.tollFreeVerificationStatus}`
+              : 'No toll-free verification details are saved yet.';
+        }
+
+        return business.a2pFailureReason
+          ? `Current note: ${business.a2pFailureReason}`
+          : business.a2pCampaignSid || business.a2pBrandSid || business.a2pCustomerProfileSid
+            ? `Current saved A2P state: ${business.managedTwilioStatus}`
+            : 'No A2P readiness details are saved yet.';
+      })(),
+      explanation: 'This step records the Twilio messaging compliance path this business is actually using. It is the source of truth for whether launch can proceed.',
+      nextAction:
+        business.messagingComplianceType === MessagingComplianceType.UNKNOWN
+          ? 'Choose the number type first, then record the actual messaging compliance state.'
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          ? 'Record the actual toll-free verification state and any known verification SID or blocker note.'
+          : 'Record the actual messaging compliance state and any known Twilio identifiers or blocker note.',
+      instructions:
+        business.messagingComplianceType === MessagingComplianceType.UNKNOWN
+          ? [
+              'Choose whether this business uses a local 10DLC/A2P number or a toll-free number.',
+              'Once the number type is selected, save the compliance state that matches reality.',
+              'Record any known verification SID, A2P identifiers, or blocker note so the next operator has context.',
+            ]
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          ? [
+              'Confirm that this business is using a toll-free number.',
+              'Save the toll-free verification state that matches reality.',
+              'If Twilio already issued a verification SID, paste it here.',
+              'If the business is blocked, record the blocker in plain English so the next operator does not have to guess.',
+            ]
+          : [
+              'Check Twilio or your rollout notes for the current A2P/compliance state.',
+              'Save the readiness status that best matches reality.',
+              'If Twilio already gave you a customer profile, brand, or campaign SID, paste it here.',
+              'If the business is blocked, record the blocker in plain English so the next operator does not have to guess.',
+            ],
+      verification:
+        business.messagingComplianceType === MessagingComplianceType.UNKNOWN
+          ? ['The number type should be selected before launch readiness is evaluated.']
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          ? [
+              'The saved status should match the real Twilio toll-free verification state.',
+              'If verified, the step should show Verified.',
+              'If blocked, the blocker note should explain why.',
+            ]
+          : ['The saved status should match the real Twilio state.', 'If approved, the step should show Approved.', 'If blocked, the blocker note should explain why.'],
+      latestEvidence:
+        business.messagingComplianceType === MessagingComplianceType.UNKNOWN
+          ? ['No number type is selected yet.']
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          ? [
+              business.tollFreeVerificationSid ? `Verification SID: ${business.tollFreeVerificationSid}` : 'No toll-free verification SID saved.',
+              business.tollFreeVerificationNote ? `Blocker note: ${business.tollFreeVerificationNote}` : 'No toll-free blocker note saved.',
+            ]
+          : [
+              business.a2pCustomerProfileSid ? `Customer profile SID: ${business.a2pCustomerProfileSid}` : 'No customer profile SID saved.',
+              business.a2pBrandSid ? `Brand SID: ${business.a2pBrandSid}` : 'No brand SID saved.',
+              business.a2pCampaignSid ? `Campaign SID: ${business.a2pCampaignSid}` : 'No campaign SID saved.',
+            ],
+      warnings:
+        business.messagingComplianceType === MessagingComplianceType.UNKNOWN
+          ? []
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          ? business.tollFreeVerificationNote
+            ? [business.tollFreeVerificationNote]
+            : []
+          : business.a2pFailureReason
+            ? [business.a2pFailureReason]
+            : [],
+      manualFields:
+        business.messagingComplianceType === MessagingComplianceType.UNKNOWN
+          ? [
+              {
+                key: 'messagingComplianceType',
+                label: 'Number type',
+                placeholder: 'UNKNOWN',
+                helpText: 'Choose the path that matches the actual texting number before evaluating readiness.',
+              },
+            ]
+          : business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          ? [
+              {
+                key: 'messagingComplianceType',
+                label: 'Number type',
+                placeholder: 'TOLL_FREE',
+                helpText: 'Choose the path that matches the actual texting number.',
+              },
+              {
+                key: 'tollFreeVerificationStatus',
+                label: 'Toll-free verification status',
+                placeholder: 'APPROVED',
+                helpText: 'Choose the state that matches the actual Twilio verification readiness.',
+              },
+              {
+                key: 'tollFreeVerificationSid',
+                label: 'Toll-free verification SID',
+                placeholder: 'Verification SID',
+                helpText: 'Optional if Twilio already issued one.',
+              },
+              {
+                key: 'tollFreeVerificationNote',
+                label: 'Blocker note',
+                placeholder: 'Record why launch is pending or blocked.',
+                helpText: 'Use plain English so the next step is obvious.',
+              },
+            ]
+          : [
+              {
+                key: 'messagingComplianceType',
+                label: 'Number type',
+                placeholder: 'LOCAL_A2P',
+                helpText: 'Choose the path that matches the actual texting number.',
+              },
+              {
+                key: 'managedTwilioStatus',
+                label: 'Managed Twilio status',
+                placeholder: 'COMPLIANT_LIVE',
+                helpText: 'Choose the state that matches the actual Twilio readiness.',
+              },
+              {
+                key: 'a2pCustomerProfileSid',
+                label: 'A2P customer profile SID',
+                placeholder: 'BUXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+                helpText: 'Optional if Twilio already issued one.',
+              },
+              {
+                key: 'a2pBrandSid',
+                label: 'A2P brand SID',
+                placeholder: 'BNXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+                helpText: 'Optional if Twilio already issued one.',
+              },
+              {
+                key: 'a2pCampaignSid',
+                label: 'A2P campaign SID',
+                placeholder: 'QEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+                helpText: 'Optional if Twilio already issued one.',
+              },
+              {
+                key: 'a2pFailureReason',
+                label: 'Blocker note',
+                placeholder: 'Record why launch is pending or blocked.',
+                helpText: 'Use plain English so the next step is obvious.',
+              },
+            ],
+      automaticActionLabel:
+        business.messagingComplianceType === MessagingComplianceType.TOLL_FREE
+          ? 'Save toll-free verification status'
+          : business.messagingComplianceType === MessagingComplianceType.LOCAL_A2P
+            ? 'Save A2P status'
+            : 'Save messaging compliance status',
       secondaryAutomaticActionLabel: null,
     },
     {

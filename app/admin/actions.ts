@@ -1,6 +1,14 @@
 'use server';
 
-import { BusinessProvisioningStatus, ManagedTwilioStatus, SubscriptionStatus, TwilioAccountMode, TwilioNumberSetupMode } from '@prisma/client';
+import {
+  BusinessProvisioningStatus,
+  ManagedTwilioStatus,
+  MessagingComplianceType,
+  SubscriptionStatus,
+  TollFreeVerificationStatus,
+  TwilioAccountMode,
+  TwilioNumberSetupMode,
+} from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
@@ -217,13 +225,13 @@ function buildChangedFieldMetadata(changes: Array<{ key: string; label: string; 
     before:
       change.key === 'ownerPhone' || change.key === 'twilioPhoneNumber'
         ? maskPhoneForAudit(change.before)
-        : change.key === 'a2pFailureReason'
+        : change.key === 'a2pFailureReason' || change.key === 'tollFreeVerificationNote'
           ? change.before
         : maskSidForAudit(change.before) ?? change.before,
     after:
       change.key === 'ownerPhone' || change.key === 'twilioPhoneNumber'
         ? maskPhoneForAudit(change.after)
-        : change.key === 'a2pFailureReason'
+        : change.key === 'a2pFailureReason' || change.key === 'tollFreeVerificationNote'
           ? change.after
         : maskSidForAudit(change.after) ?? change.after,
   }));
@@ -773,10 +781,14 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   const twilioPhoneNumber = normalizeOptionalE164Phone(data.twilioPhoneNumber || '', 'Twilio number');
   const twilioPhoneNumberSid = normalizeOptionalSid(data.twilioPhoneNumberSid);
   const twilioMessagingServiceSid = normalizeOptionalSid(data.twilioMessagingServiceSid);
+  const messagingComplianceType = data.messagingComplianceType as MessagingComplianceType;
   const a2pCustomerProfileSid = normalizeOptionalSid(data.a2pCustomerProfileSid);
   const a2pBrandSid = normalizeOptionalSid(data.a2pBrandSid);
   const a2pCampaignSid = normalizeOptionalSid(data.a2pCampaignSid);
   const a2pFailureReason = data.a2pFailureReason?.trim() || null;
+  const tollFreeVerificationStatus = data.tollFreeVerificationStatus as TollFreeVerificationStatus;
+  const tollFreeVerificationSid = normalizeOptionalSid(data.tollFreeVerificationSid);
+  const tollFreeVerificationNote = data.tollFreeVerificationNote?.trim() || null;
   const sidValidationError =
     getOptionalSidPrefixError(twilioSubaccountSid, 'AC', 'Twilio subaccount SID') ||
     getOptionalSidPrefixError(twilioPhoneNumberSid, 'PN', 'Twilio number SID') ||
@@ -825,6 +837,11 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
     existingBusiness.a2pBrandSid !== a2pBrandSid ||
     existingBusiness.a2pCampaignSid !== a2pCampaignSid ||
     existingBusiness.a2pFailureReason !== a2pFailureReason;
+  const tollFreeMetadataChanged =
+    existingBusiness.tollFreeVerificationStatus !== tollFreeVerificationStatus ||
+    existingBusiness.tollFreeVerificationSid !== tollFreeVerificationSid ||
+    existingBusiness.tollFreeVerificationNote !== tollFreeVerificationNote;
+  const messagingComplianceTypeChanged = existingBusiness.messagingComplianceType !== messagingComplianceType;
 
   const changedFields = [
     existingBusiness.twilioAccountMode !== twilioAccountMode
@@ -865,6 +882,14 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
           after: twilioMessagingServiceSid,
         }
       : null,
+    existingBusiness.messagingComplianceType !== messagingComplianceType
+      ? {
+          key: 'messagingComplianceType',
+          label: 'number type',
+          before: existingBusiness.messagingComplianceType,
+          after: messagingComplianceType,
+        }
+      : null,
     existingBusiness.a2pCustomerProfileSid !== a2pCustomerProfileSid
       ? {
           key: 'a2pCustomerProfileSid',
@@ -885,6 +910,30 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
           label: 'A2P failure reason',
           before: existingBusiness.a2pFailureReason,
           after: a2pFailureReason,
+        }
+      : null,
+    existingBusiness.tollFreeVerificationStatus !== tollFreeVerificationStatus
+      ? {
+          key: 'tollFreeVerificationStatus',
+          label: 'toll-free verification status',
+          before: existingBusiness.tollFreeVerificationStatus,
+          after: tollFreeVerificationStatus,
+        }
+      : null,
+    existingBusiness.tollFreeVerificationSid !== tollFreeVerificationSid
+      ? {
+          key: 'tollFreeVerificationSid',
+          label: 'toll-free verification SID',
+          before: existingBusiness.tollFreeVerificationSid,
+          after: tollFreeVerificationSid,
+        }
+      : null,
+    existingBusiness.tollFreeVerificationNote !== tollFreeVerificationNote
+      ? {
+          key: 'tollFreeVerificationNote',
+          label: 'toll-free blocker note',
+          before: existingBusiness.tollFreeVerificationNote,
+          after: tollFreeVerificationNote,
         }
       : null,
     managedTwilioStatusChanged
@@ -910,23 +959,37 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
       twilioPhoneNumberSid,
       twilioPrimaryNumberSid: twilioPhoneNumberSid,
       twilioMessagingServiceSid,
+      messagingComplianceType,
       a2pCustomerProfileSid,
       a2pBrandSid,
       a2pCampaignSid,
       a2pFailureReason,
+      tollFreeVerificationStatus,
+      tollFreeVerificationSid,
+      tollFreeVerificationNote,
       a2pSubmittedAt:
         managedTwilioStatusChanged &&
+        messagingComplianceType === MessagingComplianceType.LOCAL_A2P &&
         ['AWAITING_BUSINESS_VERIFICATION', 'BRAND_SUBMITTED', 'CAMPAIGN_SUBMITTED'].includes(data.managedTwilioStatus)
           ? existingBusiness.a2pSubmittedAt || new Date()
           : existingBusiness.a2pSubmittedAt,
       a2pApprovedAt:
+        messagingComplianceType === MessagingComplianceType.LOCAL_A2P &&
         data.managedTwilioStatus === ManagedTwilioStatus.COMPLIANT_LIVE
           ? existingBusiness.a2pApprovedAt || new Date()
           : managedTwilioStatusChanged
             ? null
             : existingBusiness.a2pApprovedAt,
       ...(twilioMappingChanged ? { twilioWebhookSyncedAt: null } : {}),
-      ...(twilioMappingChanged || a2pMetadataChanged || managedTwilioStatusChanged ? { provisioningLastRunAt: new Date() } : {}),
+      ...(
+        twilioMappingChanged ||
+        a2pMetadataChanged ||
+        tollFreeMetadataChanged ||
+        messagingComplianceTypeChanged ||
+        managedTwilioStatusChanged
+          ? { provisioningLastRunAt: new Date() }
+          : {}
+      ),
       provisioningError: null,
     },
   });

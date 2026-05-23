@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BusinessProvisioningStatus, ManagedTwilioStatus, SubscriptionStatus, TwilioAccountMode, TwilioNumberSetupMode } from '@prisma/client';
+import {
+  BusinessProvisioningStatus,
+  ManagedTwilioStatus,
+  MessagingComplianceType,
+  SubscriptionStatus,
+  TollFreeVerificationStatus,
+  TwilioAccountMode,
+  TwilioNumberSetupMode,
+} from '@prisma/client';
 
 import {
   buildAdminProvisioningChecklist,
@@ -41,11 +49,15 @@ function createBusiness(overrides: Record<string, unknown> = {}) {
     ownerInviteSentAt: null,
     internalNotes: null,
     updatedAt: new Date('2026-04-15T00:00:00.000Z'),
+    messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
     a2pFailureReason: null,
     a2pApprovedAt: null,
     a2pCampaignSid: null,
     a2pBrandSid: null,
     a2pCustomerProfileSid: null,
+    tollFreeVerificationStatus: TollFreeVerificationStatus.NOT_STARTED,
+    tollFreeVerificationSid: null,
+    tollFreeVerificationNote: null,
     ...overrides,
   };
 }

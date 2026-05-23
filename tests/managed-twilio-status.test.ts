@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ManagedTwilioStatus, SubscriptionStatus, TwilioAccountMode } from '@prisma/client';
+import {
+  ManagedTwilioStatus,
+  MessagingComplianceType,
+  SubscriptionStatus,
+  TollFreeVerificationStatus,
+  TwilioAccountMode,
+} from '@prisma/client';
 
 import { getManagedTwilioStatusSummary, resolveManagedTwilioStatus } from '../lib/managed-twilio-status.ts';
 import { getCustomerSystemStatus } from '../lib/system-status.ts';
@@ -12,6 +18,7 @@ function createManagedBusiness(
   return {
     twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
     managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
     twilioSubaccountSid: null,
     twilioPrimaryPhoneNumber: null,
     twilioPhoneNumber: null,
@@ -24,6 +31,9 @@ function createManagedBusiness(
     a2pCampaignSid: null,
     a2pBrandSid: null,
     a2pCustomerProfileSid: null,
+    tollFreeVerificationStatus: TollFreeVerificationStatus.NOT_STARTED,
+    tollFreeVerificationSid: null,
+    tollFreeVerificationNote: null,
     subscriptionStatus: SubscriptionStatus.ACTIVE,
     forwardingNumber: '+15557654321',
     notifyPhone: '+15551234567',
@@ -136,4 +146,52 @@ test('failed review produces an attention-required summary', () => {
   assert.equal(summary.attentionRequired, true);
   assert.equal(summary.blockers.some((blocker) => blocker.key === 'compliance_rejected'), true);
   assert.match(summary.description, /rejected|website/i);
+});
+
+test('verified toll-free setup becomes messaging-ready without A2P identifiers', () => {
+  const summary = getManagedTwilioStatusSummary(
+    createManagedBusiness({
+      messagingComplianceType: MessagingComplianceType.TOLL_FREE,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+      twilioSubaccountSid: null,
+      twilioAccountMode: TwilioAccountMode.MAIN_ACCOUNT,
+      twilioPrimaryPhoneNumber: '+15558889999',
+      twilioPhoneNumber: '+15558889999',
+      twilioPrimaryNumberSid: 'PN999',
+      twilioPhoneNumberSid: 'PN999',
+      twilioMessagingServiceSid: 'MG999',
+      twilioWebhookSyncedAt: new Date('2026-04-16T12:00:00.000Z'),
+      tollFreeVerificationStatus: TollFreeVerificationStatus.APPROVED,
+      tollFreeVerificationSid: 'tfv_123',
+    })
+  );
+
+  assert.equal(summary.complianceReady, true);
+  assert.equal(summary.messagingReady, true);
+  assert.equal(summary.label, 'Verified');
+});
+
+test('unknown compliance type blocks readiness with a clear next step', () => {
+  const summary = getManagedTwilioStatusSummary(
+    createManagedBusiness({
+      messagingComplianceType: MessagingComplianceType.UNKNOWN,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+      twilioSubaccountSid: 'AC123',
+      twilioPrimaryPhoneNumber: '+15550001111',
+      twilioPhoneNumber: '+15550001111',
+      twilioPrimaryNumberSid: 'PN123',
+      twilioPhoneNumberSid: 'PN123',
+      twilioMessagingServiceSid: 'MG123',
+      twilioWebhookSyncedAt: new Date('2026-04-16T12:00:00.000Z'),
+      a2pCustomerProfileSid: null,
+      a2pBrandSid: null,
+      a2pCampaignSid: null,
+      a2pFailureReason: null,
+      a2pApprovedAt: null,
+    })
+  );
+
+  assert.equal(summary.complianceReady, false);
+  assert.equal(summary.complianceTypeUnknown, true);
+  assert.match(summary.nextStep, /choose whether this business uses/i);
 });

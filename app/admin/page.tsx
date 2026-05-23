@@ -75,10 +75,21 @@ function getOverallStatus(params: {
   return { label: 'Pending', variant: 'secondary' as const };
 }
 
-function getA2pStateLabel(params: { complianceReady: boolean; attentionRequired: boolean; complianceStarted: boolean }) {
-  if (params.complianceReady) return { label: 'Approved', variant: 'success' as const };
+function getA2pStateLabel(params: {
+  complianceReady: boolean;
+  attentionRequired: boolean;
+  complianceStarted: boolean;
+  complianceTypeUnknown: boolean;
+  complianceTypeLabel: string;
+}) {
+  if (params.complianceReady) {
+    return { label: params.complianceTypeLabel === 'Toll-free verification' ? 'Verified' : 'Approved', variant: 'success' as const };
+  }
   if (params.attentionRequired) return { label: 'Needs attention', variant: 'destructive' as const };
-  if (params.complianceStarted) return { label: 'Pending', variant: 'secondary' as const };
+  if (params.complianceTypeUnknown) return { label: 'Not selected', variant: 'outline' as const };
+  if (params.complianceStarted) {
+    return { label: params.complianceTypeLabel === 'Toll-free verification' ? 'Pending verification' : 'Pending', variant: 'secondary' as const };
+  }
   return { label: 'Not started', variant: 'outline' as const };
 }
 
@@ -372,6 +383,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       complianceReady: managedSummary.complianceReady,
       attentionRequired: managedSummary.attentionRequired,
       complianceStarted: managedSummary.complianceStarted,
+      complianceTypeUnknown: managedSummary.complianceTypeUnknown,
+      complianceTypeLabel: managedSummary.complianceTypeLabel,
     });
     const lastIssue = buildAdminBusinessIssue({
       events: latestIssueMap.has(business.id) ? [latestIssueMap.get(business.id)!] : [],
@@ -462,7 +475,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
   const summaryStats = [
     { label: 'Needs attention', value: businessRows.filter((row) => row.onboardingConfidence.state === 'needs_attention').length },
-    { label: 'Waiting on A2P', value: businessRows.filter((row) => row.onboardingConfidence.state === 'waiting_on_a2p').length },
+    { label: 'Waiting on compliance', value: businessRows.filter((row) => row.onboardingConfidence.state === 'waiting_on_a2p').length },
     { label: 'Ready for live', value: businessRows.filter((row) => row.onboardingConfidence.state === 'ready_to_go_live').length },
     { label: 'Live with warnings', value: businessRows.filter((row) => row.onboardingConfidence.state === 'live_with_warnings').length },
   ];
@@ -936,7 +949,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                         <p className="mt-1 text-xs text-muted-foreground">{onboardingConfidence.summary}</p>
                       </div>
                       <div>
-                        <p className="font-medium">A2P</p>
+                        <p className="font-medium">Messaging compliance</p>
                         <div className="mt-1 flex flex-wrap gap-2">
                           <Badge variant={a2pState.variant}>{a2pState.label}</Badge>
                         </div>
