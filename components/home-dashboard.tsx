@@ -209,17 +209,15 @@ function LeadAttentionCard({
 function RecoveryQueueRow({
   lead,
   onTestRecoveryFlow,
-  secondaryAction = false,
 }: {
   lead?: DashboardLeadCard;
   onTestRecoveryFlow: () => void;
-  secondaryAction?: boolean;
 }) {
   if (!lead) {
     return (
       <div className="rounded-2xl border border-dashed bg-muted/20 p-6">
         <p className="text-sm font-medium text-foreground">Your recovered leads will appear here after the first missed call.</p>
-        <Button className="mt-4" onClick={onTestRecoveryFlow} size="sm" variant={secondaryAction ? 'ghost' : 'outline'}>
+        <Button className="mt-4" onClick={onTestRecoveryFlow} size="sm" variant="outline">
           Test recovery flow
         </Button>
       </div>
@@ -284,8 +282,8 @@ export function HomeDashboard({
     () => (showingSampleLeads ? buildSampleMetrics(sampleLeads) : metrics),
     [metrics, sampleLeads, showingSampleLeads],
   );
-  const attentionIsEmpty = displayedAttentionLeads.length === 0;
   const queueIsEmpty = displayedQueueLeads.length === 0;
+  const attentionIsEmpty = displayedAttentionLeads.length === 0;
 
   function testRecoveryFlow() {
     setShowSampleLeads(true);
@@ -344,7 +342,7 @@ export function HomeDashboard({
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_340px]">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="space-y-6">
           <Card className="bg-card/95">
             <CardHeader>
@@ -384,7 +382,7 @@ export function HomeDashboard({
             </CardHeader>
             <CardContent className="space-y-3">
               {queueIsEmpty ? (
-                <RecoveryQueueRow onTestRecoveryFlow={testRecoveryFlow} secondaryAction={attentionIsEmpty} />
+                <RecoveryQueueRow onTestRecoveryFlow={testRecoveryFlow} />
               ) : (
                 displayedQueueLeads.map((lead) => <RecoveryQueueRow key={lead.id} lead={lead} onTestRecoveryFlow={testRecoveryFlow} />)
               )}
@@ -392,7 +390,7 @@ export function HomeDashboard({
           </Card>
         </div>
 
-        <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+        <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
           {showSetupChecklist ? (
             <Card className="border-primary/15 bg-gradient-to-br from-card via-card to-primary/5">
               <CardHeader className="pb-4">
