@@ -1,6 +1,6 @@
 import { LeadReadiness, LeadStatus } from '@prisma/client';
 
-export const DEFAULT_AVERAGE_JOB_VALUE = 500;
+import { averageJobValueCentsToDollars, DEFAULT_AVERAGE_JOB_VALUE } from '@/lib/business-settings';
 
 export type RecoveryMetricLead = {
   status: LeadStatus;
@@ -40,7 +40,9 @@ export function estimateRevenueSaved(input: {
   return bookedRevenue + pipelineRevenue;
 }
 
-export function buildRecoveryMetrics(leads: RecoveryMetricLead[], averageJobValue = DEFAULT_AVERAGE_JOB_VALUE): RecoveryMetrics {
+export function buildRecoveryMetrics(leads: RecoveryMetricLead[], averageJobValueCents?: number | null): RecoveryMetrics {
+  const hasConfiguredAverageJobValue = typeof averageJobValueCents === 'number' && averageJobValueCents > 0;
+  const averageJobValue = averageJobValueCentsToDollars(averageJobValueCents) ?? DEFAULT_AVERAGE_JOB_VALUE;
   const missedCallsCaptured = leads.length;
   const recoveredLeads = leads.filter(isRecoveredLead).length;
   const bookedJobs = leads.filter((lead) => lead.status === LeadStatus.BOOKED).length;
@@ -55,7 +57,7 @@ export function buildRecoveryMetrics(leads: RecoveryMetricLead[], averageJobValu
       averageJobValue,
     }),
     averageJobValue,
-    usesDefaultAverageJobValue: averageJobValue === DEFAULT_AVERAGE_JOB_VALUE,
+    usesDefaultAverageJobValue: !hasConfiguredAverageJobValue,
   };
 }
 

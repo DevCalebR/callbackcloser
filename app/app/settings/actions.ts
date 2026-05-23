@@ -8,6 +8,7 @@ import { ManagedTwilioStatus, TwilioAccountMode, TwilioNumberSetupMode } from '@
 import { requireAdmin } from '@/lib/admin';
 import { logAuditEvent } from '@/lib/audit-log';
 import { requireBusiness } from '@/lib/auth';
+import { averageJobValueDollarsToCents } from '@/lib/business-settings';
 import { db } from '@/lib/db';
 import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
@@ -86,6 +87,7 @@ export async function saveBusinessSettingsAction(formData: FormData) {
       forwardingNumber: normalizePhoneNumber(parsed.data.forwardingNumber),
       notifyPhone: normalizePhoneNumber(parsed.data.notifyPhone || '') || null,
       missedCallSeconds: parsed.data.missedCallSeconds,
+      averageJobValueCents: averageJobValueDollarsToCents(parsed.data.averageJobValue),
       serviceLabel1: parsed.data.serviceLabel1,
       serviceLabel2: parsed.data.serviceLabel2,
       serviceLabel3: parsed.data.serviceLabel3,
@@ -115,6 +117,7 @@ export async function saveBusinessSettingsAction(formData: FormData) {
   });
 
   revalidatePath('/app/settings');
+  revalidatePath('/app');
   revalidatePath('/app/leads');
   revalidatePath(`/app/leads`);
   revalidatePath('/app/call-flow');

@@ -18,6 +18,7 @@ import { db } from '@/lib/db';
 import { getManagedTextingNumber, managedTwilioStatusLabels } from '@/lib/managed-twilio-status';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { averageJobValueCentsToDollars } from '@/lib/business-settings';
 
 import {
   buyTwilioNumberAction,
@@ -85,6 +86,7 @@ function getBadgeVariant(tone: TwilioSetupTone) {
 
 export default async function SettingsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
+  const averageJobValue = averageJobValueCentsToDollars(business.averageJobValueCents);
   const demoMode = isPortfolioDemoMode();
   const adminSession = demoMode ? null : await getAdminSession();
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
@@ -603,6 +605,20 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <div>
               <Label htmlFor="settingsMissedCallSeconds">Missed-call timeout (seconds)</Label>
               <Input id="settingsMissedCallSeconds" name="missedCallSeconds" type="number" min={5} max={90} defaultValue={business.missedCallSeconds} required />
+            </div>
+            <div>
+              <Label htmlFor="settingsAverageJobValue">Average job value</Label>
+              <Input
+                id="settingsAverageJobValue"
+                name="averageJobValue"
+                type="number"
+                min={1}
+                max={100000}
+                step={1}
+                defaultValue={averageJobValue ?? ''}
+                placeholder="500"
+              />
+              <p className="mt-2 text-xs text-muted-foreground">Used to estimate recovered revenue on your dashboard.</p>
             </div>
             <div>
               <Label htmlFor="settingsServiceLabel1">Service option 1</Label>

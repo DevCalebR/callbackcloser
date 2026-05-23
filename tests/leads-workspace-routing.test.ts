@@ -20,6 +20,10 @@ test('lead inbox stays list-only while lead detail is the main action workspace'
   assert.match(homeDashboard, /Missed-call leads that need action/);
   assert.match(homeDashboard, /Leads needing attention first/);
   assert.match(homeDashboard, /Today&apos;s recovery queue/);
+  assert.match(homeDashboard, /Test recovery flow/);
+  assert.doesNotMatch(homeDashboard, /Run test missed call/);
+  assert.doesNotMatch(homeDashboard, /Run demo lead/);
+  assert.doesNotMatch(homeDashboard, /Test demo flow/);
 
   assert.match(leadsPage, /Lead inbox/);
   assert.match(leadsPage, /LeadConversionSummaryCard/);

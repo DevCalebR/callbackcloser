@@ -146,7 +146,7 @@ export default async function AppHomePage({
 
   const successfulLeadCount = allLeads.filter((lead) => lead.ownerNotifiedAt || lead.notifiedAt).length;
   const systemStatus = getCustomerSystemStatus(business, successfulLeadCount);
-  const metrics = buildRecoveryMetrics(allLeads);
+  const metrics = buildRecoveryMetrics(allLeads, business.averageJobValueCents);
 
   const attentionLeads = allLeads
     .filter((lead) => isLeadOpenStatus(lead.status))
@@ -164,7 +164,7 @@ export default async function AppHomePage({
 
       return rightPriority.activityAt - leftPriority.activityAt;
     })
-    .slice(0, 5)
+    .slice(0, 4)
     .map((lead) => toLeadCard(lead, demoMode));
 
   const queueAnchor =
@@ -191,16 +191,16 @@ export default async function AppHomePage({
       key: 'phone-line',
       label: 'Phone line connected',
       detail: phoneLineConnected
-        ? 'CallbackCloser has a business line ready for missed-call recovery.'
-        : 'Connect the business line that should trigger missed-call recovery.',
+        ? 'Business line ready.'
+        : 'Connect the line that should trigger missed-call recovery.',
       state: phoneLineConnected ? ('complete' as const) : ('pending' as const),
     },
     {
       key: 'owner-alerts',
       label: 'Owner alerts ready',
       detail: ownerAlertsReady
-        ? 'The owner alert route is ready for qualified lead handoffs.'
-        : 'Add an owner phone or email so lead handoffs land in the right place.',
+        ? 'Owner handoff route ready.'
+        : 'Add an owner phone or email for lead handoffs.',
       state: ownerAlertsReady ? ('complete' as const) : ('pending' as const),
     },
     {
@@ -208,7 +208,7 @@ export default async function AppHomePage({
       label: 'Texting activation in progress',
       detail:
         systemStatus.key === 'live'
-          ? 'Texting is live and recovering missed calls now.'
+          ? 'Texting is live.'
           : systemStatus.description,
       state:
         systemStatus.key === 'live'
