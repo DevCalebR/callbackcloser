@@ -46,7 +46,7 @@ export type ManagedTwilioSummary = {
 export const messagingComplianceTypeLabels: Record<MessagingComplianceType, string> = {
   UNKNOWN: 'Unknown / not selected',
   LOCAL_A2P: 'Local 10DLC / A2P',
-  TOLL_FREE: 'Toll-free verification',
+  TOLL_FREE_VERIFICATION: 'Toll-free verification',
 };
 
 export function getMessagingComplianceTypeLabel(type: MessagingComplianceType) {
@@ -181,7 +181,7 @@ function resolveMessagingComplianceType(
   }
 
   if (business.tollFreeVerificationSid || business.tollFreeVerificationNote) {
-    return MessagingComplianceType.TOLL_FREE;
+    return MessagingComplianceType.TOLL_FREE_VERIFICATION;
   }
 
   return MessagingComplianceType.UNKNOWN;

@@ -206,7 +206,7 @@ function formatMessagingComplianceDetail(business: SetupBusiness) {
     return {
       complete: false,
       detail:
-        complianceType === MessagingComplianceType.TOLL_FREE
+        complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? 'Record whether toll-free verification is not started, pending review, verified, or blocked so launch status stays truthful.'
           : 'Record whether A2P is not started, pending review, approved, or blocked so launch status stays truthful.',
       stateLabel: 'Needs update',
@@ -220,10 +220,10 @@ function formatMessagingComplianceDetail(business: SetupBusiness) {
       detail:
         complianceType === MessagingComplianceType.LOCAL_A2P && business.a2pApprovedAt
           ? `Recorded as approved on ${business.a2pApprovedAt.toLocaleDateString()}.`
-          : complianceType === MessagingComplianceType.TOLL_FREE
+          : complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
             ? 'Recorded as verified for live messaging.'
             : 'Recorded as approved for live messaging.',
-      stateLabel: complianceType === MessagingComplianceType.TOLL_FREE ? 'Verified' : 'Approved',
+      stateLabel: complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION ? 'Verified' : 'Approved',
       tone: 'success' as const,
     };
   }
@@ -293,7 +293,7 @@ export function buildTwilioSetupFlow(params: {
     liveBlockers.push(
       managedSummary.complianceTypeUnknown
         ? 'choose the number type'
-        : managedSummary.complianceType === MessagingComplianceType.TOLL_FREE
+        : managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? 'clear toll-free verification'
           : 'clear A2P approval'
     );

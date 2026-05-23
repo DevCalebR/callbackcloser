@@ -53,7 +53,7 @@ export function MessagingComplianceFields({
   const submitLabel =
     complianceType === 'LOCAL_A2P'
       ? 'Save A2P status'
-      : complianceType === 'TOLL_FREE'
+      : complianceType === 'TOLL_FREE_VERIFICATION'
         ? 'Save toll-free verification status'
         : 'Save messaging compliance status';
 
@@ -109,7 +109,7 @@ export function MessagingComplianceFields({
         </div>
       </div>
 
-      <div className={cn('contents', complianceType === 'TOLL_FREE' ? '' : 'hidden')}>
+      <div className={cn('contents', complianceType === 'TOLL_FREE_VERIFICATION' ? '' : 'hidden')}>
         <div className="space-y-2">
           <Label htmlFor={`${idPrefix}TollFreeVerificationStatus`}>Toll-free verification status</Label>
           <Select

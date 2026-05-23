@@ -48,7 +48,7 @@ export default async function CallFlowPage() {
         ? {
             key: 'compliance',
             label:
-              managedTwilioSummary.complianceType === 'TOLL_FREE'
+              managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
                 ? 'Toll-free verification'
                 : managedTwilioSummary.complianceTypeUnknown
                   ? 'Number type'
@@ -99,10 +99,10 @@ export default async function CallFlowPage() {
     {
       key: 'compliance',
       label: managedTwilioSummary.complianceReady
-        ? managedTwilioSummary.complianceType === 'TOLL_FREE'
+        ? managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
           ? 'Toll-free verification complete'
           : 'A2P approved'
-        : managedTwilioSummary.complianceType === 'TOLL_FREE'
+        : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
           ? 'Toll-free verification in progress'
           : managedTwilioSummary.complianceTypeUnknown
             ? 'Number type still needed'
@@ -147,7 +147,7 @@ export default async function CallFlowPage() {
         title: 'The caller gets a text right away',
         detail: managedTwilioSummary.complianceReady
           ? 'The conversation collects the service type, urgency, ZIP, callback timing, and optional name without extra admin work.'
-          : managedTwilioSummary.complianceType === 'TOLL_FREE'
+          : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
             ? 'The automated SMS handoff stays pending until the managed Twilio setup and toll-free verification are complete.'
             : managedTwilioSummary.complianceTypeUnknown
               ? 'The automated SMS handoff stays pending until the number type is selected and messaging compliance is recorded.'
