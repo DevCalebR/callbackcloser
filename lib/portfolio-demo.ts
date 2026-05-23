@@ -45,6 +45,7 @@ const demoBusiness: Business = {
   ownerInviteSentAt: null,
   internalNotes: null,
   missedCallSeconds: 22,
+  averageJobValueCents: 75_000,
   serviceLabel1: 'Repair',
   serviceLabel2: 'Install',
   serviceLabel3: 'Maintenance',

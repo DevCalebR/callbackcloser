@@ -8,7 +8,8 @@ import { updateLeadStatusAction } from '@/app/app/leads/actions';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { DEFAULT_AVERAGE_JOB_VALUE, estimateRevenueSaved, formatCurrency, type RecoveryMetrics } from '@/lib/dashboard-home';
+import { DEFAULT_AVERAGE_JOB_VALUE } from '@/lib/business-settings';
+import { estimateRevenueSaved, formatCurrency, type RecoveryMetrics } from '@/lib/dashboard-home';
 import { getLeadStatusBadgeVariant, leadStatusLabels } from '@/lib/lead-presenters';
 import { cn } from '@/lib/utils';
 
@@ -130,7 +131,7 @@ function LeadAttentionCard({
   onDemoAction: (leadId: string, action: 'call' | 'text' | 'booked') => void;
 }) {
   return (
-    <div className="rounded-3xl border bg-background/90 p-5 shadow-sm">
+    <div className="rounded-2xl border bg-background/95 p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -152,12 +153,12 @@ function LeadAttentionCard({
         ) : null}
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)]">
-        <div className="rounded-2xl bg-muted/30 p-4">
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="rounded-2xl bg-muted/30 p-3.5">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">AI Summary</p>
           <p className="mt-2 text-sm text-foreground">{lead.summary}</p>
         </div>
-        <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+        <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3.5">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Recommended next action</p>
           <p className="mt-2 text-sm font-medium text-foreground">{lead.recommendedNextAction}</p>
         </div>
@@ -165,25 +166,27 @@ function LeadAttentionCard({
 
       <div className="mt-4 flex flex-wrap gap-3">
         {lead.callHref ? (
-          <Link className={buttonVariants()} href={lead.callHref}>
+          <Link className={buttonVariants({ size: 'sm' })} href={lead.callHref}>
             Call Now
           </Link>
         ) : (
-          <Button onClick={() => onDemoAction(lead.id, 'call')}>Call Now</Button>
+          <Button onClick={() => onDemoAction(lead.id, 'call')} size="sm">
+            Call Now
+          </Button>
         )}
 
         {lead.sendTextHref ? (
-          <Link className={buttonVariants({ variant: 'outline' })} href={lead.sendTextHref}>
+          <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={lead.sendTextHref}>
             Send Text
           </Link>
         ) : (
-          <Button onClick={() => onDemoAction(lead.id, 'text')} variant="outline">
+          <Button onClick={() => onDemoAction(lead.id, 'text')} size="sm" variant="outline">
             Send Text
           </Button>
         )}
 
         {lead.sourceLabel ? (
-          <Button onClick={() => onDemoAction(lead.id, 'booked')} variant="secondary">
+          <Button onClick={() => onDemoAction(lead.id, 'booked')} size="sm" variant="secondary">
             Mark Booked
           </Button>
         ) : (
@@ -191,7 +194,7 @@ function LeadAttentionCard({
             <input type="hidden" name="leadId" value={lead.id} />
             <input type="hidden" name="status" value="BOOKED" />
             <input type="hidden" name="redirectTo" value={redirectTo} />
-            <Button type="submit" variant="secondary">
+            <Button size="sm" type="submit" variant="secondary">
               Mark Booked
             </Button>
           </form>
@@ -205,17 +208,19 @@ function LeadAttentionCard({
 
 function RecoveryQueueRow({
   lead,
-  onRunDemoLead,
+  onTestRecoveryFlow,
+  secondaryAction = false,
 }: {
   lead?: DashboardLeadCard;
-  onRunDemoLead: () => void;
+  onTestRecoveryFlow: () => void;
+  secondaryAction?: boolean;
 }) {
   if (!lead) {
     return (
       <div className="rounded-2xl border border-dashed bg-muted/20 p-6">
         <p className="text-sm font-medium text-foreground">Your recovered leads will appear here after the first missed call.</p>
-        <Button className="mt-4" onClick={onRunDemoLead} variant="outline">
-          Run demo lead
+        <Button className="mt-4" onClick={onTestRecoveryFlow} size="sm" variant={secondaryAction ? 'ghost' : 'outline'}>
+          Test recovery flow
         </Button>
       </div>
     );
@@ -279,8 +284,10 @@ export function HomeDashboard({
     () => (showingSampleLeads ? buildSampleMetrics(sampleLeads) : metrics),
     [metrics, sampleLeads, showingSampleLeads],
   );
+  const attentionIsEmpty = displayedAttentionLeads.length === 0;
+  const queueIsEmpty = displayedQueueLeads.length === 0;
 
-  function runDemoLead() {
+  function testRecoveryFlow() {
     setShowSampleLeads(true);
     setDemoNotice('Sample leads are now visible on this dashboard. These cards stay in the browser only and do not affect production data.');
   }
@@ -312,14 +319,14 @@ export function HomeDashboard({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {feedback.error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{feedback.error}</div> : null}
       {feedback.saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead updated.</div> : null}
       {demoNotice ? <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">{demoNotice}</div> : null}
 
       <section className="space-y-4">
         <Badge variant="outline">Lead recovery command center</Badge>
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Missed-call leads that need action</h1>
             <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
@@ -331,13 +338,13 @@ export function HomeDashboard({
               Open lead inbox
             </Link>
             <Link className={buttonVariants({ variant: 'outline' })} href={simulatorHref}>
-              Run test missed call
+              Test recovery flow
             </Link>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_340px]">
         <div className="space-y-6">
           <Card className="bg-card/95">
             <CardHeader>
@@ -345,20 +352,22 @@ export function HomeDashboard({
               <CardDescription>These missed callers are the clearest path to recovered jobs right now.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {displayedAttentionLeads.length === 0 ? (
+              {attentionIsEmpty ? (
                 <div className="rounded-2xl border border-dashed bg-muted/20 p-6">
                   <p className="text-sm font-medium text-foreground">No real leads need action yet.</p>
                   <p className="mt-2 text-sm text-muted-foreground">
                     Once CallbackCloser captures a missed call, the lead will appear here with a summary, urgency level, and one-click follow-up actions.
                   </p>
-                  <Button className="mt-4" onClick={runDemoLead} variant="outline">
-                    Run demo lead
+                  <Button className="mt-4" onClick={testRecoveryFlow} variant="outline">
+                    Test recovery flow
                   </Button>
                 </div>
               ) : (
-                displayedAttentionLeads.map((lead) => (
-                  <LeadAttentionCard key={lead.id} lead={lead} onDemoAction={handleDemoAction} redirectTo="/app" />
-                ))
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {displayedAttentionLeads.map((lead) => (
+                    <LeadAttentionCard key={lead.id} lead={lead} onDemoAction={handleDemoAction} redirectTo="/app" />
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -374,41 +383,41 @@ export function HomeDashboard({
               </Link>
             </CardHeader>
             <CardContent className="space-y-3">
-              {displayedQueueLeads.length === 0 ? (
-                <RecoveryQueueRow onRunDemoLead={runDemoLead} />
+              {queueIsEmpty ? (
+                <RecoveryQueueRow onTestRecoveryFlow={testRecoveryFlow} secondaryAction={attentionIsEmpty} />
               ) : (
-                displayedQueueLeads.map((lead) => <RecoveryQueueRow key={lead.id} lead={lead} onRunDemoLead={runDemoLead} />)
+                displayedQueueLeads.map((lead) => <RecoveryQueueRow key={lead.id} lead={lead} onTestRecoveryFlow={testRecoveryFlow} />)
               )}
             </CardContent>
           </Card>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
           {showSetupChecklist ? (
-            <Card className="border-primary/20 bg-gradient-to-br from-card via-card to-primary/5">
-              <CardHeader>
+            <Card className="border-primary/15 bg-gradient-to-br from-card via-card to-primary/5">
+              <CardHeader className="pb-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <CardTitle>Finish setup to start recovering missed calls</CardTitle>
+                    <CardTitle>Finish setup</CardTitle>
                     <CardDescription>{getProgressText(setupChecklistItems)}</CardDescription>
                   </div>
                   <Badge variant="outline">{getProgressText(setupChecklistItems)}</Badge>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-2.5">
                 {setupChecklistItems.map((item) => {
                   const badge = getSetupItemBadge(item);
                   return (
-                    <div key={item.key} className="rounded-2xl border bg-background/80 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="font-medium">{item.label}</p>
+                    <div key={item.key} className="rounded-2xl border bg-background/80 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium">{item.label}</p>
                         <Badge variant={badge.variant}>{badge.label}</Badge>
                       </div>
-                      <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
                     </div>
                   );
                 })}
-                <Link className={cn(buttonVariants(), 'w-full')} href={finishActivationHref}>
+                <Link className={cn(buttonVariants({ size: 'sm' }), 'w-full')} href={finishActivationHref}>
                   Finish activation
                 </Link>
               </CardContent>
@@ -416,7 +425,7 @@ export function HomeDashboard({
           ) : null}
 
           <Card className="bg-card/95">
-            <CardHeader>
+            <CardHeader className="pb-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <CardTitle>Recovery numbers</CardTitle>
@@ -429,21 +438,21 @@ export function HomeDashboard({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border bg-background/90 p-4">
+                <div className="rounded-2xl border bg-background/90 p-3.5">
                   <p className="text-sm text-muted-foreground">Missed calls captured</p>
-                  <p className="mt-2 text-3xl font-semibold tracking-tight">{displayedMetrics.missedCallsCaptured}</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight">{displayedMetrics.missedCallsCaptured}</p>
                 </div>
-                <div className="rounded-2xl border bg-background/90 p-4">
+                <div className="rounded-2xl border bg-background/90 p-3.5">
                   <p className="text-sm text-muted-foreground">Recovered leads</p>
-                  <p className="mt-2 text-3xl font-semibold tracking-tight">{displayedMetrics.recoveredLeads}</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight">{displayedMetrics.recoveredLeads}</p>
                 </div>
-                <div className="rounded-2xl border bg-background/90 p-4">
+                <div className="rounded-2xl border bg-background/90 p-3.5">
                   <p className="text-sm text-muted-foreground">Booked jobs</p>
-                  <p className="mt-2 text-3xl font-semibold tracking-tight">{displayedMetrics.bookedJobs}</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight">{displayedMetrics.bookedJobs}</p>
                 </div>
-                <div className="rounded-2xl border bg-background/90 p-4">
+                <div className="rounded-2xl border bg-background/90 p-3.5">
                   <p className="text-sm text-muted-foreground">Estimated revenue saved</p>
-                  <p className="mt-2 text-3xl font-semibold tracking-tight">{formatCurrency(displayedMetrics.estimatedRevenueSaved)}</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight">{formatCurrency(displayedMetrics.estimatedRevenueSaved)}</p>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">Revenue saved is estimated from booked/recovered leads and your average job value.</p>
@@ -451,18 +460,20 @@ export function HomeDashboard({
                 <p className="text-xs text-muted-foreground">
                   Using the default {formatCurrency(displayedMetrics.averageJobValue)} average job value until a business-specific average is configured.
                 </p>
-              ) : null}
+              ) : (
+                <p className="text-xs text-muted-foreground">Using your configured {formatCurrency(displayedMetrics.averageJobValue)} average job value.</p>
+              )}
             </CardContent>
           </Card>
 
           <Card className="bg-card/95">
-            <CardHeader>
-              <CardTitle>Test your missed-call recovery flow</CardTitle>
+            <CardHeader className="pb-4">
+              <CardTitle>Test recovery flow</CardTitle>
               <CardDescription>Send yourself a sample missed-call lead so you can see the text flow, owner alert, and dashboard update.</CardDescription>
             </CardHeader>
             <CardContent>
               <Link className={cn(buttonVariants(), 'w-full')} href={simulatorHref}>
-                Test demo flow
+                Test recovery flow
               </Link>
             </CardContent>
           </Card>

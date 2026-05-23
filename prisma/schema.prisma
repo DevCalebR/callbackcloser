@@ -23,6 +23,7 @@ model Business {
   ownerInviteSentAt           DateTime?
   internalNotes               String?
   missedCallSeconds           Int                @default(20)
+  averageJobValueCents        Int?
   serviceLabel1               String             @default("Repair")
   serviceLabel2               String             @default("Install")
   serviceLabel3               String             @default("Maintenance")

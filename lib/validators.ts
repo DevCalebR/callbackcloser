@@ -1,7 +1,23 @@
 import { z } from 'zod';
 
+import { MAX_AVERAGE_JOB_VALUE } from '@/lib/business-settings';
+
 const twilioAccountModeSchema = z.enum(['MAIN_ACCOUNT', 'BUSINESS_SUBACCOUNT']);
 const twilioNumberSetupModeSchema = z.enum(['NEW_NUMBER', 'EXISTING_NUMBER']);
+const averageJobValueSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    return Number(trimmed);
+  },
+  z
+    .number({ invalid_type_error: 'Average job value must be a whole number.' })
+    .int('Average job value must be a whole number.')
+    .min(1, 'Average job value must be at least $1.')
+    .max(MAX_AVERAGE_JOB_VALUE, `Average job value must be ${MAX_AVERAGE_JOB_VALUE.toLocaleString()} or less.`)
+    .optional(),
+);
 
 export const onboardingSchema = z.object({
   name: z.string().min(2).max(120),
@@ -18,6 +34,7 @@ export const onboardingSchema = z.object({
 
 export const businessSettingsSchema = onboardingSchema.extend({
   ownerEmail: z.string().email().optional().or(z.literal('')),
+  averageJobValue: averageJobValueSchema,
   notifySms: z.coerce.boolean().optional().default(false),
   notifyEmail: z.coerce.boolean().optional().default(false),
   notifyInApp: z.coerce.boolean().optional().default(false),
