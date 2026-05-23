@@ -64,13 +64,13 @@ test('shared helpers keep generic Twilio SID validation strict', () => {
   assert.equal(normalizeOptionalSid('   '), null);
 });
 
-test('settings save schema accepts toll-free verification enum and rejects stale toll-free enum values', () => {
+test('settings save schema accepts toll-free verification enum and normalizes stale toll-free enum values', () => {
   const valid = businessTwilioAdminOverrideSchema.safeParse({
     messagingComplianceType: 'TOLL_FREE_VERIFICATION',
     tollFreeVerificationStatus: 'APPROVED',
     tollFreeVerificationSid: 'BUd2b9b67869f08c15f570d9f81d920dad',
   });
-  const invalid = businessTwilioAdminOverrideSchema.safeParse({
+  const legacy = businessTwilioAdminOverrideSchema.safeParse({
     messagingComplianceType: 'TOLL_FREE',
     tollFreeVerificationStatus: 'APPROVED',
     tollFreeVerificationSid: 'BUd2b9b67869f08c15f570d9f81d920dad',
@@ -78,5 +78,6 @@ test('settings save schema accepts toll-free verification enum and rejects stale
 
   assert.equal(valid.success, true);
   assert.equal(valid.success && valid.data.messagingComplianceType, 'TOLL_FREE_VERIFICATION');
-  assert.equal(invalid.success, false);
+  assert.equal(legacy.success, true);
+  assert.equal(legacy.success && legacy.data.messagingComplianceType, 'TOLL_FREE_VERIFICATION');
 });
