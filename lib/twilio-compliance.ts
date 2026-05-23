@@ -34,7 +34,7 @@ export function getMessagingComplianceSidValidationError(input: {
     );
   }
 
-  if (input.messagingComplianceType === MessagingComplianceType.TOLL_FREE) {
+  if (input.messagingComplianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION) {
     return getOptionalTwilioSidError(input.tollFreeVerificationSid, 'BU', 'Toll-free verification SID');
   }
 

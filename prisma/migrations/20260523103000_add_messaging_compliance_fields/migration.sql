@@ -1,7 +1,7 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'MessagingComplianceType') THEN
-    CREATE TYPE "MessagingComplianceType" AS ENUM ('UNKNOWN', 'LOCAL_A2P', 'TOLL_FREE');
+    CREATE TYPE "MessagingComplianceType" AS ENUM ('UNKNOWN', 'LOCAL_A2P', 'TOLL_FREE_VERIFICATION');
   END IF;
 END $$;
 

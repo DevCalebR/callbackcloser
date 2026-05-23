@@ -328,7 +328,7 @@ export function buildAdminNextStep(params: {
     };
   }
 
-  if (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE && !managedSummary.complianceStarted) {
+  if (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION && !managedSummary.complianceStarted) {
     return {
       title: 'Toll-free verification still needs recording',
       detail: 'Messaging is wired up, but toll-free verification still needs to be recorded before compliant live texting can launch.',
@@ -364,7 +364,7 @@ export function buildAdminNextStep(params: {
     };
   }
 
-  if (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE && managedSummary.compliancePendingReview) {
+  if (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION && managedSummary.compliancePendingReview) {
     return {
       title: 'Toll-free verification still pending',
       detail: 'Toll-free verification is waiting on Twilio review. No action is needed unless Twilio requests changes.',
@@ -487,7 +487,7 @@ export function buildAdminOnboardingConfidence(params: {
     blockers.push({
       level: 'warning',
       message:
-        managedSummary.complianceType === MessagingComplianceType.TOLL_FREE
+        managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? 'Toll-free verification is still pending. No operator action is needed unless Twilio asks for changes.'
           : 'A2P review is still pending. No operator action is needed unless Twilio asks for changes.',
     });
@@ -601,7 +601,7 @@ export function buildAdminOnboardingConfidence(params: {
       complete: managedSummary.complianceReady,
       variant: milestoneVariant({ complete: managedSummary.complianceReady, blocking: managedSummary.attentionRequired }),
       detail: managedSummary.complianceReady
-        ? managedSummary.complianceType === MessagingComplianceType.TOLL_FREE
+        ? managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? 'Toll-free verification is recorded as verified.'
           : 'A2P approval is recorded.'
         : managedSummary.nextStep,
@@ -669,9 +669,9 @@ export function buildAdminOnboardingConfidence(params: {
       stateVariant: 'secondary',
       readinessLabel: 'Waiting on external approval',
       readinessVariant: 'secondary',
-      nextAction: managedSummary.complianceType === MessagingComplianceType.TOLL_FREE ? 'Wait for toll-free verification' : 'Wait for Twilio approval',
+      nextAction: managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION ? 'Wait for toll-free verification' : 'Wait for Twilio approval',
       summary:
-        managedSummary.complianceType === MessagingComplianceType.TOLL_FREE
+        managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? 'Infrastructure is in place, but compliant messaging is still waiting on toll-free verification.'
           : 'Infrastructure is in place, but compliant messaging is still waiting on Twilio or carrier review.',
     },
