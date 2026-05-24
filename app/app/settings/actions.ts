@@ -395,11 +395,20 @@ export async function sendBusinessTwilioTestSmsAction(formData: FormData) {
     redirect(`/app/settings?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid test SMS destination')}`);
   }
 
-  const destinationPhone = normalizeOptionalE164Phone(parsed.data.destinationPhone, 'Test SMS destination');
+  let destinationPhone: string | null;
+  try {
+    destinationPhone = normalizeOptionalE164Phone(parsed.data.destinationPhone, 'Test SMS destination');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid test SMS destination';
+    redirect(`/app/settings?error=${encodeURIComponent(message)}`);
+  }
+
   const fromPhone = business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber;
   if (!fromPhone) {
     redirect('/app/settings?error=Assign%20a%20business%20number%20before%20sending%20a%20test%20SMS');
   }
+
+  let redirectPath = '/app/settings?twilioTestSms=1';
 
   try {
     await recordBusinessOperatorEvent({
@@ -439,23 +448,23 @@ export async function sendBusinessTwilioTestSmsAction(formData: FormData) {
           reason: result.reason,
         },
       });
-      redirect(`/app/settings?error=${encodeURIComponent(`Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`)}`);
+      redirectPath = `/app/settings?error=${encodeURIComponent(`Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`)}`;
+    } else {
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'admin.test_sms_accepted',
+        category: 'ADMIN_ACTIONS',
+        status: 'SUCCESS',
+        summary: 'Test SMS accepted by Twilio',
+        details: {
+          destinationPhone: formatPhoneDetail(destinationPhone),
+          fromPhone: formatPhoneDetail(fromPhone),
+          messageSid: maskSid(result.sent.sid),
+        },
+        relatedEntityType: 'message',
+        relatedEntityId: result.message.id,
+      });
     }
-
-    await recordBusinessOperatorEvent({
-      businessId: business.id,
-      type: 'admin.test_sms_accepted',
-      category: 'ADMIN_ACTIONS',
-      status: 'SUCCESS',
-      summary: 'Test SMS accepted by Twilio',
-      details: {
-        destinationPhone: formatPhoneDetail(destinationPhone),
-        fromPhone: formatPhoneDetail(fromPhone),
-        messageSid: maskSid(result.sent.sid),
-      },
-      relatedEntityType: 'message',
-      relatedEntityId: result.message.id,
-    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Test SMS failed';
     await recordBusinessOperatorEvent({
@@ -468,11 +477,11 @@ export async function sendBusinessTwilioTestSmsAction(formData: FormData) {
         error: message,
       },
     });
-    redirect(`/app/settings?error=${encodeURIComponent(message)}`);
+    redirectPath = `/app/settings?error=${encodeURIComponent(`Test SMS failed: ${message}`)}`;
   }
 
   revalidatePath('/app/settings');
-  redirect('/app/settings?twilioTestSms=1');
+  redirect(redirectPath);
 }
 
 export async function buyTwilioNumberAction(formData: FormData) {
