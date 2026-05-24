@@ -1755,7 +1755,14 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
     redirectToBusinessActionError(formData, 'Business not found.', returnStep);
   }
 
-  const destinationPhone = normalizeOptionalE164Phone(parsed.data.destinationPhone, 'Test SMS destination');
+  let destinationPhone: string | null;
+  try {
+    destinationPhone = normalizeOptionalE164Phone(parsed.data.destinationPhone, 'Test SMS destination');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid test SMS destination.';
+    redirectToBusinessActionError(formData, message, returnStep);
+  }
+
   const fromPhone = business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber;
   if (!fromPhone) {
     redirect(
@@ -1765,6 +1772,8 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
       )
     );
   }
+
+  let redirectPath = buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ testSms: 1 }, returnStep));
 
   try {
     await recordBusinessOperatorEvent({
@@ -1803,46 +1812,45 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
           reason: result.reason,
         },
       });
-      redirect(
-        buildAdminBusinessRedirectPath(business.id, {
-          ...withReturnStepParam(
-            {
-              error: `Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`,
-            },
-            returnStep
-          ),
-        })
+      redirectPath = buildAdminBusinessRedirectPath(
+        business.id,
+        withReturnStepParam(
+          {
+            error: `Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`,
+          },
+          returnStep
+        )
       );
+    } else {
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'admin.test_sms_accepted',
+        category: 'ADMIN_ACTIONS',
+        status: 'SUCCESS',
+        summary: 'Test SMS accepted by Twilio',
+        details: {
+          destinationPhone: formatPhoneDetail(destinationPhone),
+          fromPhone: formatPhoneDetail(fromPhone),
+          messageSid: maskSid(result.sent.sid),
+        },
+        relatedEntityType: 'message',
+        relatedEntityId: result.message.id,
+      });
+
+      logAuditEvent({
+        event: 'admin_test_sms_sent',
+        actorType: 'user',
+        actorId: admin.userId,
+        businessId: business.id,
+        targetType: 'business',
+        targetId: business.id,
+        metadata: {
+          actorEmail: admin.email,
+          destinationPhone: maskPhoneForAudit(destinationPhone),
+          messageSid: result.sent.sid,
+        },
+      });
     }
-
-    await recordBusinessOperatorEvent({
-      businessId: business.id,
-      type: 'admin.test_sms_accepted',
-      category: 'ADMIN_ACTIONS',
-      status: 'SUCCESS',
-      summary: 'Test SMS accepted by Twilio',
-      details: {
-        destinationPhone: formatPhoneDetail(destinationPhone),
-        fromPhone: formatPhoneDetail(fromPhone),
-        messageSid: maskSid(result.sent.sid),
-      },
-      relatedEntityType: 'message',
-      relatedEntityId: result.message.id,
-    });
-
-    logAuditEvent({
-      event: 'admin_test_sms_sent',
-      actorType: 'user',
-      actorId: admin.userId,
-      businessId: business.id,
-      targetType: 'business',
-      targetId: business.id,
-      metadata: {
-        actorEmail: admin.email,
-        destinationPhone: maskPhoneForAudit(destinationPhone),
-        messageSid: result.sent.sid,
-      },
-    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send test SMS.';
     await recordBusinessOperatorEvent({
@@ -1856,11 +1864,14 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
         error: message,
       },
     });
-    redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ error: message }, returnStep)));
+    redirectPath = buildAdminBusinessRedirectPath(
+      business.id,
+      withReturnStepParam({ error: `Test SMS failed: ${message}` }, returnStep)
+    );
   }
 
   await revalidateAdminPaths(business.id);
-  redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ testSms: 1 }, returnStep)));
+  redirect(redirectPath);
 }
 
 export async function archiveBusinessAction(formData: FormData) {
