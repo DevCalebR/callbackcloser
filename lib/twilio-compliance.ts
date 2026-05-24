@@ -1,4 +1,6 @@
-import { MessagingComplianceType, Prisma } from '@prisma/client';
+import { ManagedTwilioStatus, MessagingComplianceType, Prisma, TollFreeVerificationStatus } from '@prisma/client';
+
+import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 
 const TWILIO_SID_BODY = '[0-9a-fA-F]{32}';
 
@@ -39,6 +41,123 @@ export function getMessagingComplianceSidValidationError(input: {
   }
 
   return null;
+}
+
+export type OutboundMessagingSuppressionReason =
+  | 'recipient_opted_out'
+  | 'messaging_compliance_type_required'
+  | 'a2p_compliance_pending'
+  | 'a2p_compliance_blocked'
+  | 'toll_free_verification_required'
+  | 'toll_free_verification_pending'
+  | 'toll_free_verification_blocked';
+
+export type OutboundMessagingComplianceGate = {
+  reason: Exclude<OutboundMessagingSuppressionReason, 'recipient_opted_out'>;
+  detail: string;
+  nextStep: string;
+};
+
+export function getOutboundMessagingComplianceGate(input: {
+  twilioSubaccountSid?: string | null;
+  messagingServiceSid?: string | null;
+  managedTwilioStatus?: ManagedTwilioStatus | null;
+  a2pFailureReason?: string | null;
+  messagingComplianceType?: MessagingComplianceType | null;
+  tollFreeVerificationStatus?: TollFreeVerificationStatus | null;
+  tollFreeVerificationSid?: string | null;
+  tollFreeVerificationNote?: string | null;
+}) {
+  const summary = getManagedTwilioStatusSummary({
+    managedTwilioStatus: input.managedTwilioStatus ?? ManagedTwilioStatus.DRAFT,
+    twilioAccountMode: input.twilioSubaccountSid ? 'BUSINESS_SUBACCOUNT' : 'MAIN_ACCOUNT',
+    twilioSubaccountSid: input.twilioSubaccountSid ?? null,
+    twilioPrimaryPhoneNumber: null,
+    twilioPhoneNumber: null,
+    twilioPrimaryNumberSid: null,
+    twilioPhoneNumberSid: null,
+    twilioMessagingServiceSid: input.messagingServiceSid ?? null,
+    twilioWebhookSyncedAt: null,
+    messagingComplianceType: input.messagingComplianceType ?? MessagingComplianceType.UNKNOWN,
+    a2pFailureReason: input.a2pFailureReason ?? null,
+    a2pApprovedAt: null,
+    a2pCampaignSid: null,
+    a2pBrandSid: null,
+    a2pCustomerProfileSid: null,
+    tollFreeVerificationStatus: input.tollFreeVerificationStatus ?? TollFreeVerificationStatus.NOT_STARTED,
+    tollFreeVerificationSid: input.tollFreeVerificationSid ?? null,
+    tollFreeVerificationNote: input.tollFreeVerificationNote ?? null,
+  });
+
+  if (summary.complianceReady) {
+    return null;
+  }
+
+  if (summary.complianceTypeUnknown) {
+    return {
+      reason: 'messaging_compliance_type_required',
+      detail: 'Choose number type before live messaging can be evaluated.',
+      nextStep: summary.nextStep,
+    } satisfies OutboundMessagingComplianceGate;
+  }
+
+  if (summary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION) {
+    if (summary.attentionRequired) {
+      return {
+        reason: 'toll_free_verification_blocked',
+        detail: 'Resolve the toll-free verification issue before live messaging resumes.',
+        nextStep: summary.nextStep,
+      } satisfies OutboundMessagingComplianceGate;
+    }
+
+    if (summary.compliancePendingReview) {
+      return {
+        reason: 'toll_free_verification_pending',
+        detail: 'Toll-free verification is pending Twilio review.',
+        nextStep: summary.nextStep,
+      } satisfies OutboundMessagingComplianceGate;
+    }
+
+    return {
+      reason: 'toll_free_verification_required',
+      detail: 'Record the toll-free verification status before live messaging starts.',
+      nextStep: summary.nextStep,
+    } satisfies OutboundMessagingComplianceGate;
+  }
+
+  if (summary.attentionRequired) {
+    return {
+      reason: 'a2p_compliance_blocked',
+      detail: 'Resolve the A2P compliance issue before live messaging resumes.',
+      nextStep: summary.nextStep,
+    } satisfies OutboundMessagingComplianceGate;
+  }
+
+  return {
+    reason: 'a2p_compliance_pending',
+    detail: 'A2P approval is still pending.',
+    nextStep: summary.nextStep,
+  } satisfies OutboundMessagingComplianceGate;
+}
+
+export function getTestSmsSuppressionMessage(reason: OutboundMessagingSuppressionReason) {
+  switch (reason) {
+    case 'recipient_opted_out':
+      return 'Test SMS was suppressed because that destination has opted out of SMS.';
+    case 'messaging_compliance_type_required':
+      return 'Choose number type before sending a live test SMS.';
+    case 'toll_free_verification_required':
+    case 'toll_free_verification_pending':
+      return 'Test SMS is blocked until toll-free verification is approved.';
+    case 'toll_free_verification_blocked':
+      return 'Test SMS is blocked until the toll-free verification issue is resolved.';
+    case 'a2p_compliance_blocked':
+      return 'Test SMS is blocked until the A2P compliance issue is resolved.';
+    case 'a2p_compliance_pending':
+      return 'Test SMS is blocked until A2P approval is complete.';
+    default:
+      return 'Unable to send the test SMS until messaging compliance is ready.';
+  }
 }
 
 function getUniqueTarget(error: Prisma.PrismaClientKnownRequestError) {

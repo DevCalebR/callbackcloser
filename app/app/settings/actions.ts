@@ -23,6 +23,7 @@ import {
   getBusinessTwilioSaveErrorMessage,
   getMessagingComplianceSidValidationError,
   getOptionalTwilioSidError,
+  getTestSmsSuppressionMessage,
   normalizeOptionalSid,
 } from '@/lib/twilio-compliance';
 import { getTwilioBusinessClient } from '@/lib/twilio-client';
@@ -434,6 +435,10 @@ export async function sendBusinessTwilioTestSmsAction(formData: FormData) {
       messagingServiceSid: business.twilioMessagingServiceSid,
       managedTwilioStatus: business.managedTwilioStatus,
       a2pFailureReason: business.a2pFailureReason,
+      messagingComplianceType: business.messagingComplianceType,
+      tollFreeVerificationStatus: business.tollFreeVerificationStatus,
+      tollFreeVerificationSid: business.tollFreeVerificationSid,
+      tollFreeVerificationNote: business.tollFreeVerificationNote,
     });
 
     if (result.suppressed) {
@@ -448,7 +453,7 @@ export async function sendBusinessTwilioTestSmsAction(formData: FormData) {
           reason: result.reason,
         },
       });
-      redirectPath = `/app/settings?error=${encodeURIComponent(`Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`)}`;
+      redirectPath = `/app/settings?error=${encodeURIComponent(getTestSmsSuppressionMessage(result.reason))}`;
     } else {
       await recordBusinessOperatorEvent({
         businessId: business.id,

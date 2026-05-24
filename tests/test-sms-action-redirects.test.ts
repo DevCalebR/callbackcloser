@@ -27,7 +27,7 @@ test('customer test SMS action keeps redirect outside the catchable try/catch an
   assert.notEqual(catchStart, -1);
   assert.notEqual(finalRedirectStart, -1);
   assert.match(actionSection, /let redirectPath = '\/app\/settings\?twilioTestSms=1'/);
-  assert.match(actionSection, /Test SMS was suppressed:/);
+  assert.match(actionSection, /getTestSmsSuppressionMessage\(result\.reason\)/);
   assert.match(actionSection, /Test SMS failed:/);
   assert.doesNotMatch(catchSection, /redirect\(/);
   assert.doesNotMatch(trySection, /redirect\(/);
@@ -48,7 +48,7 @@ test('admin test SMS action keeps redirect outside the catchable try/catch and s
   assert.notEqual(catchStart, -1);
   assert.notEqual(finalRedirectStart, -1);
   assert.match(actionSection, /let redirectPath = buildAdminBusinessRedirectPath\(business\.id, withReturnStepParam\(\{ testSms: 1 \}, returnStep\)\)/);
-  assert.match(actionSection, /Test SMS was suppressed:/);
+  assert.match(actionSection, /getTestSmsSuppressionMessage\(result\.reason\)/);
   assert.match(actionSection, /Test SMS failed:/);
   assert.doesNotMatch(catchSection, /redirect\(/);
   assert.doesNotMatch(trySection, /redirect\(/);

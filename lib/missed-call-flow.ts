@@ -21,7 +21,11 @@ type LeadFlowBusiness = Pick<
   | 'twilioPhoneNumber'
   | 'twilioPrimaryPhoneNumber'
   | 'managedTwilioStatus'
+  | 'messagingComplianceType'
   | 'a2pFailureReason'
+  | 'tollFreeVerificationStatus'
+  | 'tollFreeVerificationSid'
+  | 'tollFreeVerificationNote'
   | 'subscriptionStatus'
   | 'provisioningStatus'
   | 'archivedAt'
@@ -67,6 +71,10 @@ async function deliverLeadMessage(params: {
   twilioMessagingServiceSid?: string | null;
   managedTwilioStatus?: Business['managedTwilioStatus'];
   a2pFailureReason?: string | null;
+  messagingComplianceType?: Business['messagingComplianceType'];
+  tollFreeVerificationStatus?: Business['tollFreeVerificationStatus'];
+  tollFreeVerificationSid?: string | null;
+  tollFreeVerificationNote?: string | null;
 }) {
   if (params.transport === 'simulated' || params.isSimulator) {
     const message = await persistOutboundMessageRecord({
@@ -91,6 +99,10 @@ async function deliverLeadMessage(params: {
     messagingServiceSid: params.twilioMessagingServiceSid,
     managedTwilioStatus: params.managedTwilioStatus,
     a2pFailureReason: params.a2pFailureReason,
+    messagingComplianceType: params.messagingComplianceType,
+    tollFreeVerificationStatus: params.tollFreeVerificationStatus,
+    tollFreeVerificationSid: params.tollFreeVerificationSid,
+    tollFreeVerificationNote: params.tollFreeVerificationNote,
   });
 }
 
@@ -185,6 +197,10 @@ export async function startMissedCallRecovery(params: StartRecoveryParams) {
     twilioMessagingServiceSid: params.business.twilioMessagingServiceSid,
     managedTwilioStatus: params.business.managedTwilioStatus,
     a2pFailureReason: params.business.a2pFailureReason,
+    messagingComplianceType: params.business.messagingComplianceType,
+    tollFreeVerificationStatus: params.business.tollFreeVerificationStatus,
+    tollFreeVerificationSid: params.business.tollFreeVerificationSid,
+    tollFreeVerificationNote: params.business.tollFreeVerificationNote,
   });
 
   if (!sendResult.suppressed) {
@@ -283,6 +299,10 @@ export async function processLeadInboundReply(params: ProcessReplyParams) {
     twilioMessagingServiceSid: params.business.twilioMessagingServiceSid,
     managedTwilioStatus: params.business.managedTwilioStatus,
     a2pFailureReason: params.business.a2pFailureReason,
+    messagingComplianceType: params.business.messagingComplianceType,
+    tollFreeVerificationStatus: params.business.tollFreeVerificationStatus,
+    tollFreeVerificationSid: params.business.tollFreeVerificationSid,
+    tollFreeVerificationNote: params.business.tollFreeVerificationNote,
   });
 
   if (!sendResult.suppressed) {
