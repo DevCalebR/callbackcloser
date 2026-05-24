@@ -25,7 +25,11 @@ type NotificationLeadRecord = Lead & {
     | 'twilioPrimaryPhoneNumber'
     | 'twilioPhoneNumber'
     | 'managedTwilioStatus'
+    | 'messagingComplianceType'
     | 'a2pFailureReason'
+    | 'tollFreeVerificationStatus'
+    | 'tollFreeVerificationSid'
+    | 'tollFreeVerificationNote'
   >;
 };
 
@@ -140,7 +144,11 @@ async function getLeadForOwnerNotifications(leadId: string) {
           twilioPrimaryPhoneNumber: true,
           twilioPhoneNumber: true,
           managedTwilioStatus: true,
+          messagingComplianceType: true,
           a2pFailureReason: true,
+          tollFreeVerificationStatus: true,
+          tollFreeVerificationSid: true,
+          tollFreeVerificationNote: true,
           provisioningStatus: true,
           archivedAt: true,
         },
@@ -240,6 +248,10 @@ export async function sendOwnerLeadSms(leadId: string) {
       messagingServiceSid: lead.business.twilioMessagingServiceSid,
       managedTwilioStatus: lead.business.managedTwilioStatus,
       a2pFailureReason: lead.business.a2pFailureReason,
+      messagingComplianceType: lead.business.messagingComplianceType,
+      tollFreeVerificationStatus: lead.business.tollFreeVerificationStatus,
+      tollFreeVerificationSid: lead.business.tollFreeVerificationSid,
+      tollFreeVerificationNote: lead.business.tollFreeVerificationNote,
     });
 
     if (result.suppressed) {

@@ -426,6 +426,10 @@ export async function POST(request: Request) {
               messagingServiceSid: business.twilioMessagingServiceSid,
               managedTwilioStatus: business.managedTwilioStatus,
               a2pFailureReason: business.a2pFailureReason,
+              messagingComplianceType: business.messagingComplianceType,
+              tollFreeVerificationStatus: business.tollFreeVerificationStatus,
+              tollFreeVerificationSid: business.tollFreeVerificationSid,
+              tollFreeVerificationNote: business.tollFreeVerificationNote,
             });
             if (notifyResult.suppressed) {
               logTwilioWarn('status', 'usage_limit_owner_notify_suppressed', {
@@ -435,7 +439,7 @@ export async function POST(request: Request) {
                 eventType: 'dial_status_callback',
                 businessId: business.id,
                 leadId: lead.id,
-                decision: 'owner_notification_suppressed_opted_out',
+                decision: notifyResult.reason,
               });
               return withCorrelation(xmlOk());
             }

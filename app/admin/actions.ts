@@ -46,6 +46,7 @@ import {
   getBusinessTwilioSaveErrorMessage,
   getMessagingComplianceSidValidationError,
   getOptionalTwilioSidError,
+  getTestSmsSuppressionMessage,
   normalizeOptionalSid,
 } from '@/lib/twilio-compliance';
 import { sendAndPersistOutboundMessage } from '@/lib/twilio-messaging';
@@ -1798,6 +1799,10 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
       messagingServiceSid: business.twilioMessagingServiceSid,
       managedTwilioStatus: business.managedTwilioStatus,
       a2pFailureReason: business.a2pFailureReason,
+      messagingComplianceType: business.messagingComplianceType,
+      tollFreeVerificationStatus: business.tollFreeVerificationStatus,
+      tollFreeVerificationSid: business.tollFreeVerificationSid,
+      tollFreeVerificationNote: business.tollFreeVerificationNote,
     });
 
     if (result.suppressed) {
@@ -1816,7 +1821,7 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
         business.id,
         withReturnStepParam(
           {
-            error: `Test SMS was suppressed: ${result.reason.replace(/_/g, ' ')}.`,
+            error: getTestSmsSuppressionMessage(result.reason),
           },
           returnStep
         )

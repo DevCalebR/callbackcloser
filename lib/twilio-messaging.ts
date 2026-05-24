@@ -1,10 +1,10 @@
 import { ManagedTwilioStatus, MessageParticipant, MessagingComplianceType, Prisma, TollFreeVerificationStatus } from '@prisma/client';
 
 import { db } from '@/lib/db';
-import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { type OutboundMessageContext } from '@/lib/outbound-message-events';
 import { formatPhoneDetail, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { getOutboundMessagingComplianceGate, type OutboundMessagingSuppressionReason } from '@/lib/twilio-compliance';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
 import { getTwilioBusinessClient, getTwilioMessageStatusCallbackUrl } from '@/lib/twilio';
@@ -83,6 +83,10 @@ export async function sendAndPersistOutboundMessage(params: {
   messagingServiceSid?: string | null;
   managedTwilioStatus?: ManagedTwilioStatus | null;
   a2pFailureReason?: string | null;
+  messagingComplianceType?: MessagingComplianceType | null;
+  tollFreeVerificationStatus?: TollFreeVerificationStatus | null;
+  tollFreeVerificationSid?: string | null;
+  tollFreeVerificationNote?: string | null;
   allowUnapproved?: boolean;
 }) {
   const from = normalizePhoneNumber(params.fromPhone) || params.fromPhone;
@@ -120,38 +124,20 @@ export async function sendAndPersistOutboundMessage(params: {
     };
   }
 
-  if (
-    !params.allowUnapproved &&
-    typeof params.managedTwilioStatus === 'string' &&
-    params.managedTwilioStatus !== ManagedTwilioStatus.COMPLIANT_LIVE
-  ) {
-    const managedSummary = getManagedTwilioStatusSummary({
-      managedTwilioStatus: params.managedTwilioStatus,
-      twilioAccountMode: params.twilioSubaccountSid ? 'BUSINESS_SUBACCOUNT' : 'MAIN_ACCOUNT',
-      twilioSubaccountSid: params.twilioSubaccountSid ?? null,
-      twilioPrimaryPhoneNumber: from,
-      twilioPhoneNumber: from,
-      twilioPrimaryNumberSid: null,
-      twilioPhoneNumberSid: null,
-      twilioMessagingServiceSid: params.messagingServiceSid ?? null,
-      twilioWebhookSyncedAt: null,
-      messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
-      a2pFailureReason: params.a2pFailureReason ?? null,
-      a2pApprovedAt: null,
-      a2pCampaignSid: null,
-      a2pBrandSid: null,
-      a2pCustomerProfileSid: null,
-      tollFreeVerificationStatus: TollFreeVerificationStatus.NOT_STARTED,
-      tollFreeVerificationSid: null,
-      tollFreeVerificationNote: null,
-    });
+  const complianceGate = params.allowUnapproved
+    ? null
+    : getOutboundMessagingComplianceGate({
+        twilioSubaccountSid: params.twilioSubaccountSid,
+        messagingServiceSid: params.messagingServiceSid,
+        managedTwilioStatus: params.managedTwilioStatus,
+        a2pFailureReason: params.a2pFailureReason,
+        messagingComplianceType: params.messagingComplianceType,
+        tollFreeVerificationStatus: params.tollFreeVerificationStatus,
+        tollFreeVerificationSid: params.tollFreeVerificationSid,
+        tollFreeVerificationNote: params.tollFreeVerificationNote,
+      });
 
-    const reason =
-      params.managedTwilioStatus === ManagedTwilioStatus.FAILED_REVIEW ||
-      params.managedTwilioStatus === ManagedTwilioStatus.PAUSED_NONCOMPLIANT
-        ? 'managed_twilio_compliance_blocked'
-        : 'managed_twilio_compliance_pending';
-
+  if (complianceGate) {
     await recordBusinessOperatorEvent({
       businessId: params.businessId,
       type: 'messaging.outbound_sms_suppressed',
@@ -159,24 +145,26 @@ export async function sendAndPersistOutboundMessage(params: {
       status: 'WARNING',
       summary: `Outbound ${recipientLabel} suppressed`,
       details: {
-        reason,
+        reason: complianceGate.reason,
         participant,
-        nextStep: managedSummary.nextStep,
+        detail: complianceGate.detail,
+        nextStep: complianceGate.nextStep,
       },
       relatedEntityType: params.leadId ? 'lead' : null,
       relatedEntityId: params.leadId ?? null,
     });
     logTwilioWarn('messaging', 'outbound_suppressed_managed_twilio_not_ready', {
-      decision: reason,
+      decision: complianceGate.reason,
       businessId: params.businessId,
       leadId: params.leadId ?? null,
       participant,
-      nextStep: managedSummary.nextStep,
+      nextStep: complianceGate.nextStep,
     });
 
     return {
       suppressed: true as const,
-      reason,
+      reason: complianceGate.reason as OutboundMessagingSuppressionReason,
+      detail: complianceGate.detail,
     };
   }
 
