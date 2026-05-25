@@ -37,14 +37,15 @@ test('protected app surfaces use shared tenant-scoped access helpers', () => {
 
 test('middleware protects owner and admin app surfaces plus sensitive authenticated mutations', () => {
   const middleware = read('middleware.ts');
+  const middlewareAccess = read('lib/middleware-access.ts');
   const twilioProvisionRoute = read('app/api/twilio/provision-number/route.ts');
 
-  assert.match(middleware, /'\/app\(\.\*\)'/);
-  assert.match(middleware, /'\/admin\(\.\*\)'/);
-  assert.match(middleware, /'\/api\/stripe\/checkout\(\.\*\)'/);
-  assert.match(middleware, /'\/api\/stripe\/portal\(\.\*\)'/);
-  assert.match(middleware, /'\/api\/twilio\/provision-number\(\.\*\)'/);
-  assert.match(middleware, /'\/api\/twilio\/provision-number'/);
+  assert.match(middleware, /routeNeedsProtection/);
+  assert.match(middlewareAccess, /'\/app'/);
+  assert.match(middlewareAccess, /'\/admin'/);
+  assert.match(middlewareAccess, /'\/api\/stripe\/checkout'/);
+  assert.match(middlewareAccess, /'\/api\/stripe\/portal'/);
+  assert.match(middlewareAccess, /'\/api\/twilio\/provision-number'/);
   assert.match(twilioProvisionRoute, /auth\(\)/);
   assert.match(twilioProvisionRoute, /isAllowedRequestOrigin/);
   assert.match(twilioProvisionRoute, /Invalid request origin/);
