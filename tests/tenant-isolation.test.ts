@@ -92,6 +92,7 @@ test('tenant-scoped helpers block cross-business reads and writes while preservi
     assert.equal(allowedUpdate?.status, LeadStatus.BOOKED);
 
     const allDashboardAAfterUpdate = await listAllDashboardLeadsForBusiness(fixtures.businessA.id);
+    assert.equal(allDashboardAAfterUpdate[0]?.status, LeadStatus.BOOKED);
     assert.deepEqual(getLeadOutcomeSummary(allDashboardAAfterUpdate), {
       totalLeads: 1,
       closedLeads: 1,

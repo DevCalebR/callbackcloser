@@ -18,6 +18,7 @@ function resolveSafeAppRedirect(value: FormDataEntryValue | null, fallback: stri
 export async function updateLeadStatusAction(formData: FormData) {
   const fallbackPath = '/app/leads';
   const redirectTo = resolveSafeAppRedirect(formData.get('redirectTo'), fallbackPath);
+  const successRedirectTo = resolveSafeAppRedirect(formData.get('successRedirectTo'), redirectTo);
 
   const business = await requireBusiness();
   const parsed = leadStatusSchema.safeParse(Object.fromEntries(formData));
@@ -38,5 +39,5 @@ export async function updateLeadStatusAction(formData: FormData) {
   revalidatePath('/app');
   revalidatePath('/app/conversations');
   revalidatePath(`/app/leads/${lead.id}`);
-  redirect(`${redirectTo}${redirectTo.includes('?') ? '&' : '?'}saved=1`);
+  redirect(`${successRedirectTo}${successRedirectTo.includes('?') ? '&' : '?'}saved=1`);
 }
