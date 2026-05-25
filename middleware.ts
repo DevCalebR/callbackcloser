@@ -1,8 +1,14 @@
 import type { NextFetchEvent, NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { clerkMiddleware } from '@clerk/nextjs/server';
 
 import { hasRequiredValidClerkEnv } from '@/lib/clerk-config';
+import {
+  routeCanRenderWithoutClerk,
+  routeNeedsClerkContext,
+  routeNeedsProtectedMutationRateLimit,
+  routeNeedsProtection,
+} from '@/lib/middleware-access';
 import {
   getPortfolioDemoGuardrailErrorMessage,
   isPortfolioDemoModeBlockedInProduction,
@@ -13,18 +19,6 @@ import { RATE_LIMIT_PROTECTED_API_MAX, RATE_LIMIT_WINDOW_MS } from '@/lib/rate-l
 import { buildRateLimitHeaders, consumeRateLimit, getClientIpAddress } from '@/lib/rate-limit';
 import { withSecurityHeaders } from '@/lib/security-headers';
 
-const isProtectedRoute = createRouteMatcher([
-  '/app(.*)',
-  '/admin(.*)',
-  '/api/stripe/checkout(.*)',
-  '/api/stripe/portal(.*)',
-  '/api/twilio/provision-number(.*)',
-]);
-const isProtectedApiMutationRoute = createRouteMatcher([
-  '/api/stripe/checkout',
-  '/api/stripe/portal',
-  '/api/twilio/provision-number',
-]);
 let productionDemoGuardrailLogged = false;
 let productionDemoOverrideLogged = false;
 let missingClerkEnvLogged = false;
@@ -43,22 +37,26 @@ function buildAuthUnavailableResponse(request: NextRequest) {
   return new NextResponse('Authentication is temporarily unavailable.', { status: 503 });
 }
 
-const protectedMiddleware = clerkMiddleware(async (auth, req) => {
-  await auth.protect();
+const appMiddleware = clerkMiddleware(async (auth, req) => {
+  const pathname = req.nextUrl.pathname;
 
-  if (req.method === 'POST' && isProtectedApiMutationRoute(req)) {
-    const clientIp = getClientIpAddress(req);
-    const rateLimit = consumeRateLimit({
-      key: `middleware:protected-api:${clientIp}`,
-      limit: RATE_LIMIT_PROTECTED_API_MAX,
-      windowMs: RATE_LIMIT_WINDOW_MS,
-    });
+  if (routeNeedsProtection(pathname)) {
+    await auth.protect();
 
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { error: 'Too many requests' },
-        { status: 429, headers: buildRateLimitHeaders(rateLimit) }
-      );
+    if (req.method === 'POST' && routeNeedsProtectedMutationRateLimit(pathname)) {
+      const clientIp = getClientIpAddress(req);
+      const rateLimit = consumeRateLimit({
+        key: `middleware:protected-api:${clientIp}`,
+        limit: RATE_LIMIT_PROTECTED_API_MAX,
+        windowMs: RATE_LIMIT_WINDOW_MS,
+      });
+
+      if (!rateLimit.allowed) {
+        return NextResponse.json(
+          { error: 'Too many requests' },
+          { status: 429, headers: buildRateLimitHeaders(rateLimit) }
+        );
+      }
     }
   }
 
@@ -88,14 +86,13 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
     return withSecurityHeaders(NextResponse.next());
   }
 
-  if (!isProtectedRoute(req)) {
-    return withSecurityHeaders(NextResponse.next());
-  }
+  const pathname = req.nextUrl.pathname;
+  const needsClerkContext = routeNeedsClerkContext(pathname);
 
   if (!hasRequiredClerkMiddlewareEnv(process.env)) {
     if (!missingClerkEnvLogged) {
       missingClerkEnvLogged = true;
-      console.error('Clerk middleware env is incomplete; protected routes will return 503 until keys are configured.', {
+      console.error('Clerk middleware env is incomplete; Clerk-backed routes will return 503 until keys are configured.', {
         clerkSecretKeyPresent: Boolean(process.env.CLERK_SECRET_KEY?.trim()),
         clerkPublishableKeyPresent: Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim()),
         clerkKeysLookValid: hasRequiredValidClerkEnv(process.env),
@@ -104,18 +101,22 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
       });
     }
 
-    return withSecurityHeaders(buildAuthUnavailableResponse(req));
+    return withSecurityHeaders(
+      needsClerkContext ? buildAuthUnavailableResponse(req) : NextResponse.next()
+    );
   }
 
   try {
-    const response = await protectedMiddleware(req, event);
+    const response = await appMiddleware(req, event);
     return withSecurityHeaders(response ?? NextResponse.next());
   } catch (error) {
-    console.error('Protected middleware invocation failed.', {
+    console.error('Clerk middleware invocation failed.', {
       path: req.nextUrl.pathname,
       message: error instanceof Error ? error.message : 'unknown_error',
     });
-    return withSecurityHeaders(buildAuthUnavailableResponse(req));
+    return withSecurityHeaders(
+      routeCanRenderWithoutClerk(pathname) ? NextResponse.next() : buildAuthUnavailableResponse(req)
+    );
   }
 }
 
