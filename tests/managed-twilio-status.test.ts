@@ -2,8 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  BusinessPhoneSetupPath,
+  ForwardedCallAnswerMode,
+  ForwardingVerificationStatus,
   ManagedTwilioStatus,
+  MessagingSetupMode,
   MessagingComplianceType,
+  PortingStatus,
   SubscriptionStatus,
   TollFreeVerificationStatus,
   TwilioAccountMode,
@@ -17,6 +22,7 @@ function createManagedBusiness(
 ) {
   return {
     twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
+    messagingSetupMode: MessagingSetupMode.PER_BUSINESS_TWILIO,
     managedTwilioStatus: ManagedTwilioStatus.DRAFT,
     messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
     twilioSubaccountSid: null,
@@ -35,6 +41,15 @@ function createManagedBusiness(
     tollFreeVerificationSid: null,
     tollFreeVerificationNote: null,
     subscriptionStatus: SubscriptionStatus.ACTIVE,
+    phoneSetupPath: BusinessPhoneSetupPath.NEW_TWILIO_NUMBER,
+    publicBusinessPhone: null,
+    forwardingVerificationStatus: ForwardingVerificationStatus.NOT_STARTED,
+    forwardingVerifiedAt: null,
+    forwardingVerificationNote: null,
+    portingStatus: PortingStatus.NOT_STARTED,
+    portingNotes: null,
+    portingCompletedAt: null,
+    forwardedCallAnswerMode: ForwardedCallAnswerMode.PRESS_1_REQUIRED,
     forwardingNumber: '+15557654321',
     notifyPhone: '+15551234567',
     ...overrides,
@@ -100,6 +115,35 @@ test('approved, synced setup becomes live once a successful lead exists', () => 
   const customerStatus = getCustomerSystemStatus(business, 1);
 
   assert.equal(summary.messagingReady, true);
+  assert.equal(customerStatus.key, 'live');
+});
+
+test('shared pilot messaging can be launch-ready without per-business A2P approval', () => {
+  const business = createManagedBusiness({
+    messagingSetupMode: MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE,
+    messagingComplianceType: MessagingComplianceType.UNKNOWN,
+    managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+    twilioAccountMode: TwilioAccountMode.MAIN_ACCOUNT,
+    twilioSubaccountSid: null,
+    twilioPrimaryPhoneNumber: '+15550001111',
+    twilioPhoneNumber: '+15550001111',
+    twilioPrimaryNumberSid: 'PN123',
+    twilioPhoneNumberSid: 'PN123',
+    twilioMessagingServiceSid: 'MG123',
+    twilioWebhookSyncedAt: new Date('2026-04-16T12:00:00.000Z'),
+    phoneSetupPath: BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING,
+    publicBusinessPhone: '+15559990000',
+    forwardingVerificationStatus: ForwardingVerificationStatus.VERIFIED,
+    forwardingVerifiedAt: new Date('2026-04-16T12:00:00.000Z'),
+  });
+
+  const summary = getManagedTwilioStatusSummary(business);
+  const customerStatus = getCustomerSystemStatus(business, 1);
+
+  assert.equal(summary.usesSharedPilotMessaging, true);
+  assert.equal(summary.complianceReady, true);
+  assert.equal(summary.messagingReady, true);
+  assert.match(summary.description, /approved CallbackCloser messaging number/i);
   assert.equal(customerStatus.key, 'live');
 });
 

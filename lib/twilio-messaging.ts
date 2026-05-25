@@ -1,4 +1,4 @@
-import { ManagedTwilioStatus, MessageParticipant, MessagingComplianceType, Prisma, TollFreeVerificationStatus } from '@prisma/client';
+import { ManagedTwilioStatus, MessageParticipant, MessagingComplianceType, MessagingSetupMode, Prisma, TollFreeVerificationStatus } from '@prisma/client';
 
 import { db } from '@/lib/db';
 import { persistAcceptedOutboundMessage, persistOutboundMessageRecord } from '@/lib/outbound-message-persistence';
@@ -86,6 +86,7 @@ export async function sendAndPersistOutboundMessage(params: {
   context?: OutboundMessageContext;
   twilioSubaccountSid?: string | null;
   messagingServiceSid?: string | null;
+  messagingSetupMode?: MessagingSetupMode | null;
   managedTwilioStatus?: ManagedTwilioStatus | null;
   a2pFailureReason?: string | null;
   messagingComplianceType?: MessagingComplianceType | null;
@@ -135,6 +136,7 @@ export async function sendAndPersistOutboundMessage(params: {
     : getOutboundMessagingComplianceGate({
         twilioSubaccountSid: params.twilioSubaccountSid,
         messagingServiceSid: params.messagingServiceSid,
+        messagingSetupMode: params.messagingSetupMode,
         managedTwilioStatus: params.managedTwilioStatus,
         a2pFailureReason: params.a2pFailureReason,
         messagingComplianceType: params.messagingComplianceType,

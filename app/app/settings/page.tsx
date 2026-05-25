@@ -13,7 +13,14 @@ import { getAdminTestSmsConfidenceState } from '@/lib/admin-dashboard';
 import { getTwilioWebhookSnapshot } from '@/lib/admin-provisioning';
 import { requireBusiness } from '@/lib/auth';
 import { getBusinessNotificationSettingsForBusiness } from '@/lib/business-access';
-import { TwilioSetupTone, buildTwilioSetupFlow, businessPhonePathOptions, twilioAccountModeOptions } from '@/lib/twilio-setup';
+import {
+  TwilioSetupTone,
+  buildTwilioSetupFlow,
+  businessPhonePathOptions,
+  forwardedCallAnswerOptions,
+  messagingSetupOptions,
+  twilioAccountModeOptions,
+} from '@/lib/twilio-setup';
 import { db } from '@/lib/db';
 import {
   getManagedTextingNumber,
@@ -38,6 +45,8 @@ const adminChangedFieldLabels: Record<string, string> = {
   ownerPhone: 'owner alert phone',
   twilioAccountMode: 'Twilio account mode',
   phoneSetupPath: 'business number path',
+  forwardedCallAnswerMode: 'forwarded call answer mode',
+  messagingSetupMode: 'messaging setup mode',
   twilioNumberSetupMode: 'routing number mode',
   twilioSubaccountSid: 'Twilio subaccount SID',
   twilioPhoneNumber: 'Twilio number',
@@ -61,6 +70,8 @@ const adminChangedFieldLabels: Record<string, string> = {
 type BusinessTwilioDefaults = {
   twilioAccountMode: string;
   phoneSetupPath: string;
+  forwardedCallAnswerMode: string;
+  messagingSetupMode: string;
   twilioNumberSetupMode: string;
   twilioSubaccountSid: string;
   twilioPhoneNumber: string;
@@ -166,6 +177,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
   const twilioDefaults: BusinessTwilioDefaults = {
     twilioAccountMode: business.twilioAccountMode,
     phoneSetupPath: business.phoneSetupPath,
+    forwardedCallAnswerMode: business.forwardedCallAnswerMode,
+    messagingSetupMode: business.messagingSetupMode,
     twilioNumberSetupMode: business.twilioNumberSetupMode,
     twilioSubaccountSid: business.twilioSubaccountSid || '',
     twilioPhoneNumber: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || '',
@@ -242,6 +255,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         body: (
           <form action={saveBusinessTwilioSetupChoiceAction} className="space-y-4" id="account-mode-step">
             <input type="hidden" name="phoneSetupPath" value={setupFlow.phoneSetupPath} />
+            <input type="hidden" name="forwardedCallAnswerMode" value={setupFlow.forwardedCallAnswerMode} />
+            <input type="hidden" name="messagingSetupMode" value={setupFlow.messagingSetupMode} />
             <div className="grid gap-3 md:grid-cols-2">
               {twilioAccountModeOptions.map((option) => (
                 <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
@@ -282,11 +297,49 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                 </label>
               ))}
             </div>
+            <div className="grid gap-3">
+              <p className="text-sm font-medium">Forwarded call answer confirmation</p>
+              {forwardedCallAnswerOptions.map((option) => (
+                <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
+                  <div className="flex items-start gap-3">
+                    <input
+                      defaultChecked={setupFlow.forwardedCallAnswerMode === option.value}
+                      name="forwardedCallAnswerMode"
+                      type="radio"
+                      value={option.value}
+                    />
+                    <div className="space-y-1">
+                      <p className="font-medium">{option.label}</p>
+                      <p className="text-muted-foreground">{option.description}</p>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="grid gap-3">
+              <p className="text-sm font-medium">Messaging setup mode</p>
+              {messagingSetupOptions.map((option) => (
+                <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
+                  <div className="flex items-start gap-3">
+                    <input
+                      defaultChecked={setupFlow.messagingSetupMode === option.value}
+                      name="messagingSetupMode"
+                      type="radio"
+                      value={option.value}
+                    />
+                    <div className="space-y-1">
+                      <p className="font-medium">{option.label}</p>
+                      <p className="text-muted-foreground">{option.description}</p>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
             {setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER' ? (
               <p className="text-sm text-muted-foreground">{setupFlow.existingNumberMessage}</p>
             ) : null}
             <Button size="sm" type="submit" variant="outline">
-              Save business number path
+              Save call and messaging path
             </Button>
           </form>
         ),
@@ -299,7 +352,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         body: adminSession?.isAdmin ? (
           <form action={saveBusinessTwilioAdminOverridesAction} className="space-y-4">
             <HiddenBusinessTwilioFields defaults={twilioDefaults} exclude={['twilioSubaccountSid']} />
-            {setupFlow.accountMode === 'BUSINESS_SUBACCOUNT' ? (
+            {setupFlow.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE' ? (
+              <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+                Pilot setup uses the approved CallbackCloser sender, so a dedicated subaccount is optional during founder-operated onboarding.
+              </div>
+            ) : setupFlow.accountMode === 'BUSINESS_SUBACCOUNT' ? (
               <div className="space-y-2">
                 <Label htmlFor="businessTwilioSubaccountSid">Business subaccount SID</Label>
                 <Input
@@ -321,7 +378,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
           </form>
         ) : (
           <p className="text-sm text-muted-foreground">
-            {setupFlow.accountMode === 'BUSINESS_SUBACCOUNT'
+            {setupFlow.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE'
+              ? 'Pilot setup is founder-operated, so a dedicated business subaccount is optional while SMS uses the approved CallbackCloser sender.'
+              : setupFlow.accountMode === 'BUSINESS_SUBACCOUNT'
               ? 'CallbackCloser will create or reuse a dedicated Twilio subaccount for this business during setup.'
               : 'CallbackCloser will keep this business on the parent Twilio account.'}
           </p>
@@ -335,6 +394,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         body: adminSession?.isAdmin ? (
           <form action={saveBusinessTwilioAdminOverridesAction} className="space-y-4">
             <HiddenBusinessTwilioFields defaults={twilioDefaults} exclude={['twilioMessagingServiceSid']} />
+            {setupFlow.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE' ? (
+              <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+                Pilot setup: current number forwards to CallbackCloser; SMS sends from the approved CallbackCloser messaging number.
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label htmlFor="businessMessagingServiceSid">Messaging Service SID</Label>
               <Input
@@ -349,7 +413,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             </Button>
           </form>
         ) : (
-          <p className="text-sm text-muted-foreground">Current value: {business.twilioMessagingServiceSid || 'Not recorded yet.'}</p>
+          <p className="text-sm text-muted-foreground">
+            {setupFlow.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE'
+              ? `Pilot sender: ${business.twilioMessagingServiceSid || 'Approved CallbackCloser Messaging Service not recorded yet.'}`
+              : `Current value: ${business.twilioMessagingServiceSid || 'Not recorded yet.'}`}
+          </p>
         ),
       };
     }
@@ -630,6 +698,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         <CardContent>
           <form action={saveBusinessSettingsAction} className="grid gap-4 md:grid-cols-2">
             <input type="hidden" name="phoneSetupPath" value={business.phoneSetupPath} />
+            <input type="hidden" name="forwardedCallAnswerMode" value={business.forwardedCallAnswerMode} />
+            <input type="hidden" name="messagingSetupMode" value={business.messagingSetupMode} />
             <div className="md:col-span-2">
               <Label htmlFor="settingsBusinessName">Business name</Label>
               <Input id="settingsBusinessName" name="name" defaultValue={business.name} required />

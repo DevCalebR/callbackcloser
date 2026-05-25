@@ -1,7 +1,9 @@
 import {
   BusinessPhoneSetupPath,
   BusinessProvisioningStatus,
+  ForwardedCallAnswerMode,
   ManagedTwilioStatus,
+  MessagingSetupMode,
   MessagingComplianceType,
   TwilioAccountMode,
   TwilioNumberSetupMode,
@@ -12,10 +14,16 @@ import {
 import type { TwilioWebhookSnapshot } from '@/lib/admin-provisioning-presenters';
 import {
   businessPhoneSetupPathOptions,
+  forwardedCallAnswerModeOptions,
   getBusinessPhoneSetupGate,
   getBusinessPhoneSetupPathDescription,
   getBusinessPhoneSetupPathLabel,
   getBusinessRoutingNumber,
+  getForwardedCallAnswerModeDescription,
+  getForwardedCallAnswerModeLabel,
+  getMessagingSetupModeDescription,
+  getMessagingSetupModeLabel,
+  messagingSetupModeOptions,
 } from '@/lib/business-phone-setup';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { formatPhoneForDisplay } from '@/lib/phone';
@@ -51,6 +59,8 @@ type SetupBusiness = Pick<
       Business,
       | 'publicBusinessPhone'
       | 'phoneSetupPath'
+      | 'forwardedCallAnswerMode'
+      | 'messagingSetupMode'
       | 'forwardingVerificationStatus'
       | 'forwardingVerifiedAt'
       | 'forwardingVerificationNote'
@@ -99,12 +109,18 @@ export type TwilioSetupBanner = {
 export type TwilioSetupFlow = {
   accountMode: TwilioAccountMode;
   phoneSetupPath: BusinessPhoneSetupPath;
+  forwardedCallAnswerMode: ForwardedCallAnswerMode;
+  messagingSetupMode: MessagingSetupMode;
   numberSetupMode: TwilioNumberSetupMode;
   accountModeLabel: string;
   phoneSetupPathLabel: string;
+  forwardedCallAnswerModeLabel: string;
+  messagingSetupModeLabel: string;
   numberSetupModeLabel: string;
   accountModeDescription: string;
   phoneSetupPathDescription: string;
+  forwardedCallAnswerModeDescription: string;
+  messagingSetupModeDescription: string;
   numberSetupModeDescription: string;
   existingNumberMessage: string;
   safeToMarkLive: boolean;
@@ -129,6 +145,8 @@ export const twilioAccountModeOptions = [
 ] as const;
 
 export const businessPhonePathOptions = businessPhoneSetupPathOptions;
+export const forwardedCallAnswerOptions = forwardedCallAnswerModeOptions;
+export const messagingSetupOptions = messagingSetupModeOptions;
 
 export const twilioNumberSetupModeOptions = [
   {
@@ -217,8 +235,20 @@ function buildWebhookState(snapshot: TwilioWebhookSnapshot | null, type: 'voice'
 }
 
 function formatMessagingComplianceDetail(business: SetupBusiness) {
-  const managedSummary = getManagedTwilioStatusSummary(business);
+  const managedSummary = getManagedTwilioStatusSummary({
+    ...business,
+    messagingSetupMode: business.messagingSetupMode || MessagingSetupMode.PER_BUSINESS_TWILIO,
+  });
   const complianceType = managedSummary.complianceType;
+
+  if (managedSummary.usesSharedPilotMessaging) {
+    return {
+      complete: managedSummary.complianceReady,
+      detail: managedSummary.description,
+      stateLabel: managedSummary.complianceReady ? 'Pilot sender ready' : 'Attach pilot sender',
+      tone: managedSummary.complianceReady ? ('success' as const) : ('pending' as const),
+    };
+  }
 
   if (managedSummary.complianceTypeUnknown) {
     return {
@@ -289,15 +319,20 @@ export function buildTwilioSetupFlow(params: {
   const { business, notificationSettings, ownerConnected, successfulLeadCount, testSmsState, webhookSnapshot, missedCallValidation } = params;
   const accountMode = business.twilioAccountMode || TwilioAccountMode.BUSINESS_SUBACCOUNT;
   const phoneSetupPath = business.phoneSetupPath || BusinessPhoneSetupPath.NEW_TWILIO_NUMBER;
+  const forwardedCallAnswerMode = business.forwardedCallAnswerMode || ForwardedCallAnswerMode.PRESS_1_REQUIRED;
+  const messagingSetupMode = business.messagingSetupMode || MessagingSetupMode.PER_BUSINESS_TWILIO;
   const numberSetupMode = business.twilioNumberSetupMode || TwilioNumberSetupMode.NEW_NUMBER;
-  const managedSummary = getManagedTwilioStatusSummary(business);
+  const managedSummary = getManagedTwilioStatusSummary({
+    ...business,
+    messagingSetupMode,
+  });
   const assignedNumber = getManagedTextingNumber(business);
   const routingNumber = getBusinessRoutingNumber(business);
   const phoneSetupGate = getBusinessPhoneSetupGate(business);
   const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
   const ownerPhone = notificationSettings?.ownerPhone?.trim() || business.notifyPhone || null;
   const usingSubaccount = usesBusinessSubaccount(accountMode);
-  const accountReady = usingSubaccount ? Boolean(business.twilioSubaccountSid) : true;
+  const accountReady = managedSummary.accountReady;
   const messagingServiceReady = Boolean(business.twilioMessagingServiceSid);
   const numberAssigned = Boolean(assignedNumber && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid));
   const voiceWebhook = buildWebhookState(webhookSnapshot, 'voice');
@@ -321,7 +356,9 @@ export function buildTwilioSetupFlow(params: {
   if (!statusWebhook.synced) liveBlockers.push('sync the status callback');
   if (!managedSummary.complianceReady) {
     liveBlockers.push(
-      managedSummary.complianceTypeUnknown
+      managedSummary.usesSharedPilotMessaging
+        ? 'attach the approved pilot sender'
+        : managedSummary.complianceTypeUnknown
         ? 'choose the number type'
         : managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
           ? 'clear toll-free verification'
@@ -377,17 +414,22 @@ export function buildTwilioSetupFlow(params: {
       key: 'account_ready',
       label: '4. Twilio account/subaccount ready',
       complete: accountReady,
-      tone: buildTone(accountReady, usingSubaccount),
+      tone: buildTone(accountReady, usingSubaccount && messagingSetupMode !== MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE),
       stateLabel: accountReady
-        ? usingSubaccount
+        ? usingSubaccount && messagingSetupMode !== MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE
           ? 'Subaccount ready'
-          : 'Main account ready'
+          : messagingSetupMode === MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE
+            ? 'Pilot sender ready'
+            : 'Main account ready'
         : 'Needs action',
-      detail: usingSubaccount
-        ? business.twilioSubaccountSid
-          ? `Business subaccount ${business.twilioSubaccountSid} is saved for this business.`
-          : 'Create, select, or paste the business subaccount SID before continuing.'
-        : 'This business uses the parent Twilio account directly. No business subaccount is required.',
+      detail:
+        messagingSetupMode === MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE
+          ? 'Pilot setup uses the approved CallbackCloser sender, so a dedicated business subaccount is optional for launch.'
+          : usingSubaccount
+            ? business.twilioSubaccountSid
+              ? `Business subaccount ${business.twilioSubaccountSid} is saved for this business.`
+              : 'Create, select, or paste the business subaccount SID before continuing.'
+            : 'This business uses the parent Twilio account directly. No business subaccount is required.',
     },
     {
       key: 'messaging_service_ready',
@@ -396,8 +438,12 @@ export function buildTwilioSetupFlow(params: {
       tone: buildTone(messagingServiceReady),
       stateLabel: messagingServiceReady ? 'Ready' : 'Missing',
       detail: messagingServiceReady
-        ? `Messaging Service ${business.twilioMessagingServiceSid} is saved for this business.`
-        : 'Create or record the Messaging Service that should send business SMS.',
+        ? messagingSetupMode === MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE
+          ? `Pilot setup is using Messaging Service ${business.twilioMessagingServiceSid} for the approved CallbackCloser sender.`
+          : `Messaging Service ${business.twilioMessagingServiceSid} is saved for this business.`
+        : messagingSetupMode === MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE
+          ? 'Attach the approved CallbackCloser Messaging Service before pilot SMS goes live.'
+          : 'Create or record the Messaging Service that should send business SMS.',
     },
     {
       key: 'number_assigned',
@@ -454,7 +500,10 @@ export function buildTwilioSetupFlow(params: {
       complete: messagingCompliance.complete,
       tone: messagingCompliance.tone,
       stateLabel: messagingCompliance.stateLabel,
-      detail: messagingCompliance.detail,
+      detail:
+        messagingSetupMode === MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE
+          ? `${messagingCompliance.detail} Pilot setup is founder-operated and does not imply this business has its own A2P approval yet.`
+          : messagingCompliance.detail,
     },
     {
       key: 'test_sms_delivered',
@@ -523,6 +572,9 @@ export function buildTwilioSetupFlow(params: {
             ? 'Choose how this business should use Twilio'
             : nextIncompleteStep.key === 'number_path'
               ? 'Choose how to connect the business number'
+              : nextIncompleteStep.key === 'messaging_service_ready' &&
+                  messagingSetupMode === MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE
+                ? 'Attach the approved pilot sender next'
               : nextIncompleteStep.key === 'forwarding_verified'
                 ? phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
                   ? 'Verify current-number forwarding next'
@@ -550,12 +602,18 @@ export function buildTwilioSetupFlow(params: {
   return {
     accountMode,
     phoneSetupPath,
+    forwardedCallAnswerMode,
+    messagingSetupMode,
     numberSetupMode,
     accountModeLabel: getTwilioAccountModeLabel(accountMode),
     phoneSetupPathLabel: getBusinessPhoneSetupPathLabel(phoneSetupPath),
+    forwardedCallAnswerModeLabel: getForwardedCallAnswerModeLabel(forwardedCallAnswerMode),
+    messagingSetupModeLabel: getMessagingSetupModeLabel(messagingSetupMode),
     numberSetupModeLabel: getTwilioNumberSetupModeLabel(numberSetupMode),
     accountModeDescription: getTwilioAccountModeDescription(accountMode),
     phoneSetupPathDescription: getBusinessPhoneSetupPathDescription(phoneSetupPath),
+    forwardedCallAnswerModeDescription: getForwardedCallAnswerModeDescription(forwardedCallAnswerMode),
+    messagingSetupModeDescription: getMessagingSetupModeDescription(messagingSetupMode),
     numberSetupModeDescription: getTwilioNumberSetupModeDescription(numberSetupMode),
     existingNumberMessage,
     safeToMarkLive,

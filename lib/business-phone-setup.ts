@@ -1,6 +1,8 @@
 import {
   BusinessPhoneSetupPath,
+  ForwardedCallAnswerMode,
   ForwardingVerificationStatus,
+  MessagingSetupMode,
   PortingStatus,
   TwilioNumberSetupMode,
   type Business,
@@ -64,6 +66,36 @@ export const businessPhoneSetupPathOptions = [
   },
 ] as const;
 
+export const forwardedCallAnswerModeOptions = [
+  {
+    value: ForwardedCallAnswerMode.PRESS_1_REQUIRED,
+    label: 'Require Press 1 before connecting',
+    description:
+      'Recommended. CallbackCloser only treats the forwarded call as answered after the owner or staff member presses 1, so voicemail pickups still trigger missed-call recovery.',
+  },
+  {
+    value: ForwardedCallAnswerMode.DIRECT_CONNECT,
+    label: 'Connect immediately',
+    description:
+      'Use the legacy direct bridge without human confirmation. This can allow voicemail or auto-attendants to count as answered.',
+  },
+] as const;
+
+export const messagingSetupModeOptions = [
+  {
+    value: MessagingSetupMode.PER_BUSINESS_TWILIO,
+    label: 'Dedicated business Twilio setup',
+    description:
+      'Use the business-specific Twilio Messaging Service and compliance path. This is the standard long-term setup for fully managed per-business messaging.',
+  },
+  {
+    value: MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE,
+    label: 'Pilot setup: shared approved CallbackCloser sender',
+    description:
+      'Pilot setup: current number forwards to CallbackCloser; SMS sends from the approved CallbackCloser messaging number. This is founder-operated and does not imply the business has its own A2P approval yet.',
+  },
+] as const;
+
 export function getBusinessPhoneSetupPath(path: BusinessPhoneSetupPath | null | undefined) {
   return path || BusinessPhoneSetupPath.NEW_TWILIO_NUMBER;
 }
@@ -76,6 +108,34 @@ export function getBusinessPhoneSetupPathLabel(path: BusinessPhoneSetupPath | nu
 export function getBusinessPhoneSetupPathDescription(path: BusinessPhoneSetupPath | null | undefined) {
   const resolved = getBusinessPhoneSetupPath(path);
   return businessPhoneSetupPathOptions.find((option) => option.value === resolved)?.description || businessPhoneSetupPathOptions[2].description;
+}
+
+export function getForwardedCallAnswerMode(mode: ForwardedCallAnswerMode | null | undefined) {
+  return mode || ForwardedCallAnswerMode.PRESS_1_REQUIRED;
+}
+
+export function getForwardedCallAnswerModeLabel(mode: ForwardedCallAnswerMode | null | undefined) {
+  const resolved = getForwardedCallAnswerMode(mode);
+  return forwardedCallAnswerModeOptions.find((option) => option.value === resolved)?.label || forwardedCallAnswerModeOptions[0].label;
+}
+
+export function getForwardedCallAnswerModeDescription(mode: ForwardedCallAnswerMode | null | undefined) {
+  const resolved = getForwardedCallAnswerMode(mode);
+  return forwardedCallAnswerModeOptions.find((option) => option.value === resolved)?.description || forwardedCallAnswerModeOptions[0].description;
+}
+
+export function getMessagingSetupMode(mode: MessagingSetupMode | null | undefined) {
+  return mode || MessagingSetupMode.PER_BUSINESS_TWILIO;
+}
+
+export function getMessagingSetupModeLabel(mode: MessagingSetupMode | null | undefined) {
+  const resolved = getMessagingSetupMode(mode);
+  return messagingSetupModeOptions.find((option) => option.value === resolved)?.label || messagingSetupModeOptions[0].label;
+}
+
+export function getMessagingSetupModeDescription(mode: MessagingSetupMode | null | undefined) {
+  const resolved = getMessagingSetupMode(mode);
+  return messagingSetupModeOptions.find((option) => option.value === resolved)?.description || messagingSetupModeOptions[0].description;
 }
 
 export function deriveTwilioNumberSetupModeFromPhoneSetupPath(path: BusinessPhoneSetupPath | null | undefined) {

@@ -1,4 +1,4 @@
-import { ManagedTwilioStatus, MessagingComplianceType, Prisma, TollFreeVerificationStatus } from '@prisma/client';
+import { ManagedTwilioStatus, MessagingComplianceType, MessagingSetupMode, Prisma, TollFreeVerificationStatus } from '@prisma/client';
 
 import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 
@@ -61,6 +61,7 @@ export type OutboundMessagingComplianceGate = {
 export function getOutboundMessagingComplianceGate(input: {
   twilioSubaccountSid?: string | null;
   messagingServiceSid?: string | null;
+  messagingSetupMode?: MessagingSetupMode | null;
   managedTwilioStatus?: ManagedTwilioStatus | null;
   a2pFailureReason?: string | null;
   messagingComplianceType?: MessagingComplianceType | null;
@@ -70,6 +71,7 @@ export function getOutboundMessagingComplianceGate(input: {
 }) {
   const summary = getManagedTwilioStatusSummary({
     managedTwilioStatus: input.managedTwilioStatus ?? ManagedTwilioStatus.DRAFT,
+    messagingSetupMode: input.messagingSetupMode ?? MessagingSetupMode.PER_BUSINESS_TWILIO,
     twilioAccountMode: input.twilioSubaccountSid ? 'BUSINESS_SUBACCOUNT' : 'MAIN_ACCOUNT',
     twilioSubaccountSid: input.twilioSubaccountSid ?? null,
     twilioPrimaryPhoneNumber: null,

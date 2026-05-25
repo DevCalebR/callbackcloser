@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  ForwardedCallAnswerMode,
   LeadReadiness,
   LeadStatus,
   ManagedTwilioStatus,
+  MessagingSetupMode,
   MessagingComplianceType,
   MessageDirection,
   MessageParticipant,
@@ -57,6 +59,8 @@ export async function seedTenantFixtures() {
       stripeSubscriptionId: `sub_${seed.replace(/-/g, '').slice(0, 10)}a`,
       stripePriceId: 'price_starter_fixture',
       subscriptionStatus: SubscriptionStatus.ACTIVE,
+      forwardedCallAnswerMode: ForwardedCallAnswerMode.PRESS_1_REQUIRED,
+      messagingSetupMode: MessagingSetupMode.PER_BUSINESS_TWILIO,
       messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
       managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
       managedTwilioStatusUpdatedAt: now,
@@ -86,6 +90,8 @@ export async function seedTenantFixtures() {
       stripeSubscriptionId: `sub_${seed.replace(/-/g, '').slice(0, 10)}b`,
       stripePriceId: 'price_growth_fixture',
       subscriptionStatus: SubscriptionStatus.PAST_DUE,
+      forwardedCallAnswerMode: ForwardedCallAnswerMode.PRESS_1_REQUIRED,
+      messagingSetupMode: MessagingSetupMode.PER_BUSINESS_TWILIO,
       messagingComplianceType: MessagingComplianceType.LOCAL_A2P,
       managedTwilioStatus: ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION,
       managedTwilioStatusUpdatedAt: now,

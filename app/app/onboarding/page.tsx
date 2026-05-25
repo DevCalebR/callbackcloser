@@ -3,8 +3,10 @@ import { redirect } from 'next/navigation';
 import {
   BusinessPhoneSetupPath,
   BusinessProvisioningStatus,
+  ForwardedCallAnswerMode,
   ForwardingVerificationStatus,
   ManagedTwilioStatus,
+  MessagingSetupMode,
   MessagingComplianceType,
   PortingStatus,
   TollFreeVerificationStatus,
@@ -56,6 +58,8 @@ export default async function OnboardingPage({
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
       twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
       phoneSetupPath: BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING,
+      forwardedCallAnswerMode: ForwardedCallAnswerMode.PRESS_1_REQUIRED,
+      messagingSetupMode: MessagingSetupMode.PER_BUSINESS_TWILIO,
       twilioNumberSetupMode: 'NEW_NUMBER',
       twilioSubaccountSid: null,
       twilioMessagingServiceSid: null,
@@ -143,6 +147,8 @@ export default async function OnboardingPage({
           ) : null}
           <form action={saveOnboardingAction} className="grid gap-4 sm:grid-cols-2" id="onboarding-business-form">
             <input type="hidden" name="next" value={nextPath} />
+            <input type="hidden" name="forwardedCallAnswerMode" value={ForwardedCallAnswerMode.PRESS_1_REQUIRED} />
+            <input type="hidden" name="messagingSetupMode" value={MessagingSetupMode.PER_BUSINESS_TWILIO} />
             <div className="sm:col-span-2 space-y-3 rounded-xl border bg-background/80 p-4">
               <div className="space-y-1">
                 <p className="text-sm font-medium">Twilio account mode</p>

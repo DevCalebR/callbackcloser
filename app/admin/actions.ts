@@ -3,8 +3,10 @@
 import {
   BusinessPhoneSetupPath,
   BusinessProvisioningStatus,
+  ForwardedCallAnswerMode,
   ForwardingVerificationStatus,
   ManagedTwilioStatus,
+  MessagingSetupMode,
   MessagingComplianceType,
   PortingStatus,
   Prisma,
@@ -347,6 +349,8 @@ export async function createDemoBusinessAction(formData: FormData) {
       notifyPhone: ownerPhone,
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
       phoneSetupPath: BusinessPhoneSetupPath.NEW_TWILIO_NUMBER,
+      forwardedCallAnswerMode: ForwardedCallAnswerMode.PRESS_1_REQUIRED,
+      messagingSetupMode: MessagingSetupMode.PER_BUSINESS_TWILIO,
       missedCallSeconds: 20,
       serviceLabel1: 'Repair',
       serviceLabel2: 'Install',
@@ -369,6 +373,8 @@ export async function createDemoBusinessAction(formData: FormData) {
       notifyPhone: ownerPhone,
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
       phoneSetupPath: BusinessPhoneSetupPath.NEW_TWILIO_NUMBER,
+      forwardedCallAnswerMode: ForwardedCallAnswerMode.PRESS_1_REQUIRED,
+      messagingSetupMode: MessagingSetupMode.PER_BUSINESS_TWILIO,
       subscriptionStatus: SubscriptionStatus.ACTIVE,
       subscriptionStatusUpdatedAt: new Date(),
       managedTwilioStatusUpdatedAt: new Date(),
@@ -415,6 +421,8 @@ export async function createAdminBusinessAction(formData: FormData) {
   const forwardingNumber = normalizePhoneNumber(data.forwardingNumber);
   const publicBusinessPhone = normalizePhoneNumber(data.publicBusinessPhone || '') || null;
   const phoneSetupPath = data.phoneSetupPath as BusinessPhoneSetupPath;
+  const forwardedCallAnswerMode = data.forwardedCallAnswerMode as ForwardedCallAnswerMode;
+  const messagingSetupMode = data.messagingSetupMode as MessagingSetupMode;
 
   const business = await db.business.create({
     data: {
@@ -427,6 +435,8 @@ export async function createAdminBusinessAction(formData: FormData) {
       notifyPhone: ownerPhone,
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
       phoneSetupPath,
+      forwardedCallAnswerMode,
+      messagingSetupMode,
       twilioNumberSetupMode: deriveTwilioNumberSetupModeFromPhoneSetupPath(phoneSetupPath),
       forwardingVerificationStatus:
         phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
@@ -792,6 +802,8 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
 
   const twilioAccountMode = data.twilioAccountMode as TwilioAccountMode;
   const phoneSetupPath = data.phoneSetupPath as BusinessPhoneSetupPath;
+  const forwardedCallAnswerMode = data.forwardedCallAnswerMode as ForwardedCallAnswerMode;
+  const messagingSetupMode = data.messagingSetupMode as MessagingSetupMode;
   const twilioNumberSetupMode = deriveTwilioNumberSetupModeFromPhoneSetupPath(phoneSetupPath) as TwilioNumberSetupMode;
   const twilioSubaccountSid = twilioAccountMode === TwilioAccountMode.MAIN_ACCOUNT ? null : normalizeOptionalSid(data.twilioSubaccountSid);
   let twilioPhoneNumber: string | null;
@@ -859,6 +871,8 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   const twilioMappingChanged =
     existingBusiness.twilioAccountMode !== twilioAccountMode ||
     existingBusiness.phoneSetupPath !== phoneSetupPath ||
+    existingBusiness.forwardedCallAnswerMode !== forwardedCallAnswerMode ||
+    existingBusiness.messagingSetupMode !== messagingSetupMode ||
     existingBusiness.twilioNumberSetupMode !== twilioNumberSetupMode ||
     existingBusiness.twilioSubaccountSid !== twilioSubaccountSid ||
     (existingBusiness.twilioPrimaryPhoneNumber || existingBusiness.twilioPhoneNumber) !== twilioPhoneNumber ||
@@ -886,6 +900,22 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
       : null,
     existingBusiness.phoneSetupPath !== phoneSetupPath
       ? { key: 'phoneSetupPath', label: 'business number path', before: existingBusiness.phoneSetupPath, after: phoneSetupPath }
+      : null,
+    existingBusiness.forwardedCallAnswerMode !== forwardedCallAnswerMode
+      ? {
+          key: 'forwardedCallAnswerMode',
+          label: 'forwarded call answer mode',
+          before: existingBusiness.forwardedCallAnswerMode,
+          after: forwardedCallAnswerMode,
+        }
+      : null,
+    existingBusiness.messagingSetupMode !== messagingSetupMode
+      ? {
+          key: 'messagingSetupMode',
+          label: 'messaging setup mode',
+          before: existingBusiness.messagingSetupMode,
+          after: messagingSetupMode,
+        }
       : null,
     existingBusiness.twilioNumberSetupMode !== twilioNumberSetupMode
       ? {
@@ -1014,6 +1044,8 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
       data: {
         twilioAccountMode,
         phoneSetupPath,
+        forwardedCallAnswerMode,
+        messagingSetupMode,
         twilioNumberSetupMode,
         twilioSubaccountSid,
         forwardingVerificationStatus:
@@ -1951,6 +1983,7 @@ export async function sendBusinessTestSmsAction(formData: FormData) {
       context: 'admin_test',
       twilioSubaccountSid: business.twilioAccountMode === TwilioAccountMode.MAIN_ACCOUNT ? null : business.twilioSubaccountSid,
       messagingServiceSid: business.twilioMessagingServiceSid,
+      messagingSetupMode: business.messagingSetupMode,
       managedTwilioStatus: business.managedTwilioStatus,
       a2pFailureReason: business.a2pFailureReason,
       messagingComplianceType: business.messagingComplianceType,

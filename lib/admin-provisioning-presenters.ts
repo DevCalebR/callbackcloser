@@ -16,6 +16,7 @@ type AdminBusinessSummary = Pick<
   | 'notifyPhone'
   | 'forwardingNumber'
   | 'twilioAccountMode'
+  | 'messagingSetupMode'
   | 'twilioNumberSetupMode'
   | 'twilioSubaccountSid'
   | 'twilioPhoneNumber'

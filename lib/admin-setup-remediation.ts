@@ -14,6 +14,7 @@ type SetupBusiness = Pick<
   | 'forwardingNumber'
   | 'notifyPhone'
   | 'twilioAccountMode'
+  | 'messagingSetupMode'
   | 'twilioSubaccountSid'
   | 'twilioMessagingServiceSid'
   | 'twilioPrimaryPhoneNumber'

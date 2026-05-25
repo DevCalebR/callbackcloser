@@ -63,6 +63,8 @@ import {
   type TwilioSetupTone,
   businessPhonePathOptions,
   buildTwilioSetupFlow,
+  forwardedCallAnswerOptions,
+  messagingSetupOptions,
   twilioAccountModeOptions,
 } from '@/lib/twilio-setup';
 
@@ -70,6 +72,8 @@ type AdminTwilioDefaults = {
   businessId: string;
   twilioAccountMode: string;
   phoneSetupPath: string;
+  forwardedCallAnswerMode: string;
+  messagingSetupMode: string;
   twilioNumberSetupMode: string;
   twilioSubaccountSid: string;
   twilioPhoneNumber: string;
@@ -323,6 +327,8 @@ export default async function AdminBusinessDetailPage({
     businessId: business.id,
     twilioAccountMode: business.twilioAccountMode,
     phoneSetupPath: business.phoneSetupPath,
+    forwardedCallAnswerMode: business.forwardedCallAnswerMode,
+    messagingSetupMode: business.messagingSetupMode,
     twilioNumberSetupMode: business.twilioNumberSetupMode,
     twilioSubaccountSid: business.twilioSubaccountSid || '',
     twilioPhoneNumber: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || '',
@@ -517,7 +523,11 @@ export default async function AdminBusinessDetailPage({
     if (step.key === 'number_path') {
       return (
         <form action={saveAdminTwilioSetupAction} className="space-y-4">
-          <HiddenAdminTwilioFields defaults={defaults} exclude={['phoneSetupPath']} returnStep={step.key} />
+          <HiddenAdminTwilioFields
+            defaults={defaults}
+            exclude={['phoneSetupPath', 'forwardedCallAnswerMode', 'messagingSetupMode']}
+            returnStep={step.key}
+          />
           <div className="grid gap-3">
             {businessPhonePathOptions.map((option) => (
               <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
@@ -531,14 +541,61 @@ export default async function AdminBusinessDetailPage({
               </label>
             ))}
           </div>
+          <div className="grid gap-3">
+            <p className="text-sm font-medium">Forwarded call answer confirmation</p>
+            {forwardedCallAnswerOptions.map((option) => (
+              <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
+                <div className="flex items-start gap-3">
+                  <input
+                    defaultChecked={business.forwardedCallAnswerMode === option.value}
+                    name="forwardedCallAnswerMode"
+                    type="radio"
+                    value={option.value}
+                  />
+                  <div className="space-y-1">
+                    <p className="font-medium">{option.label}</p>
+                    <p className="text-muted-foreground">{option.description}</p>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="grid gap-3">
+            <p className="text-sm font-medium">Messaging setup mode</p>
+            {messagingSetupOptions.map((option) => (
+              <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
+                <div className="flex items-start gap-3">
+                  <input
+                    defaultChecked={business.messagingSetupMode === option.value}
+                    name="messagingSetupMode"
+                    type="radio"
+                    value={option.value}
+                  />
+                  <div className="space-y-1">
+                    <p className="font-medium">{option.label}</p>
+                    <p className="text-muted-foreground">{option.description}</p>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
           <Button size="sm" type="submit" variant="outline">
-            Save business number path
+            Save call and messaging path
           </Button>
         </form>
       );
     }
 
     if (step.key === 'account_ready') {
+      if (business.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE') {
+        return (
+          <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+            Pilot setup is founder-operated. A dedicated subaccount is optional while SMS sends through the approved CallbackCloser Messaging
+            Service.
+          </div>
+        );
+      }
+
       if (business.twilioAccountMode === 'MAIN_ACCOUNT') {
         return <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">Main account mode is active, so this step does not require a business subaccount.</div>;
       }
@@ -556,6 +613,15 @@ export default async function AdminBusinessDetailPage({
     }
 
     if (step.key === 'messaging_service_ready') {
+      if (business.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE') {
+        return (
+          <div className="space-y-3 rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+            <p>Pilot setup: current number forwards to CallbackCloser; SMS sends from the approved CallbackCloser messaging number.</p>
+            <p>Do not create a new per-business Messaging Service here. Save the approved shared Messaging Service SID in the admin override panel below.</p>
+          </div>
+        );
+      }
+
       return (
         <form action={createBusinessMessagingServiceAction} className="space-y-3 rounded-xl border bg-background/80 p-4">
           <input name="businessId" type="hidden" value={business.id} />
@@ -1327,6 +1393,20 @@ export default async function AdminBusinessDetailPage({
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
             <p className="font-medium">Business number path</p>
             <p className="mt-2 text-muted-foreground">{getBusinessPhoneSetupPathLabel(business.phoneSetupPath)}</p>
+          </div>
+          <div className="rounded-xl border bg-background/80 p-4 text-sm">
+            <p className="font-medium">Routing number</p>
+            <p className="mt-2 text-muted-foreground">
+              {managedTextingNumber ? formatPhoneForDisplay(managedTextingNumber) : 'Routing number not assigned yet'}
+            </p>
+          </div>
+          <div className="rounded-xl border bg-background/80 p-4 text-sm">
+            <p className="font-medium">Answer confirmation</p>
+            <p className="mt-2 text-muted-foreground">{setupFlow.forwardedCallAnswerModeLabel}</p>
+          </div>
+          <div className="rounded-xl border bg-background/80 p-4 text-sm">
+            <p className="font-medium">Messaging setup mode</p>
+            <p className="mt-2 text-muted-foreground">{setupFlow.messagingSetupModeLabel}</p>
           </div>
         </CardContent>
       </Card>

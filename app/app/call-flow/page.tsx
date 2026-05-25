@@ -59,7 +59,9 @@ export default async function CallFlowPage() {
         ? {
             key: 'compliance',
             label:
-              managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
+              managedTwilioSummary.usesSharedPilotMessaging
+                ? 'Pilot sender setup'
+                : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
                 ? 'Toll-free verification'
                 : managedTwilioSummary.complianceTypeUnknown
                   ? 'Number type'
@@ -116,10 +118,14 @@ export default async function CallFlowPage() {
     {
       key: 'compliance',
       label: managedTwilioSummary.complianceReady
-        ? managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
+        ? managedTwilioSummary.usesSharedPilotMessaging
+          ? 'Pilot sender ready'
+          : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
           ? 'Toll-free verification complete'
           : 'A2P approved'
-        : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
+        : managedTwilioSummary.usesSharedPilotMessaging
+          ? 'Pilot sender still needed'
+          : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
           ? 'Toll-free verification in progress'
           : managedTwilioSummary.complianceTypeUnknown
             ? 'Number type still needed'
@@ -163,12 +169,17 @@ export default async function CallFlowPage() {
     },
     {
       title: 'CallbackCloser sees the missed call',
-      detail: `Current missed-call timeout is ${business.missedCallSeconds} seconds before the recovery flow starts.`,
+      detail:
+        business.forwardedCallAnswerMode === 'PRESS_1_REQUIRED'
+          ? `Current missed-call timeout is ${business.missedCallSeconds} seconds. Forwarded calls only count as answered after your team presses 1, so voicemail pickups still fall back into recovery.`
+          : `Current missed-call timeout is ${business.missedCallSeconds} seconds before the recovery flow starts.`,
     },
       {
         title: 'The caller gets a text right away',
         detail: managedTwilioSummary.complianceReady
-          ? 'The conversation collects the service type, urgency, ZIP, callback timing, and optional name without extra admin work.'
+          ? managedTwilioSummary.usesSharedPilotMessaging
+            ? 'Pilot setup sends the conversation from the approved CallbackCloser messaging number while the business keeps its public number live.'
+            : 'The conversation collects the service type, urgency, ZIP, callback timing, and optional name without extra admin work.'
           : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
             ? 'The automated SMS handoff stays pending until the managed Twilio setup and toll-free verification are complete.'
             : managedTwilioSummary.complianceTypeUnknown

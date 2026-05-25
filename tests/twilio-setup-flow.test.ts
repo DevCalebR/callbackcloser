@@ -4,8 +4,10 @@ import test from 'node:test';
 import {
   BusinessPhoneSetupPath,
   BusinessProvisioningStatus,
+  ForwardedCallAnswerMode,
   ForwardingVerificationStatus,
   ManagedTwilioStatus,
+  MessagingSetupMode,
   MessagingComplianceType,
   PortingStatus,
   TollFreeVerificationStatus,
@@ -24,6 +26,8 @@ function createBusiness(overrides: Record<string, unknown> = {}) {
     provisioningStatus: BusinessProvisioningStatus.ONBOARDING,
     twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
     phoneSetupPath: BusinessPhoneSetupPath.NEW_TWILIO_NUMBER,
+    forwardedCallAnswerMode: ForwardedCallAnswerMode.PRESS_1_REQUIRED,
+    messagingSetupMode: MessagingSetupMode.PER_BUSINESS_TWILIO,
     twilioNumberSetupMode: TwilioNumberSetupMode.NEW_NUMBER,
     forwardingVerificationStatus: ForwardingVerificationStatus.NOT_STARTED,
     forwardingVerifiedAt: null,
@@ -194,4 +198,32 @@ test('unknown number type keeps the live gate blocked', () => {
 
   assert.equal(flow.safeToMarkLive, false);
   assert.match(flow.liveGateDetail, /choose the number type/i);
+});
+
+test('shared pilot messaging path can clear the launch gate intentionally', () => {
+  const flow = buildTwilioSetupFlow({
+    business: createBusiness({
+      phoneSetupPath: BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING,
+      forwardedCallAnswerMode: ForwardedCallAnswerMode.PRESS_1_REQUIRED,
+      messagingSetupMode: MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE,
+      forwardingVerificationStatus: ForwardingVerificationStatus.VERIFIED,
+      forwardingVerifiedAt: new Date('2026-04-20T00:00:00.000Z'),
+      messagingComplianceType: MessagingComplianceType.UNKNOWN,
+      managedTwilioStatus: ManagedTwilioStatus.DRAFT,
+      a2pCustomerProfileSid: null,
+      a2pBrandSid: null,
+      a2pCampaignSid: null,
+      a2pApprovedAt: null,
+    }),
+    notificationSettings: createNotificationSettings(),
+    ownerConnected: true,
+    successfulLeadCount: 1,
+    testSmsState: 'delivered',
+    webhookSnapshot: createWebhookSnapshot(),
+  });
+
+  assert.equal(flow.safeToMarkLive, true);
+  const complianceStep = flow.steps.find((step) => step.key === 'a2p_status_recorded');
+  assert.match(complianceStep?.detail || '', /founder-operated/i);
+  assert.match(complianceStep?.detail || '', /approved CallbackCloser messaging number/i);
 });
