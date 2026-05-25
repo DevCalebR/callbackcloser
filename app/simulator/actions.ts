@@ -38,7 +38,7 @@ export async function startSimulatorRunAction(formData: FormData) {
   const transport = realSmsEnabled ? 'twilio' : 'simulated';
   const notice = realSmsEnabled
     ? 'Simulator started. CallbackCloser should text the number you entered from the demo business texting line.'
-    : 'Preview mode active. This simulator run updates the transcript and owner alerts on-page, but it does not text your phone until a real demo texting line is assigned and ENABLE_PUBLIC_SIMULATOR_REAL_SMS=true.';
+    : 'Preview mode active. This simulator run updates the transcript and owner alerts on-page, but it does not text your phone until the demo texting line is configured for real SMS delivery.';
 
   const call = await db.call.create({
     data: {

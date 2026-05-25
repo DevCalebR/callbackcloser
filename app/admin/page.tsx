@@ -128,6 +128,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   const admin = await requireAdmin();
   const createdDemo = getQueryValue(searchParams, 'createdDemo') === '1';
   const createdBusinessId = getQueryValue(searchParams, 'createdBusinessId');
+  const setupIntent = getQueryValue(searchParams, 'intent');
   const selectedBusinessId = getQueryValue(searchParams, 'businessId');
   const archived = getQueryValue(searchParams, 'archived') === '1';
   const deleted = getQueryValue(searchParams, 'deleted') === '1';
@@ -526,6 +527,11 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           Demo business ready. Use <code className="rounded bg-background px-1 py-0.5">{createdBusinessId}</code> as `SIMULATOR_BUSINESS_ID`, or open the
           support workspace below.
+        </div>
+      ) : null}
+      {setupIntent === 'new-business-pilot' ? (
+        <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+          Customer pilot setup starts here. Public signup is for business owners creating their own account; founder/operator setup for a real customer stays in this admin new-business flow.
         </div>
       ) : null}
 

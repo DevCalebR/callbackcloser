@@ -5,6 +5,7 @@ import { PublicSiteNav } from '@/components/public-site-nav';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const pricingPlans = [
   {
@@ -66,7 +67,7 @@ export default function PricingPage() {
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
               support@callbackcloser.com
             </a>
-            .
+            . Founder-run customer pilot setup is separate from public signup.
           </p>
         </section>
 
@@ -87,7 +88,7 @@ export default function PricingPage() {
                       Contact Sales
                     </Link>
                   ) : (
-                    <Link className={buttonVariants()} href="/sign-up">
+                    <Link className={buttonVariants()} href={PUBLIC_START_FREE_PILOT_PATH}>
                       Start Free Pilot
                     </Link>
                   )}
@@ -122,6 +123,9 @@ export default function PricingPage() {
               <p>STOP, START, and HELP handling remain part of the live messaging flow, and the consent page stays public.</p>
               <p>Businesses remain responsible for lawful texting practices and consent requirements in their market.</p>
               <div className="flex flex-wrap gap-3 pt-2">
+                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
+                  Create account
+                </Link>
                 <Link className={buttonVariants({ size: 'sm' })} href="/sms-consent">
                   Review SMS consent
                 </Link>

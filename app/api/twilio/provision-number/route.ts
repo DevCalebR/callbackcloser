@@ -2,7 +2,9 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
 import { db } from '@/lib/db';
+import { getConfiguredAppBaseUrl } from '@/lib/env.server';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
+import { isAllowedRequestOrigin } from '@/lib/request-origin';
 import { logTwilioError, logTwilioWarn } from '@/lib/twilio-logging';
 import { getTwilioProvisioningBlockReason, provisionPhoneNumber } from '@/lib/twilio-provision';
 
@@ -34,6 +36,10 @@ function buildBlockedResponse(blockReason: ReturnType<typeof getTwilioProvisioni
 export async function POST(request: Request) {
   const correlationId = getCorrelationIdFromRequest(request);
   const withCorrelation = (response: NextResponse) => withCorrelationIdHeader(response, correlationId);
+
+  if (process.env.NODE_ENV === 'production' && !isAllowedRequestOrigin(request, getConfiguredAppBaseUrl())) {
+    return withCorrelation(NextResponse.json({ error: 'Invalid request origin' }, { status: 403 }));
+  }
 
   const { userId } = await auth();
   if (!userId) {

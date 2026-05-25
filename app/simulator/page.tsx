@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDateTime, getLeadStatusBadgeVariant, leadReadinessLabels, leadStatusLabels } from '@/lib/lead-presenters';
+import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 import { canSendRealSimulatorSms, getSimulatorBusiness, getSimulatorRun, isPlaceholderSimulatorNumber, isPublicSimulatorEnabled } from '@/lib/simulator';
 
 export const metadata: Metadata = {
@@ -101,7 +102,7 @@ export default async function SimulatorPage({
                   Demo number unavailable
                 </Button>
               )}
-              <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/sign-up">
+              <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href={PUBLIC_START_FREE_PILOT_PATH}>
                 Start Free Pilot
               </Link>
             </div>
@@ -115,7 +116,7 @@ export default async function SimulatorPage({
                   ? 'CallbackCloser will text the phone number you enter from the demo business texting line, then continue the rest of the flow in this page.'
                   : usingPlaceholderTextingLine
                     ? 'This demo workspace is still using the safe placeholder texting line, so CallbackCloser will show the recovery text and owner alerts on this page instead of sending a real SMS.'
-                    : 'ENABLE_PUBLIC_SIMULATOR_REAL_SMS is still off, so CallbackCloser will show the recovery text and owner alerts on this page instead of sending a real SMS.'}
+                    : 'Real SMS mode is not enabled for this environment yet, so CallbackCloser will show the recovery text and owner alerts on this page instead of sending a real SMS.'}
               </p>
             </div>
           </div>
@@ -258,14 +259,14 @@ export default async function SimulatorPage({
                   )}
 
                   <div className="flex flex-wrap gap-3">
-                    <Link className={buttonVariants()} href="/sign-up">
-                      Start trial
+                    <Link className={buttonVariants()} href={PUBLIC_CREATE_ACCOUNT_PATH}>
+                      Create account
                     </Link>
-                    <Link className={buttonVariants({ variant: 'outline' })} href="/contact">
-                      Request setup
+                    <Link className={buttonVariants({ variant: 'outline' })} href={PUBLIC_START_FREE_PILOT_PATH}>
+                      Start Free Pilot
                     </Link>
                     <Link className={buttonVariants({ variant: 'ghost' })} href="/pricing">
-                      Book demo
+                      View pricing
                     </Link>
                   </div>
                 </div>

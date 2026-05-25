@@ -4,6 +4,7 @@ import { PublicSiteFooter } from '@/components/public-site-footer';
 import { PublicSiteNav } from '@/components/public-site-nav';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const outreachInputs = [
   'Business name and service type',
@@ -45,11 +46,15 @@ export default function ContactPage() {
                 For SMS consent, STOP or HELP behavior, or public trust-page questions, email support and reference{' '}
                 <span className="font-medium text-foreground">callbackcloser.com</span> so we can match the request to the live pilot setup.
               </p>
+              <p>Founder/operator customer pilot setup is separate from public signup and stays inside the admin new-business flow.</p>
               <div className="flex flex-wrap gap-3 pt-2">
-                <Link className={buttonVariants()} href="/sign-up">
+                <Link className={buttonVariants()} href={PUBLIC_START_FREE_PILOT_PATH}>
                   Start pilot onboarding
                 </Link>
-                <Link className={buttonVariants({ variant: 'outline' })} href="/pricing">
+                <Link className={buttonVariants({ variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
+                  Create account
+                </Link>
+                <Link className={buttonVariants({ variant: 'ghost' })} href="/pricing">
                   View pricing
                 </Link>
                 <Link className={buttonVariants({ variant: 'ghost' })} href="/sms-consent">

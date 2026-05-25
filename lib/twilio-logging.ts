@@ -1,3 +1,4 @@
+import { sanitizeLogFields } from '@/lib/log-sanitization';
 import { reportApplicationError } from './observability.ts';
 
 type TwilioLogRoute = 'voice' | 'sms' | 'status' | 'messaging' | 'webhook-auth' | 'provisioning';
@@ -11,7 +12,7 @@ function errorMessage(error: unknown) {
 }
 
 function write(level: TwilioLogLevel, route: TwilioLogRoute, event: string, fields: TwilioLogFields) {
-  const payload = { route, event, ...fields };
+  const payload = { route, event, ...sanitizeLogFields(fields) };
   if (level === 'info') console.info(`twilio.${route}`, payload);
   if (level === 'warn') console.warn(`twilio.${route}`, payload);
   if (level === 'error') console.error(`twilio.${route}`, payload);
