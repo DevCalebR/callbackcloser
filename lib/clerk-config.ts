@@ -18,11 +18,13 @@ export function isLikelyValidClerkSecretKey(value: string) {
 function normalizeClerkRoute(rawValue: string | undefined, fallbackPath: string) {
   const value = rawValue?.trim();
   if (!value) return fallbackPath;
-  if (value.startsWith('/') && !value.startsWith('//')) return value;
+  if (value.startsWith('/') && !value.startsWith('//')) {
+    return value.split('?')[0]?.split('#')[0] || fallbackPath;
+  }
 
   try {
     const parsed = new URL(value);
-    const normalized = `${parsed.pathname}${parsed.search}` || fallbackPath;
+    const normalized = parsed.pathname || fallbackPath;
     return normalized.startsWith('/') ? normalized : fallbackPath;
   } catch {
     return fallbackPath;
@@ -72,5 +74,29 @@ export function validateOptionalClerkRouteEnv(name: string, env: EnvMap = proces
     return null;
   } catch {
     return `${name} must be a relative path like /sign-in or a valid absolute URL`;
+  }
+}
+
+function decodeBase64Url(value: string) {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
+  return Buffer.from(`${normalized}${padding}`, 'base64').toString('utf8');
+}
+
+export function getClerkFrontendApiOrigin(env: EnvMap = process.env) {
+  const publishableKey = env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() ?? '';
+  const match = publishableKey.match(/^pk_(?:test|live)_(.+)$/);
+  if (!match) return null;
+
+  try {
+    const decoded = decodeBase64Url(match[1]).replace(/\$$/, '').trim();
+    if (!decoded) return null;
+
+    const withProtocol = decoded.startsWith('http://') || decoded.startsWith('https://')
+      ? decoded
+      : `https://${decoded}`;
+    return new URL(withProtocol).origin;
+  } catch {
+    return null;
   }
 }

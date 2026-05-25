@@ -4,6 +4,7 @@ import { clerkMiddleware } from '@clerk/nextjs/server';
 
 import { hasRequiredValidClerkEnv } from '@/lib/clerk-config';
 import {
+  routeCanRenderClerkFallback,
   routeCanRenderWithoutClerk,
   routeNeedsClerkContext,
   routeNeedsProtectedMutationRateLimit,
@@ -102,7 +103,9 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
     }
 
     return withSecurityHeaders(
-      needsClerkContext ? buildAuthUnavailableResponse(req) : NextResponse.next()
+      !needsClerkContext || routeCanRenderClerkFallback(pathname)
+        ? NextResponse.next()
+        : buildAuthUnavailableResponse(req)
     );
   }
 
@@ -115,7 +118,9 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
       message: error instanceof Error ? error.message : 'unknown_error',
     });
     return withSecurityHeaders(
-      routeCanRenderWithoutClerk(pathname) ? NextResponse.next() : buildAuthUnavailableResponse(req)
+      routeCanRenderWithoutClerk(pathname) || routeCanRenderClerkFallback(pathname)
+        ? NextResponse.next()
+        : buildAuthUnavailableResponse(req)
     );
   }
 }

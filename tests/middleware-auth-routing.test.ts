@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  routeCanRenderClerkFallback,
   routeCanRenderWithoutClerk,
   routeNeedsClerkContext,
   routeNeedsProtectedMutationRateLimit,
@@ -31,6 +32,8 @@ test('marketing pages remain public when Clerk is unavailable', () => {
   assert.equal(routeCanRenderWithoutClerk('/pricing'), true);
   assert.equal(routeCanRenderWithoutClerk('/demo'), true);
   assert.equal(routeCanRenderWithoutClerk('/contact'), true);
+  assert.equal(routeCanRenderClerkFallback('/sign-up'), true);
+  assert.equal(routeCanRenderClerkFallback('/sign-in'), true);
 });
 
 test('protected owner and admin routes still require auth', () => {
@@ -60,7 +63,7 @@ test('middleware uses one clerkMiddleware path and only protects the protected s
   assert.match(middleware, /if \(routeNeedsProtection\(pathname\)\) {\s*await auth\.protect\(\);/s);
   assert.match(middleware, /if \(req\.method === 'POST' && routeNeedsProtectedMutationRateLimit\(pathname\)\)/);
   assert.match(middleware, /const needsClerkContext = routeNeedsClerkContext\(pathname\)/);
-  assert.match(middleware, /needsClerkContext \? buildAuthUnavailableResponse\(req\) : NextResponse\.next\(\)/);
+  assert.match(middleware, /routeCanRenderClerkFallback\(pathname\)/);
   assert.doesNotMatch(middleware, /if \(!isProtectedRoute\(req\)\)/);
   assert.doesNotMatch(middleware, /const protectedMiddleware = clerkMiddleware/);
   assert.match(signInPage, /const \{ userId \} = await auth\(\);/);
