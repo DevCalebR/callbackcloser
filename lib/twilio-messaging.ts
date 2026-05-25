@@ -1,13 +1,18 @@
 import { ManagedTwilioStatus, MessageParticipant, MessagingComplianceType, Prisma, TollFreeVerificationStatus } from '@prisma/client';
 
 import { db } from '@/lib/db';
+import { persistAcceptedOutboundMessage, persistOutboundMessageRecord } from '@/lib/outbound-message-persistence';
 import { type OutboundMessageContext } from '@/lib/outbound-message-events';
 import { formatPhoneDetail, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { getOutboundMessagingComplianceGate, type OutboundMessagingSuppressionReason } from '@/lib/twilio-compliance';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
 import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
-import { getTwilioBusinessClient, getTwilioMessageStatusCallbackUrl } from '@/lib/twilio';
+import { type TwilioClient, getTwilioBusinessClient, getTwilioMessageStatusCallbackUrl } from '@/lib/twilio';
+
+type OutboundTwilioClient = Pick<TwilioClient, 'messages'>;
+
+export { persistOutboundMessageRecord } from '@/lib/outbound-message-persistence';
 
 export async function persistInboundMessage(params: {
   businessId: string;
@@ -88,6 +93,7 @@ export async function sendAndPersistOutboundMessage(params: {
   tollFreeVerificationSid?: string | null;
   tollFreeVerificationNote?: string | null;
   allowUnapproved?: boolean;
+  twilioClient?: OutboundTwilioClient;
 }) {
   const from = normalizePhoneNumber(params.fromPhone) || params.fromPhone;
   const to = normalizePhoneNumber(params.toPhone) || params.toPhone;
@@ -183,24 +189,25 @@ export async function sendAndPersistOutboundMessage(params: {
     relatedEntityId: params.leadId ?? null,
   });
 
-  const client = getTwilioBusinessClient(params.twilioSubaccountSid);
+  const statusCallback = getTwilioMessageStatusCallbackUrl();
+  const client = params.twilioClient ?? getTwilioBusinessClient(params.twilioSubaccountSid);
   const sent = await client.messages.create(
     params.messagingServiceSid
       ? {
           messagingServiceSid: params.messagingServiceSid,
           to,
           body: params.body,
-          statusCallback: getTwilioMessageStatusCallbackUrl(),
+          statusCallback,
         }
       : {
           from,
           to,
           body: params.body,
-          statusCallback: getTwilioMessageStatusCallbackUrl(),
+          statusCallback,
         }
   );
 
-  const message = await persistOutboundMessageRecord({
+  const message = await persistAcceptedOutboundMessage({
     businessId: params.businessId,
     leadId: params.leadId ?? null,
     fromPhone: from,
@@ -209,10 +216,9 @@ export async function sendAndPersistOutboundMessage(params: {
     participant,
     twilioSid: sent.sid,
     status: sent.status,
-    rawPayload: {
-      source: 'twilio_api',
-      context,
-    },
+    context,
+    statusCallback,
+    messagingServiceSid: params.messagingServiceSid,
     twilioCreatedAt: sent.dateCreated ?? undefined,
   });
   await recordBusinessOperatorEvent({
@@ -240,38 +246,6 @@ export async function sendAndPersistOutboundMessage(params: {
   });
 
   return { suppressed: false as const, sent, message };
-}
-
-export async function persistOutboundMessageRecord(params: {
-  businessId: string;
-  leadId?: string | null;
-  twilioSid?: string | null;
-  fromPhone: string;
-  toPhone: string;
-  body: string;
-  participant?: MessageParticipant;
-  status?: string | null;
-  rawPayload?: Prisma.InputJsonValue;
-  twilioCreatedAt?: Date | null;
-}) {
-  const from = normalizePhoneNumber(params.fromPhone) || params.fromPhone;
-  const to = normalizePhoneNumber(params.toPhone) || params.toPhone;
-
-  return db.message.create({
-    data: {
-      businessId: params.businessId,
-      leadId: params.leadId ?? null,
-      twilioSid: params.twilioSid ?? null,
-      direction: 'OUTBOUND',
-      participant: params.participant ?? 'LEAD',
-      fromPhone: from,
-      toPhone: to,
-      body: params.body,
-      status: params.status ?? undefined,
-      rawPayload: params.rawPayload ?? undefined,
-      twilioCreatedAt: params.twilioCreatedAt ?? undefined,
-    },
-  });
 }
 
 export function buildOwnerNotificationMessage(params: {

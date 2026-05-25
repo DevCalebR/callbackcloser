@@ -1,8 +1,19 @@
-import { OperatorEventCategory, OperatorEventStatus, type Message } from '@prisma/client';
+import { OperatorEventCategory, OperatorEventStatus, Prisma, type Message } from '@prisma/client';
 
 export type OutboundMessageContext = 'lead_recovery' | 'owner_alert' | 'admin_test';
 
-type OperatorMessageRecord = Pick<Message, 'leadId' | 'participant' | 'body'>;
+type OperatorMessageRecord = Pick<Message, 'leadId' | 'participant' | 'body' | 'rawPayload'>;
+
+const ADMIN_TEST_PREFIXES = ['CallbackCloser admin test:', 'CallbackCloser setup test:'];
+
+function readRawPayloadContext(rawPayload: Prisma.JsonValue | null | undefined) {
+  if (!rawPayload || Array.isArray(rawPayload) || typeof rawPayload !== 'object') {
+    return null;
+  }
+
+  const context = (rawPayload as Record<string, unknown>).context;
+  return typeof context === 'string' ? context.trim().toLowerCase() : null;
+}
 
 export function normalizeOutboundMessageStatus(status: string | null | undefined) {
   const normalized = status?.trim().toLowerCase();
@@ -20,7 +31,10 @@ export function isFailedOutboundMessageStatus(status: string | null | undefined)
 }
 
 export function getOutboundMessageContext(message: OperatorMessageRecord): OutboundMessageContext {
-  if (!message.leadId && message.participant === 'OWNER' && message.body.startsWith('CallbackCloser admin test:')) {
+  const rawPayloadContext = readRawPayloadContext(message.rawPayload);
+  const isAdminTestBody = ADMIN_TEST_PREFIXES.some((prefix) => message.body.startsWith(prefix));
+
+  if (!message.leadId && message.participant === 'OWNER' && (rawPayloadContext === 'admin_test' || isAdminTestBody)) {
     return 'admin_test';
   }
 
