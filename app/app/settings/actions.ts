@@ -464,7 +464,9 @@ export async function sendBusinessTwilioTestSmsAction(formData: FormData) {
         details: {
           destinationPhone: formatPhoneDetail(destinationPhone),
           fromPhone: formatPhoneDetail(fromPhone),
-          messageSid: maskSid(result.sent.sid),
+          messageSid: result.sent.sid,
+          messageSidMasked: maskSid(result.sent.sid),
+          messageStatus: result.sent.status,
         },
         relatedEntityType: 'message',
         relatedEntityId: result.message.id,

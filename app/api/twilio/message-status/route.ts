@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 
+import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
+import { normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
 import {
   buildOutboundMessageStatusEvent,
   isTerminalOutboundMessageStatus,
@@ -23,6 +25,53 @@ function formField(formData: FormData, key: string) {
 
 function okResponse() {
   return new NextResponse(null, { status: 200 });
+}
+
+async function findFallbackAdminTestMessage(params: {
+  fromPhone: string | null;
+  toPhone: string | null;
+  messagingServiceSid: string | null;
+}) {
+  const { fromPhone, toPhone, messagingServiceSid } = params;
+  if (!fromPhone || !toPhone) {
+    return null;
+  }
+
+  const business =
+    (messagingServiceSid
+      ? await db.business.findFirst({
+          where: { twilioMessagingServiceSid: messagingServiceSid },
+          select: { id: true },
+        })
+      : null) || (await findBusinessByTwilioNumber(fromPhone));
+
+  if (!business) {
+    return null;
+  }
+
+  return db.message.findFirst({
+    where: {
+      businessId: business.id,
+      leadId: null,
+      direction: 'OUTBOUND',
+      participant: 'OWNER',
+      fromPhone,
+      toPhone,
+      OR: [{ body: { startsWith: 'CallbackCloser admin test:' } }, { body: { startsWith: 'CallbackCloser setup test:' } }],
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      businessId: true,
+      leadId: true,
+      participant: true,
+      body: true,
+      fromPhone: true,
+      toPhone: true,
+      status: true,
+      rawPayload: true,
+    },
+  });
 }
 
 export async function POST(request: Request) {
@@ -89,6 +138,9 @@ export async function POST(request: Request) {
 
     messageSid = formField(formData, 'MessageSid') || formField(formData, 'SmsSid') || null;
     const messageStatus = normalizeOutboundMessageStatus(formField(formData, 'MessageStatus') || formField(formData, 'SmsStatus'));
+    const toPhone = normalizePhoneNumberToE164(formField(formData, 'To')) || normalizePhoneNumber(formField(formData, 'To'));
+    const fromPhone = normalizePhoneNumberToE164(formField(formData, 'From')) || normalizePhoneNumber(formField(formData, 'From'));
+    const messagingServiceSid = formField(formData, 'MessagingServiceSid') || null;
     const errorCode = formField(formData, 'ErrorCode') || null;
     const errorMessage = formField(formData, 'ErrorMessage') || null;
 
@@ -121,8 +173,9 @@ export async function POST(request: Request) {
         fromPhone: true,
         toPhone: true,
         status: true,
+        rawPayload: true,
       },
-    });
+    }) || (await findFallbackAdminTestMessage({ fromPhone, toPhone, messagingServiceSid }));
 
     if (!message) {
       logTwilioWarn('sms', 'message_status_message_not_found', {
@@ -130,6 +183,9 @@ export async function POST(request: Request) {
         correlationId,
         eventType: 'message_status_callback',
         decision: 'noop_message_not_found',
+        toPhone,
+        fromPhone,
+        messagingServiceSid,
       });
       return withCorrelation(okResponse());
     }
@@ -152,15 +208,18 @@ export async function POST(request: Request) {
           status: event.status,
           summary: event.summary,
           details: {
-            messageSid,
-            messageStatus,
-            toPhone: formatPhoneDetail(message.toPhone),
-            fromPhone: formatPhoneDetail(message.fromPhone),
-            errorCode,
-            errorMessage,
-          },
-          relatedEntityType: message.leadId ? 'lead' : 'message',
-          relatedEntityId: message.leadId ?? message.id,
+          messageSid,
+          messageStatus,
+          toPhone: formatPhoneDetail(message.toPhone),
+          fromPhone: formatPhoneDetail(message.fromPhone),
+          callbackToPhone: formatPhoneDetail(toPhone),
+          callbackFromPhone: formatPhoneDetail(fromPhone),
+          messagingServiceSid,
+          errorCode,
+          errorMessage,
+        },
+        relatedEntityType: message.leadId ? 'lead' : 'message',
+        relatedEntityId: message.leadId ?? message.id,
         });
       }
     }
