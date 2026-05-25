@@ -2,14 +2,15 @@ import Link from 'next/link';
 
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
+import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_SIGN_IN_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const primaryLinks = [
+  { href: '/demo', label: 'Demo' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/#how-it-works', label: 'How it works' },
-  { href: '/#proof', label: 'Results' },
-  { href: '/demo', label: 'See demo' },
   { href: '/contact', label: 'Contact' },
   { href: '/sms-consent', label: 'SMS Consent' },
+  { href: '/privacy', label: 'Privacy' },
+  { href: '/terms', label: 'Terms' },
 ];
 
 export function PublicSiteNav() {
@@ -35,10 +36,13 @@ export function PublicSiteNav() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Link className={buttonVariants({ size: 'sm', variant: 'ghost' })} href="/sign-in">
+            <Link className={buttonVariants({ size: 'sm', variant: 'ghost' })} href={PUBLIC_SIGN_IN_PATH}>
               Sign in
             </Link>
-            <Link className={buttonVariants({ size: 'sm' })} href="/sign-up">
+            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
+              Create account
+            </Link>
+            <Link className={buttonVariants({ size: 'sm' })} href={PUBLIC_START_FREE_PILOT_PATH}>
               Start Free Pilot
             </Link>
           </div>

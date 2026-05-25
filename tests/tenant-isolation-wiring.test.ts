@@ -34,3 +34,18 @@ test('protected app surfaces use shared tenant-scoped access helpers', () => {
   assert.match(billingPage, /getBillingUsageSnapshotForBusiness/);
   assert.match(recordingRoute, /getLeadRecordingForOwnerClerkId/);
 });
+
+test('middleware protects owner and admin app surfaces plus sensitive authenticated mutations', () => {
+  const middleware = read('middleware.ts');
+  const twilioProvisionRoute = read('app/api/twilio/provision-number/route.ts');
+
+  assert.match(middleware, /'\/app\(\.\*\)'/);
+  assert.match(middleware, /'\/admin\(\.\*\)'/);
+  assert.match(middleware, /'\/api\/stripe\/checkout\(\.\*\)'/);
+  assert.match(middleware, /'\/api\/stripe\/portal\(\.\*\)'/);
+  assert.match(middleware, /'\/api\/twilio\/provision-number\(\.\*\)'/);
+  assert.match(middleware, /'\/api\/twilio\/provision-number'/);
+  assert.match(twilioProvisionRoute, /auth\(\)/);
+  assert.match(twilioProvisionRoute, /isAllowedRequestOrigin/);
+  assert.match(twilioProvisionRoute, /Invalid request origin/);
+});

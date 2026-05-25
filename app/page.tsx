@@ -5,6 +5,7 @@ import { PublicSiteNav } from '@/components/public-site-nav';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const roiPoints = [
   {
@@ -145,14 +146,14 @@ export default function LandingPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <Link className={buttonVariants({ size: 'lg' })} href="/sign-up">
+                  <Link className={buttonVariants({ size: 'lg' })} href={PUBLIC_START_FREE_PILOT_PATH}>
                     Start Free Pilot
                   </Link>
-                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/demo">
-                    See Demo
+                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
+                    Create Account
                   </Link>
-                  <Link className={buttonVariants({ size: 'lg', variant: 'ghost' })} href="/pricing">
-                    Pricing
+                  <Link className={buttonVariants({ size: 'lg', variant: 'ghost' })} href="/demo">
+                    See Demo
                   </Link>
                 </div>
                 <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
@@ -162,6 +163,10 @@ export default function LandingPage() {
                   <span className="rounded-full border bg-card px-3 py-1">Less admin chasing</span>
                 </div>
                 <p className="text-base font-medium text-foreground">Close one extra job and this can pay for itself.</p>
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                  Start Free Pilot creates a new account or takes an existing user to the right next step automatically.
+                  Founder-operated customer pilot setup stays separate in the admin new-business flow.
+                </p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

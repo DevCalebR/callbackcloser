@@ -16,6 +16,7 @@ import {
   demoTrustPoints,
   demoWorkflowSteps,
 } from '@/lib/demo-data';
+import { PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
@@ -61,6 +62,7 @@ export default function DemoPage() {
                   </Link>
                 </div>
                 <p className="text-sm text-muted-foreground">Get this live on your number fast, without changing how your team already works.</p>
+                <p className="text-xs text-muted-foreground">Demo only: fake business, fake callers, and no live customer or Twilio data.</p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -221,7 +223,7 @@ export default function DemoPage() {
                   <Link className={buttonVariants()} href="/contact">
                     Want this on your business?
                   </Link>
-                  <Link className={buttonVariants({ variant: 'outline' })} href="/sign-up">
+                  <Link className={buttonVariants({ variant: 'outline' })} href={PUBLIC_START_FREE_PILOT_PATH}>
                     See it on your number
                   </Link>
                 </div>
@@ -261,7 +263,7 @@ export default function DemoPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <Link className={buttonVariants({ size: 'lg' })} href="/sign-up">
+              <Link className={buttonVariants({ size: 'lg' })} href={PUBLIC_START_FREE_PILOT_PATH}>
                 See it on your number
               </Link>
               <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/contact">

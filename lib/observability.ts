@@ -81,13 +81,14 @@ export function withCorrelationIdHeader<T extends Response>(response: T, correla
 }
 
 export function reportApplicationError(input: ReportErrorInput) {
+  const metadata = sanitizeLogFields(input.metadata ?? {});
   const errorMessage = input.error === undefined ? 'unknown_error' : toErrorMessage(input.error);
   const payload: ErrorReportPayload = {
     source: input.source,
     event: input.event,
     correlationId: input.correlationId,
     error: errorMessage,
-    metadata: input.metadata ?? {},
+    metadata,
     timestamp: new Date().toISOString(),
   };
 
@@ -96,3 +97,4 @@ export function reportApplicationError(input: ReportErrorInput) {
   if (input.alert === false) return;
   void dispatchAlert(payload);
 }
+import { sanitizeLogFields } from '@/lib/log-sanitization';
