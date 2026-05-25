@@ -50,6 +50,7 @@ export async function getSimulatorBusiness() {
       twilioMessagingServiceSid: true,
       twilioPhoneNumber: true,
       twilioPrimaryPhoneNumber: true,
+      messagingSetupMode: true,
       managedTwilioStatus: true,
       messagingComplianceType: true,
       a2pFailureReason: true,
@@ -90,6 +91,7 @@ export async function getSimulatorRun(publicId: string) {
           twilioMessagingServiceSid: true,
           twilioPhoneNumber: true,
           twilioPrimaryPhoneNumber: true,
+          messagingSetupMode: true,
           managedTwilioStatus: true,
           messagingComplianceType: true,
           a2pFailureReason: true,
@@ -118,6 +120,7 @@ export type SimulatorRunRecord = SimulatorRun & {
     | 'twilioMessagingServiceSid'
     | 'twilioPhoneNumber'
     | 'twilioPrimaryPhoneNumber'
+    | 'messagingSetupMode'
     | 'managedTwilioStatus'
     | 'messagingComplianceType'
     | 'a2pFailureReason'

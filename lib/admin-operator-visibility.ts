@@ -257,6 +257,8 @@ export function getOperatorEventCategoryBadgeVariant(category: OperatorEventCate
 const stepKeyByChangedField: Partial<Record<string, TwilioSetupStepKey>> = {
   twilioAccountMode: 'account_mode',
   phoneSetupPath: 'number_path',
+  forwardedCallAnswerMode: 'number_path',
+  messagingSetupMode: 'number_path',
   twilioNumberSetupMode: 'number_path',
   twilioSubaccountSid: 'account_ready',
   twilioMessagingServiceSid: 'messaging_service_ready',

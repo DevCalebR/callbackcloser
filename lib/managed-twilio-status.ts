@@ -1,5 +1,6 @@
 import {
   ManagedTwilioStatus,
+  MessagingSetupMode,
   MessagingComplianceType,
   TollFreeVerificationStatus,
   TwilioAccountMode,
@@ -17,6 +18,7 @@ type ManagedTwilioBlockerKey =
   | 'campaign_review'
   | 'toll_free_details'
   | 'toll_free_review'
+  | 'shared_pilot_setup'
   | 'compliance_rejected'
   | 'compliance_paused';
 
@@ -24,6 +26,8 @@ export type ManagedTwilioSummary = {
   label: string;
   description: string;
   accountMode: TwilioAccountMode;
+  messagingSetupMode: MessagingSetupMode;
+  usesSharedPilotMessaging: boolean;
   accountReady: boolean;
   subaccountReady: boolean;
   numberAssigned: boolean;
@@ -213,6 +217,7 @@ export function getManagedTwilioStatusSummary(
   business: Pick<
     Business,
     | 'managedTwilioStatus'
+    | 'messagingSetupMode'
     | 'twilioAccountMode'
     | 'twilioSubaccountSid'
     | 'twilioPrimaryPhoneNumber'
@@ -232,8 +237,10 @@ export function getManagedTwilioStatusSummary(
     | 'tollFreeVerificationNote'
   >
 ): ManagedTwilioSummary {
+  const messagingSetupMode = business.messagingSetupMode || MessagingSetupMode.PER_BUSINESS_TWILIO;
+  const usesSharedPilotMessaging = messagingSetupMode === MessagingSetupMode.SHARED_PILOT_MESSAGING_SERVICE;
   const accountMode = business.twilioAccountMode || TwilioAccountMode.BUSINESS_SUBACCOUNT;
-  const requiresSubaccount = accountMode === TwilioAccountMode.BUSINESS_SUBACCOUNT;
+  const requiresSubaccount = accountMode === TwilioAccountMode.BUSINESS_SUBACCOUNT && !usesSharedPilotMessaging;
   const subaccountReady = Boolean(business.twilioSubaccountSid);
   const accountReady = requiresSubaccount ? subaccountReady : true;
   const numberAssigned = hasManagedTwilioNumber(business);
@@ -265,7 +272,9 @@ export function getManagedTwilioStatusSummary(
     blockers.push({
       key: 'messaging_service',
       label: 'Create Messaging Service',
-      detail: 'The approved sending number still needs to be attached to a Twilio Messaging Service.',
+      detail: usesSharedPilotMessaging
+        ? 'Attach the approved CallbackCloser Messaging Service before pilot SMS goes live.'
+        : 'The approved sending number still needs to be attached to a Twilio Messaging Service.',
     });
   }
 
@@ -285,7 +294,25 @@ export function getManagedTwilioStatusSummary(
   let attentionRequired = false;
   let approvedAt: Date | null | undefined = null;
 
-  if (complianceTypeUnknown) {
+  if (usesSharedPilotMessaging) {
+    label = 'Founder-operated pilot sender';
+    description = messagingServiceReady
+      ? 'Pilot setup is intentionally using the approved CallbackCloser messaging number. This does not indicate the business has its own A2P approval yet.'
+      : 'Pilot setup is selected, but the approved CallbackCloser Messaging Service still needs to be attached before live SMS starts.';
+    complianceReady = messagingServiceReady;
+    complianceStarted = messagingServiceReady;
+    compliancePendingReview = false;
+    attentionRequired = false;
+
+    if (!messagingServiceReady) {
+      blockers.push({
+        key: 'shared_pilot_setup',
+        label: 'Attach approved pilot sender',
+        detail:
+          'Pilot setup is founder-operated. Save the approved CallbackCloser Messaging Service SID so SMS can send from the shared approved messaging number.',
+      });
+    }
+  } else if (complianceTypeUnknown) {
     blockers.push({
       key: 'compliance_type',
       label: 'Choose number type',
@@ -415,13 +442,15 @@ export function getManagedTwilioStatusSummary(
     label,
     description,
     accountMode,
+    messagingSetupMode,
+    usesSharedPilotMessaging,
     accountReady,
     subaccountReady,
     numberAssigned,
     messagingServiceReady,
     webhooksSynced,
     complianceType,
-    complianceTypeLabel: getMessagingComplianceTypeLabel(complianceType),
+    complianceTypeLabel: usesSharedPilotMessaging ? 'Shared approved CallbackCloser sender' : getMessagingComplianceTypeLabel(complianceType),
     complianceReady,
     complianceStarted,
     compliancePendingReview,

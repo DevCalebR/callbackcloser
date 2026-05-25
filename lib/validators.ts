@@ -5,6 +5,8 @@ import { MAX_AVERAGE_JOB_VALUE } from '@/lib/business-settings';
 const twilioAccountModeSchema = z.enum(['MAIN_ACCOUNT', 'BUSINESS_SUBACCOUNT']);
 const twilioNumberSetupModeSchema = z.enum(['NEW_NUMBER', 'EXISTING_NUMBER']);
 const businessPhoneSetupPathSchema = z.enum(['CURRENT_NUMBER_FORWARDING', 'PORT_EXISTING_NUMBER', 'NEW_TWILIO_NUMBER']);
+const forwardedCallAnswerModeSchema = z.enum(['PRESS_1_REQUIRED', 'DIRECT_CONNECT']);
+const messagingSetupModeSchema = z.enum(['PER_BUSINESS_TWILIO', 'SHARED_PILOT_MESSAGING_SERVICE']);
 const forwardingVerificationStatusSchema = z.enum(['NOT_STARTED', 'PENDING', 'VERIFIED']);
 const portingStatusSchema = z.enum(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED']);
 const messagingComplianceTypeSchema = z.preprocess(
@@ -50,6 +52,8 @@ const onboardingBaseSchema = z.object({
   notifyPhone: z.string().max(30).optional().or(z.literal('')),
   twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
   phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
+  forwardedCallAnswerMode: forwardedCallAnswerModeSchema.default('PRESS_1_REQUIRED'),
+  messagingSetupMode: messagingSetupModeSchema.default('PER_BUSINESS_TWILIO'),
   twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
   missedCallSeconds: z.coerce.number().int().min(5).max(90).default(20),
   serviceLabel1: z.string().min(1).max(40),
@@ -97,6 +101,8 @@ const adminBusinessDraftBaseSchema = z.object({
   ownerPhone: z.string().max(30).optional().or(z.literal('')),
   publicBusinessPhone: z.string().trim().max(30).optional().or(z.literal('')),
   phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
+  forwardedCallAnswerMode: forwardedCallAnswerModeSchema.default('PRESS_1_REQUIRED'),
+  messagingSetupMode: messagingSetupModeSchema.default('PER_BUSINESS_TWILIO'),
   areaCode: z
     .string()
     .trim()
@@ -233,6 +239,8 @@ export const adminTwilioSetupSchema = z.object({
   businessId: z.string().min(1),
   twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
   phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
+  forwardedCallAnswerMode: forwardedCallAnswerModeSchema.default('PRESS_1_REQUIRED'),
+  messagingSetupMode: messagingSetupModeSchema.default('PER_BUSINESS_TWILIO'),
   twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
   twilioSubaccountSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
@@ -288,6 +296,8 @@ export const adminFounderDeleteAllBusinessesSchema = z.object({
 export const businessTwilioAdminOverrideSchema = z.object({
   twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
   phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
+  forwardedCallAnswerMode: forwardedCallAnswerModeSchema.default('PRESS_1_REQUIRED'),
+  messagingSetupMode: messagingSetupModeSchema.default('PER_BUSINESS_TWILIO'),
   twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
   twilioSubaccountSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
@@ -324,6 +334,8 @@ export const businessTwilioAdminOverrideSchema = z.object({
 export const businessTwilioSetupChoiceSchema = z.object({
   twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
   phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
+  forwardedCallAnswerMode: forwardedCallAnswerModeSchema.default('PRESS_1_REQUIRED'),
+  messagingSetupMode: messagingSetupModeSchema.default('PER_BUSINESS_TWILIO'),
   twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
 });
 

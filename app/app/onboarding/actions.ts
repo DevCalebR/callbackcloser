@@ -51,6 +51,8 @@ export async function saveOnboardingAction(formData: FormData) {
     notifyPhone: data.notifyPhone,
     twilioAccountMode: data.twilioAccountMode,
     phoneSetupPath: data.phoneSetupPath,
+    forwardedCallAnswerMode: data.forwardedCallAnswerMode,
+    messagingSetupMode: data.messagingSetupMode,
     twilioNumberSetupMode: deriveTwilioNumberSetupModeFromPhoneSetupPath(data.phoneSetupPath),
     missedCallSeconds: data.missedCallSeconds,
     serviceLabel1: data.serviceLabel1,

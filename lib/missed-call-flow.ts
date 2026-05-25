@@ -21,6 +21,7 @@ type LeadFlowBusiness = Pick<
   | 'twilioPhoneNumber'
   | 'twilioPrimaryPhoneNumber'
   | 'managedTwilioStatus'
+  | 'messagingSetupMode'
   | 'messagingComplianceType'
   | 'a2pFailureReason'
   | 'tollFreeVerificationStatus'
@@ -69,6 +70,7 @@ async function deliverLeadMessage(params: {
   isSimulator?: boolean;
   twilioSubaccountSid?: string | null;
   twilioMessagingServiceSid?: string | null;
+  messagingSetupMode?: Business['messagingSetupMode'];
   managedTwilioStatus?: Business['managedTwilioStatus'];
   a2pFailureReason?: string | null;
   messagingComplianceType?: Business['messagingComplianceType'];
@@ -196,6 +198,7 @@ export async function startMissedCallRecovery(params: StartRecoveryParams) {
     twilioSubaccountSid: params.business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : params.business.twilioSubaccountSid,
     twilioMessagingServiceSid: params.business.twilioMessagingServiceSid,
     managedTwilioStatus: params.business.managedTwilioStatus,
+    messagingSetupMode: params.business.messagingSetupMode,
     a2pFailureReason: params.business.a2pFailureReason,
     messagingComplianceType: params.business.messagingComplianceType,
     tollFreeVerificationStatus: params.business.tollFreeVerificationStatus,

@@ -36,6 +36,8 @@ model Business {
   twilioPrimaryPhoneNumber    String?            @unique
   twilioAccountMode           TwilioAccountMode  @default(BUSINESS_SUBACCOUNT)
   phoneSetupPath              BusinessPhoneSetupPath @default(NEW_TWILIO_NUMBER)
+  forwardedCallAnswerMode     ForwardedCallAnswerMode @default(PRESS_1_REQUIRED)
+  messagingSetupMode          MessagingSetupMode @default(PER_BUSINESS_TWILIO)
   twilioNumberSetupMode       TwilioNumberSetupMode @default(NEW_NUMBER)
   forwardingVerificationStatus ForwardingVerificationStatus @default(NOT_STARTED)
   forwardingVerifiedAt        DateTime?
@@ -95,6 +97,9 @@ model Call {
   callDurationSeconds      Int?
   dialCallDurationSeconds  Int?
   answered                 Boolean  @default(false)
+  answerConfirmationRequested Boolean @default(false)
+  humanAccepted            Boolean  @default(false)
+  humanAcceptedAt          DateTime?
   missed                   Boolean  @default(false)
   rawPayload               Json?
   createdAt                DateTime @default(now())
@@ -378,6 +383,16 @@ enum BusinessPhoneSetupPath {
   CURRENT_NUMBER_FORWARDING
   PORT_EXISTING_NUMBER
   NEW_TWILIO_NUMBER
+}
+
+enum ForwardedCallAnswerMode {
+  PRESS_1_REQUIRED
+  DIRECT_CONNECT
+}
+
+enum MessagingSetupMode {
+  PER_BUSINESS_TWILIO
+  SHARED_PILOT_MESSAGING_SERVICE
 }
 
 enum TwilioNumberSetupMode {

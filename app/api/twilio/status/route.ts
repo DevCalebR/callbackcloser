@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ForwardedCallAnswerMode } from '@prisma/client';
 
 import { findBusinessByTwilioNumber } from '@/lib/business';
 import { db } from '@/lib/db';
@@ -180,8 +181,20 @@ export async function POST(request: Request) {
       return withCorrelation(xmlOk());
     }
 
-    const answered = dialCallStatus.trim().toLowerCase() === 'completed';
-    const missed = isMissedDialStatus(dialCallStatus);
+    const existingCall = await db.call.findUnique({
+      where: { twilioCallSid: callSid },
+      select: {
+        id: true,
+        answerConfirmationRequested: true,
+        humanAccepted: true,
+      },
+    });
+    const completedDial = dialCallStatus.trim().toLowerCase() === 'completed';
+    const requiresHumanAcceptance =
+      existingCall?.answerConfirmationRequested ?? business.forwardedCallAnswerMode === ForwardedCallAnswerMode.PRESS_1_REQUIRED;
+    const humanAccepted = existingCall?.humanAccepted ?? false;
+    const answered = completedDial && (!requiresHumanAcceptance || humanAccepted);
+    const missed = isMissedDialStatus(dialCallStatus) || (completedDial && requiresHumanAcceptance && !humanAccepted);
 
     const call = await db.call.upsert({
       where: { twilioCallSid: callSid },
@@ -195,11 +208,13 @@ export async function POST(request: Request) {
         toPhone: to || formField(formData, 'To'),
         toPhoneNormalized: to || formField(formData, 'To'),
         dialCallStatus: dialCallStatus || null,
+        answerConfirmationRequested: requiresHumanAcceptance,
         status: answered ? 'ANSWERED' : missed ? 'MISSED' : 'COMPLETED',
         callDurationSeconds: toInt(formField(formData, 'CallDuration')),
         dialCallDurationSeconds: toInt(formField(formData, 'DialCallDuration')),
         ...(recordingUpdate ?? {}),
         answered,
+        humanAccepted,
         missed,
         rawPayload: payload,
       },
@@ -207,11 +222,13 @@ export async function POST(request: Request) {
         parentCallSid: formField(formData, 'ParentCallSid') || undefined,
         dialCallSid,
         dialCallStatus: dialCallStatus || null,
+        answerConfirmationRequested: requiresHumanAcceptance,
         status: answered ? 'ANSWERED' : missed ? 'MISSED' : 'COMPLETED',
         callDurationSeconds: toInt(formField(formData, 'CallDuration')),
         dialCallDurationSeconds: toInt(formField(formData, 'DialCallDuration')),
         ...(recordingUpdate ?? {}),
         answered,
+        humanAccepted,
         missed,
         rawPayload: payload,
       },
@@ -224,6 +241,7 @@ export async function POST(request: Request) {
       eventType: 'dial_status_callback',
       businessId: business.id,
       answered,
+      humanAccepted,
       missed,
       decision: 'upsert_call',
     });
@@ -238,6 +256,42 @@ export async function POST(request: Request) {
         recordingSid: recording?.recordingSid ?? null,
         recordingStatus: recording?.recordingStatus ?? null,
         decision: 'persist_recording_metadata',
+      });
+    }
+
+    if (completedDial && requiresHumanAcceptance && !humanAccepted) {
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'voice.no_human_acceptance_detected',
+        category: 'VOICE',
+        status: 'WARNING',
+        summary: 'No human acceptance detected',
+        details: {
+          callSid,
+          dialCallSid,
+          dialCallStatus,
+          fromPhone: formatPhoneDetail(from || formField(formData, 'From')),
+          toPhone: formatPhoneDetail(to),
+          reason: 'timeout_or_voicemail',
+        },
+        relatedEntityType: 'call',
+        relatedEntityId: call.id,
+      });
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'voice.voicemail_or_timeout_treated_as_missed',
+        category: 'VOICE',
+        status: 'WARNING',
+        summary: 'Voicemail or timeout treated as missed',
+        details: {
+          callSid,
+          dialCallSid,
+          dialCallStatus,
+          fromPhone: formatPhoneDetail(from || formField(formData, 'From')),
+          toPhone: formatPhoneDetail(to),
+        },
+        relatedEntityType: 'call',
+        relatedEntityId: call.id,
       });
     }
 
@@ -424,6 +478,7 @@ export async function POST(request: Request) {
               participant: 'OWNER',
               twilioSubaccountSid: business.twilioAccountMode === 'MAIN_ACCOUNT' ? null : business.twilioSubaccountSid,
               messagingServiceSid: business.twilioMessagingServiceSid,
+              messagingSetupMode: business.messagingSetupMode,
               managedTwilioStatus: business.managedTwilioStatus,
               a2pFailureReason: business.a2pFailureReason,
               messagingComplianceType: business.messagingComplianceType,
@@ -489,7 +544,7 @@ export async function POST(request: Request) {
         business,
         callerPhone: callerPhoneNormalized,
         callId: call.id,
-        transport: 'twilio',
+        transport: process.env.NODE_ENV === 'test' ? 'simulated' : 'twilio',
       });
 
       if (!recovery.started) {
@@ -524,6 +579,19 @@ export async function POST(request: Request) {
         category: 'MESSAGING',
         status: 'SUCCESS',
         summary: 'Missed-call SMS flow started',
+        details: {
+          callSid,
+          leadId: recovery.lead.id,
+        },
+        relatedEntityType: 'lead',
+        relatedEntityId: recovery.lead.id,
+      });
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'voice.missed_call_sms_started',
+        category: 'VOICE',
+        status: 'SUCCESS',
+        summary: 'Missed-call SMS started',
         details: {
           callSid,
           leadId: recovery.lead.id,

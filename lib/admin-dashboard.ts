@@ -34,6 +34,7 @@ type DashboardBusiness = Pick<
   | 'forwardingNumber'
   | 'notifyPhone'
   | 'twilioAccountMode'
+  | 'messagingSetupMode'
   | 'twilioNumberSetupMode'
   | 'twilioSubaccountSid'
   | 'twilioMessagingServiceSid'

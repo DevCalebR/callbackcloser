@@ -1,8 +1,10 @@
 import {
   BusinessPhoneSetupPath,
   BusinessProvisioningStatus,
+  ForwardedCallAnswerMode,
   ForwardingVerificationStatus,
   ManagedTwilioStatus,
+  MessagingSetupMode,
   TwilioAccountMode,
   TwilioNumberSetupMode,
   type Prisma,
@@ -22,6 +24,8 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
   ownerEmail?: string | null;
   twilioAccountMode?: TwilioAccountMode | null;
   phoneSetupPath?: BusinessPhoneSetupPath | null;
+  forwardedCallAnswerMode?: ForwardedCallAnswerMode | null;
+  messagingSetupMode?: MessagingSetupMode | null;
   twilioNumberSetupMode?: TwilioNumberSetupMode | null;
   missedCallSeconds: number;
   serviceLabel1: string;
@@ -40,6 +44,8 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
     provisioningStatus: BusinessProvisioningStatus.DRAFT,
     twilioAccountMode: input.twilioAccountMode || TwilioAccountMode.BUSINESS_SUBACCOUNT,
     phoneSetupPath,
+    forwardedCallAnswerMode: input.forwardedCallAnswerMode || ForwardedCallAnswerMode.PRESS_1_REQUIRED,
+    messagingSetupMode: input.messagingSetupMode || MessagingSetupMode.PER_BUSINESS_TWILIO,
     twilioNumberSetupMode: input.twilioNumberSetupMode || deriveTwilioNumberSetupModeFromPhoneSetupPath(phoneSetupPath),
     forwardingVerificationStatus: phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING ? ForwardingVerificationStatus.PENDING : ForwardingVerificationStatus.NOT_STARTED,
     missedCallSeconds: input.missedCallSeconds,
@@ -63,6 +69,8 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
       notifyPhone: data.notifyPhone,
       twilioAccountMode: data.twilioAccountMode,
       phoneSetupPath: data.phoneSetupPath,
+      forwardedCallAnswerMode: data.forwardedCallAnswerMode,
+      messagingSetupMode: data.messagingSetupMode,
       twilioNumberSetupMode: data.twilioNumberSetupMode,
       forwardingVerificationStatus:
         data.phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
