@@ -15,6 +15,7 @@ model Business {
   ownerName                   String?
   isTestBusiness              Boolean            @default(false)
   archivedAt                  DateTime?
+  publicBusinessPhone         String?
   forwardingNumber            String
   notifyPhone                 String?
   provisioningStatus          BusinessProvisioningStatus @default(DRAFT)
@@ -34,7 +35,14 @@ model Business {
   twilioPrimaryNumberSid      String?            @unique
   twilioPrimaryPhoneNumber    String?            @unique
   twilioAccountMode           TwilioAccountMode  @default(BUSINESS_SUBACCOUNT)
+  phoneSetupPath              BusinessPhoneSetupPath @default(NEW_TWILIO_NUMBER)
   twilioNumberSetupMode       TwilioNumberSetupMode @default(NEW_NUMBER)
+  forwardingVerificationStatus ForwardingVerificationStatus @default(NOT_STARTED)
+  forwardingVerifiedAt        DateTime?
+  forwardingVerificationNote  String?
+  portingStatus               PortingStatus      @default(NOT_STARTED)
+  portingNotes                String?
+  portingCompletedAt          DateTime?
   messagingComplianceType     MessagingComplianceType @default(UNKNOWN)
   a2pCustomerProfileSid       String?            @unique
   a2pBrandSid                 String?            @unique
@@ -366,9 +374,28 @@ enum TwilioAccountMode {
   BUSINESS_SUBACCOUNT
 }
 
+enum BusinessPhoneSetupPath {
+  CURRENT_NUMBER_FORWARDING
+  PORT_EXISTING_NUMBER
+  NEW_TWILIO_NUMBER
+}
+
 enum TwilioNumberSetupMode {
   NEW_NUMBER
   EXISTING_NUMBER
+}
+
+enum ForwardingVerificationStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+}
+
+enum PortingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
 }
 
 enum MessagingComplianceType {

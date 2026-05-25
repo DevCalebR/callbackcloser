@@ -1,15 +1,27 @@
-import { BusinessProvisioningStatus, ManagedTwilioStatus, TwilioAccountMode, TwilioNumberSetupMode, type Prisma, SubscriptionStatus } from '@prisma/client';
+import {
+  BusinessPhoneSetupPath,
+  BusinessProvisioningStatus,
+  ForwardingVerificationStatus,
+  ManagedTwilioStatus,
+  TwilioAccountMode,
+  TwilioNumberSetupMode,
+  type Prisma,
+  SubscriptionStatus,
+} from '@prisma/client';
 
+import { deriveTwilioNumberSetupModeFromPhoneSetupPath } from '@/lib/business-phone-setup';
 import { db } from '@/lib/db';
 import { normalizePhoneNumber, normalizePhoneNumberToE164, phoneNumbersEqual } from '@/lib/phone';
 
 export async function upsertBusinessForOwner(ownerClerkId: string, input: {
   name: string;
   ownerName?: string | null;
+  publicBusinessPhone?: string | null;
   forwardingNumber: string;
   notifyPhone?: string | null;
   ownerEmail?: string | null;
   twilioAccountMode?: TwilioAccountMode | null;
+  phoneSetupPath?: BusinessPhoneSetupPath | null;
   twilioNumberSetupMode?: TwilioNumberSetupMode | null;
   missedCallSeconds: number;
   serviceLabel1: string;
@@ -17,15 +29,19 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
   serviceLabel3: string;
   timezone: string;
 }) {
+  const phoneSetupPath = input.phoneSetupPath || BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING;
   const data: Prisma.BusinessUncheckedCreateInput = {
     ownerClerkId,
     name: input.name,
     ownerName: input.ownerName?.trim() || null,
+    publicBusinessPhone: normalizePhoneNumber(input.publicBusinessPhone || '') || null,
     forwardingNumber: normalizePhoneNumber(input.forwardingNumber),
     notifyPhone: normalizePhoneNumber(input.notifyPhone || '') || null,
     provisioningStatus: BusinessProvisioningStatus.DRAFT,
     twilioAccountMode: input.twilioAccountMode || TwilioAccountMode.BUSINESS_SUBACCOUNT,
-    twilioNumberSetupMode: input.twilioNumberSetupMode || TwilioNumberSetupMode.NEW_NUMBER,
+    phoneSetupPath,
+    twilioNumberSetupMode: input.twilioNumberSetupMode || deriveTwilioNumberSetupModeFromPhoneSetupPath(phoneSetupPath),
+    forwardingVerificationStatus: phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING ? ForwardingVerificationStatus.PENDING : ForwardingVerificationStatus.NOT_STARTED,
     missedCallSeconds: input.missedCallSeconds,
     serviceLabel1: input.serviceLabel1,
     serviceLabel2: input.serviceLabel2,
@@ -42,10 +58,16 @@ export async function upsertBusinessForOwner(ownerClerkId: string, input: {
     update: {
       name: data.name,
       ownerName: data.ownerName,
+      publicBusinessPhone: data.publicBusinessPhone,
       forwardingNumber: data.forwardingNumber,
       notifyPhone: data.notifyPhone,
       twilioAccountMode: data.twilioAccountMode,
+      phoneSetupPath: data.phoneSetupPath,
       twilioNumberSetupMode: data.twilioNumberSetupMode,
+      forwardingVerificationStatus:
+        data.phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
+          ? ForwardingVerificationStatus.PENDING
+          : undefined,
       missedCallSeconds: data.missedCallSeconds,
       serviceLabel1: data.serviceLabel1,
       serviceLabel2: data.serviceLabel2,
@@ -125,6 +147,7 @@ export async function searchBusinessesForAdmin(query: string) {
         OR: [
           { id: { contains: trimmed, mode: 'insensitive' } },
           { name: { contains: trimmed, mode: 'insensitive' } },
+          { publicBusinessPhone: { contains: trimmed, mode: 'insensitive' } },
           { twilioPhoneNumberSid: { contains: trimmed, mode: 'insensitive' } },
           { twilioPrimaryNumberSid: { contains: trimmed, mode: 'insensitive' } },
           {
@@ -136,6 +159,7 @@ export async function searchBusinessesForAdmin(query: string) {
           },
           ...(normalizedPhone
             ? [
+                { publicBusinessPhone: normalizedPhone },
                 { twilioPhoneNumber: normalizedPhone },
                 { twilioPrimaryPhoneNumber: normalizedPhone },
               ]

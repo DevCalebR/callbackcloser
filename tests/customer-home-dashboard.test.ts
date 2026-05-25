@@ -26,6 +26,8 @@ test('average job value helpers round-trip whole-dollar business settings values
 test('business settings schema accepts a blank average job value and rejects invalid values', () => {
   const blank = businessSettingsSchema.safeParse({
     name: 'Northside Plumbing',
+    phoneSetupPath: 'NEW_TWILIO_NUMBER',
+    publicBusinessPhone: '',
     forwardingNumber: '+15125550111',
     notifyPhone: '+15125550199',
     ownerEmail: 'owner@example.com',
@@ -48,6 +50,8 @@ test('business settings schema accepts a blank average job value and rejects inv
 
   const configured = businessSettingsSchema.safeParse({
     name: 'Northside Plumbing',
+    phoneSetupPath: 'NEW_TWILIO_NUMBER',
+    publicBusinessPhone: '',
     forwardingNumber: '+15125550111',
     notifyPhone: '+15125550199',
     ownerEmail: 'owner@example.com',
@@ -70,6 +74,8 @@ test('business settings schema accepts a blank average job value and rejects inv
 
   const invalid = businessSettingsSchema.safeParse({
     name: 'Northside Plumbing',
+    phoneSetupPath: 'NEW_TWILIO_NUMBER',
+    publicBusinessPhone: '',
     forwardingNumber: '+15125550111',
     notifyPhone: '+15125550199',
     ownerEmail: 'owner@example.com',

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { BusinessProvisioningStatus, type Business, type BusinessNotificationSettings } from '@prisma/client';
 
+import { getBusinessPhoneSetupGate, getPublicBusinessPhone } from '@/lib/business-phone-setup';
 import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { normalizePhoneNumber } from '@/lib/phone';
 
@@ -19,21 +20,34 @@ type AdminBusinessSummary = Pick<
   | 'twilioSubaccountSid'
   | 'twilioPhoneNumber'
   | 'twilioPhoneNumberSid'
-    | 'twilioPrimaryPhoneNumber'
-    | 'twilioPrimaryNumberSid'
-    | 'twilioMessagingServiceSid'
-    | 'twilioWebhookSyncedAt'
-    | 'managedTwilioStatus'
-    | 'messagingComplianceType'
-    | 'a2pCustomerProfileSid'
-    | 'a2pBrandSid'
-    | 'a2pCampaignSid'
-    | 'a2pFailureReason'
-    | 'a2pApprovedAt'
-    | 'tollFreeVerificationStatus'
-    | 'tollFreeVerificationSid'
-    | 'tollFreeVerificationNote'
->;
+  | 'twilioPrimaryPhoneNumber'
+  | 'twilioPrimaryNumberSid'
+  | 'twilioMessagingServiceSid'
+  | 'twilioWebhookSyncedAt'
+  | 'managedTwilioStatus'
+  | 'messagingComplianceType'
+  | 'a2pCustomerProfileSid'
+  | 'a2pBrandSid'
+  | 'a2pCampaignSid'
+  | 'a2pFailureReason'
+  | 'a2pApprovedAt'
+  | 'tollFreeVerificationStatus'
+  | 'tollFreeVerificationSid'
+  | 'tollFreeVerificationNote'
+> &
+  Partial<
+    Pick<
+      Business,
+      | 'publicBusinessPhone'
+      | 'phoneSetupPath'
+      | 'forwardingVerificationStatus'
+      | 'forwardingVerifiedAt'
+      | 'forwardingVerificationNote'
+      | 'portingStatus'
+      | 'portingNotes'
+      | 'portingCompletedAt'
+    >
+  >;
 
 type NotificationSettingsSummary = Pick<
   BusinessNotificationSettings,
@@ -296,13 +310,19 @@ export function buildAdminProvisioningChecklist({
   const ownerPhone = normalizePhoneNumber(notificationSettings?.ownerPhone || business.notifyPhone || '') || null;
   const messagingServiceReady = Boolean(business.twilioMessagingServiceSid);
   const managedSummary = getManagedTwilioStatusSummary(business);
+  const phoneSetupGate = getBusinessPhoneSetupGate(business);
+  const publicBusinessPhone = getPublicBusinessPhone(business);
 
   return [
     {
       key: 'business_profile',
       label: 'Business profile saved',
-      complete: Boolean(business.name.trim() && business.forwardingNumber.trim()),
-      detail: business.forwardingNumber ? 'Business name and routing number are saved.' : 'Add the business name and forwarding number.',
+      complete: Boolean(business.name.trim() && business.forwardingNumber.trim() && (publicBusinessPhone || phoneSetupGate.path === 'NEW_TWILIO_NUMBER')),
+      detail: business.forwardingNumber
+        ? publicBusinessPhone || phoneSetupGate.path === 'NEW_TWILIO_NUMBER'
+          ? 'Business name, public number, and owner answer number are saved.'
+          : 'Add the public business number for this setup path.'
+        : 'Add the owner answer number that should receive live calls.',
     },
     {
       key: 'owner_account',

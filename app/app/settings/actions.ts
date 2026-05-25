@@ -4,8 +4,11 @@ import { currentUser } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
+  BusinessPhoneSetupPath,
+  ForwardingVerificationStatus,
   ManagedTwilioStatus,
   MessagingComplianceType,
+  PortingStatus,
   Prisma,
   TollFreeVerificationStatus,
   TwilioAccountMode,
@@ -15,6 +18,7 @@ import {
 import { requireAdmin } from '@/lib/admin';
 import { logAuditEvent } from '@/lib/audit-log';
 import { requireBusiness } from '@/lib/auth';
+import { deriveTwilioNumberSetupModeFromPhoneSetupPath } from '@/lib/business-phone-setup';
 import { averageJobValueDollarsToCents } from '@/lib/business-settings';
 import { db } from '@/lib/db';
 import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
@@ -92,13 +96,39 @@ export async function saveBusinessSettingsAction(formData: FormData) {
     (user?.primaryEmailAddressId
       ? user.emailAddresses.find((email) => email.id === user.primaryEmailAddressId)?.emailAddress
       : user?.emailAddresses[0]?.emailAddress) || null;
+  const publicBusinessPhone = normalizePhoneNumber(parsed.data.publicBusinessPhone || '') || null;
+  const phoneSetupPath = parsed.data.phoneSetupPath as BusinessPhoneSetupPath;
+  const shouldResetForwardingVerification =
+    phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING &&
+    (business.phoneSetupPath !== phoneSetupPath || business.publicBusinessPhone !== publicBusinessPhone);
 
   await db.business.update({
     where: { id: business.id },
     data: {
       name: parsed.data.name,
+      publicBusinessPhone,
       forwardingNumber: normalizePhoneNumber(parsed.data.forwardingNumber),
       notifyPhone: normalizePhoneNumber(parsed.data.notifyPhone || '') || null,
+      phoneSetupPath,
+      twilioNumberSetupMode: deriveTwilioNumberSetupModeFromPhoneSetupPath(phoneSetupPath),
+      forwardingVerificationStatus:
+        phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
+          ? shouldResetForwardingVerification
+            ? ForwardingVerificationStatus.PENDING
+            : business.forwardingVerificationStatus
+          : ForwardingVerificationStatus.NOT_STARTED,
+      forwardingVerifiedAt:
+        phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING && !shouldResetForwardingVerification
+          ? business.forwardingVerifiedAt
+          : null,
+      forwardingVerificationNote:
+        phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING && !shouldResetForwardingVerification
+          ? business.forwardingVerificationNote
+          : null,
+      portingStatus: phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? business.portingStatus : PortingStatus.NOT_STARTED,
+      portingNotes: phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? business.portingNotes : null,
+      portingCompletedAt:
+        phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? business.portingCompletedAt : null,
       missedCallSeconds: parsed.data.missedCallSeconds,
       averageJobValueCents: averageJobValueDollarsToCents(parsed.data.averageJobValue),
       serviceLabel1: parsed.data.serviceLabel1,
@@ -144,11 +174,33 @@ export async function saveBusinessTwilioSetupChoiceAction(formData: FormData) {
     redirect(`/app/settings?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid Twilio setup choice')}`);
   }
 
+  const phoneSetupPath = parsed.data.phoneSetupPath as BusinessPhoneSetupPath;
   await db.business.update({
     where: { id: business.id },
     data: {
       twilioAccountMode: parsed.data.twilioAccountMode as TwilioAccountMode,
-      twilioNumberSetupMode: parsed.data.twilioNumberSetupMode as TwilioNumberSetupMode,
+      phoneSetupPath,
+      twilioNumberSetupMode: deriveTwilioNumberSetupModeFromPhoneSetupPath(phoneSetupPath),
+      forwardingVerificationStatus:
+        phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
+          ? business.forwardingVerificationStatus === ForwardingVerificationStatus.VERIFIED
+            ? ForwardingVerificationStatus.VERIFIED
+            : ForwardingVerificationStatus.PENDING
+          : ForwardingVerificationStatus.NOT_STARTED,
+      forwardingVerifiedAt:
+        phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING &&
+        business.forwardingVerificationStatus === ForwardingVerificationStatus.VERIFIED
+          ? business.forwardingVerifiedAt
+          : null,
+      forwardingVerificationNote:
+        phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING &&
+        business.forwardingVerificationStatus === ForwardingVerificationStatus.VERIFIED
+          ? business.forwardingVerificationNote
+          : null,
+      portingStatus: phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? business.portingStatus : PortingStatus.NOT_STARTED,
+      portingNotes: phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? business.portingNotes : null,
+      portingCompletedAt:
+        phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? business.portingCompletedAt : null,
       provisioningLastRunAt: new Date(),
     },
   });
@@ -166,10 +218,15 @@ export async function saveBusinessTwilioAdminOverridesAction(formData: FormData)
   }
 
   const twilioAccountMode = parsed.data.twilioAccountMode as TwilioAccountMode;
-  const twilioNumberSetupMode = parsed.data.twilioNumberSetupMode as TwilioNumberSetupMode;
+  const phoneSetupPath = parsed.data.phoneSetupPath as BusinessPhoneSetupPath;
+  const twilioNumberSetupMode = deriveTwilioNumberSetupModeFromPhoneSetupPath(phoneSetupPath) as TwilioNumberSetupMode;
   const twilioSubaccountSid = twilioAccountMode === TwilioAccountMode.MAIN_ACCOUNT ? null : normalizeOptionalSid(parsed.data.twilioSubaccountSid);
   const twilioPhoneNumberSid = normalizeOptionalSid(parsed.data.twilioPhoneNumberSid);
   const twilioMessagingServiceSid = normalizeOptionalSid(parsed.data.twilioMessagingServiceSid);
+  const forwardingVerificationStatus = parsed.data.forwardingVerificationStatus as ForwardingVerificationStatus;
+  const forwardingVerificationNote = parsed.data.forwardingVerificationNote?.trim() || null;
+  const portingStatus = parsed.data.portingStatus as PortingStatus;
+  const portingNotes = parsed.data.portingNotes?.trim() || null;
   const messagingComplianceType = parsed.data.messagingComplianceType as MessagingComplianceType;
   const a2pCustomerProfileSid = normalizeOptionalSid(parsed.data.a2pCustomerProfileSid);
   const a2pBrandSid = normalizeOptionalSid(parsed.data.a2pBrandSid);
@@ -224,11 +281,17 @@ export async function saveBusinessTwilioAdminOverridesAction(formData: FormData)
 
   const twilioMappingChanged =
     business.twilioAccountMode !== twilioAccountMode ||
+    business.phoneSetupPath !== phoneSetupPath ||
     business.twilioNumberSetupMode !== twilioNumberSetupMode ||
     business.twilioSubaccountSid !== twilioSubaccountSid ||
     existingTwilioPhoneNumber !== twilioPhoneNumber ||
     existingTwilioPhoneNumberSid !== twilioPhoneNumberSid ||
     business.twilioMessagingServiceSid !== twilioMessagingServiceSid;
+  const phonePathStatusChanged =
+    business.forwardingVerificationStatus !== forwardingVerificationStatus ||
+    business.forwardingVerificationNote !== forwardingVerificationNote ||
+    business.portingStatus !== portingStatus ||
+    business.portingNotes !== portingNotes;
   const a2pMetadataChanged =
     business.a2pCustomerProfileSid !== a2pCustomerProfileSid ||
     business.a2pBrandSid !== a2pBrandSid ||
@@ -245,6 +308,7 @@ export async function saveBusinessTwilioAdminOverridesAction(formData: FormData)
     business.twilioAccountMode !== twilioAccountMode
       ? { key: 'twilioAccountMode', before: business.twilioAccountMode, after: twilioAccountMode }
       : null,
+    business.phoneSetupPath !== phoneSetupPath ? { key: 'phoneSetupPath', before: business.phoneSetupPath, after: phoneSetupPath } : null,
     business.twilioNumberSetupMode !== twilioNumberSetupMode
       ? { key: 'twilioNumberSetupMode', before: business.twilioNumberSetupMode, after: twilioNumberSetupMode }
       : null,
@@ -261,6 +325,14 @@ export async function saveBusinessTwilioAdminOverridesAction(formData: FormData)
     business.twilioMessagingServiceSid !== twilioMessagingServiceSid
       ? { key: 'twilioMessagingServiceSid', before: business.twilioMessagingServiceSid, after: twilioMessagingServiceSid }
       : null,
+    business.forwardingVerificationStatus !== forwardingVerificationStatus
+      ? { key: 'forwardingVerificationStatus', before: business.forwardingVerificationStatus, after: forwardingVerificationStatus }
+      : null,
+    business.forwardingVerificationNote !== forwardingVerificationNote
+      ? { key: 'forwardingVerificationNote', before: business.forwardingVerificationNote, after: forwardingVerificationNote }
+      : null,
+    business.portingStatus !== portingStatus ? { key: 'portingStatus', before: business.portingStatus, after: portingStatus } : null,
+    business.portingNotes !== portingNotes ? { key: 'portingNotes', before: business.portingNotes, after: portingNotes } : null,
     business.messagingComplianceType !== messagingComplianceType
       ? { key: 'messagingComplianceType', before: business.messagingComplianceType, after: messagingComplianceType }
       : null,
@@ -293,9 +365,25 @@ export async function saveBusinessTwilioAdminOverridesAction(formData: FormData)
       where: { id: business.id },
       data: {
         twilioAccountMode,
+        phoneSetupPath,
         twilioNumberSetupMode,
         twilioSubaccountSid,
         notifyPhone: ownerPhone,
+        forwardingVerificationStatus:
+          phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING ? forwardingVerificationStatus : ForwardingVerificationStatus.NOT_STARTED,
+        forwardingVerifiedAt:
+          phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING &&
+          forwardingVerificationStatus === ForwardingVerificationStatus.VERIFIED
+            ? business.forwardingVerifiedAt || new Date()
+            : null,
+        forwardingVerificationNote:
+          phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING ? forwardingVerificationNote : null,
+        portingStatus: phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? portingStatus : PortingStatus.NOT_STARTED,
+        portingNotes: phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? portingNotes : null,
+        portingCompletedAt:
+          phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER && portingStatus === PortingStatus.COMPLETED
+            ? business.portingCompletedAt || new Date()
+            : null,
         managedTwilioStatus: parsed.data.managedTwilioStatus as ManagedTwilioStatus,
         managedTwilioStatusUpdatedAt: managedTwilioStatusChanged ? new Date() : business.managedTwilioStatusUpdatedAt,
         twilioPhoneNumber,
@@ -327,6 +415,7 @@ export async function saveBusinessTwilioAdminOverridesAction(formData: FormData)
         ...(twilioMappingChanged ? { twilioWebhookSyncedAt: null } : {}),
         ...(
           twilioMappingChanged ||
+          phonePathStatusChanged ||
           a2pMetadataChanged ||
           tollFreeMetadataChanged ||
           messagingComplianceTypeChanged ||
@@ -542,7 +631,9 @@ export async function connectExistingTwilioNumberAction(formData: FormData) {
   await db.business.update({
     where: { id: business.id },
     data: {
+      phoneSetupPath: BusinessPhoneSetupPath.PORT_EXISTING_NUMBER,
       twilioNumberSetupMode: 'EXISTING_NUMBER',
+      portingStatus: business.portingStatus === PortingStatus.COMPLETED ? business.portingStatus : PortingStatus.IN_PROGRESS,
     },
   });
   revalidatePath('/app/settings');

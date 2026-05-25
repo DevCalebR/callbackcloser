@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import {
   archiveBusinessAction,
+  confirmForwardingVerificationAction,
   confirmMissedCallValidationAction,
   connectExistingBusinessOwnerAction,
   createBusinessMessagingServiceAction,
@@ -39,6 +40,7 @@ import {
 } from '@/lib/admin-operator-visibility';
 import { getAdminOwnerState, getTwilioWebhookSnapshot, listAdminTwilioNumbers } from '@/lib/admin-provisioning';
 import { requireAdmin } from '@/lib/admin';
+import { getBusinessPhoneSetupPathLabel } from '@/lib/business-phone-setup';
 import { db } from '@/lib/db';
 import { formatDateTime } from '@/lib/lead-presenters';
 import {
@@ -59,19 +61,24 @@ import {
   type TwilioSetupStep,
   type TwilioSetupStepKey,
   type TwilioSetupTone,
+  businessPhonePathOptions,
   buildTwilioSetupFlow,
   twilioAccountModeOptions,
-  twilioNumberSetupModeOptions,
 } from '@/lib/twilio-setup';
 
 type AdminTwilioDefaults = {
   businessId: string;
   twilioAccountMode: string;
+  phoneSetupPath: string;
   twilioNumberSetupMode: string;
   twilioSubaccountSid: string;
   twilioPhoneNumber: string;
   twilioPhoneNumberSid: string;
   twilioMessagingServiceSid: string;
+  forwardingVerificationStatus: string;
+  forwardingVerificationNote: string;
+  portingStatus: string;
+  portingNotes: string;
   messagingComplianceType: string;
   a2pCustomerProfileSid: string;
   a2pBrandSid: string;
@@ -315,11 +322,16 @@ export default async function AdminBusinessDetailPage({
   const defaults: AdminTwilioDefaults = {
     businessId: business.id,
     twilioAccountMode: business.twilioAccountMode,
+    phoneSetupPath: business.phoneSetupPath,
     twilioNumberSetupMode: business.twilioNumberSetupMode,
     twilioSubaccountSid: business.twilioSubaccountSid || '',
     twilioPhoneNumber: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || '',
     twilioPhoneNumberSid: business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || '',
     twilioMessagingServiceSid: business.twilioMessagingServiceSid || '',
+    forwardingVerificationStatus: business.forwardingVerificationStatus,
+    forwardingVerificationNote: business.forwardingVerificationNote || '',
+    portingStatus: business.portingStatus,
+    portingNotes: business.portingNotes || '',
     messagingComplianceType: business.messagingComplianceType,
     a2pCustomerProfileSid: business.a2pCustomerProfileSid || '',
     a2pBrandSid: business.a2pBrandSid || '',
@@ -505,12 +517,12 @@ export default async function AdminBusinessDetailPage({
     if (step.key === 'number_path') {
       return (
         <form action={saveAdminTwilioSetupAction} className="space-y-4">
-          <HiddenAdminTwilioFields defaults={defaults} exclude={['twilioNumberSetupMode']} returnStep={step.key} />
-          <div className="grid gap-3 md:grid-cols-2">
-            {twilioNumberSetupModeOptions.map((option) => (
+          <HiddenAdminTwilioFields defaults={defaults} exclude={['phoneSetupPath']} returnStep={step.key} />
+          <div className="grid gap-3">
+            {businessPhonePathOptions.map((option) => (
               <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
                 <div className="flex items-start gap-3">
-                  <input defaultChecked={business.twilioNumberSetupMode === option.value} name="twilioNumberSetupMode" type="radio" value={option.value} />
+                  <input defaultChecked={business.phoneSetupPath === option.value} name="phoneSetupPath" type="radio" value={option.value} />
                   <div className="space-y-1">
                     <p className="font-medium">{option.label}</p>
                     <p className="text-muted-foreground">{option.description}</p>
@@ -520,7 +532,7 @@ export default async function AdminBusinessDetailPage({
             ))}
           </div>
           <Button size="sm" type="submit" variant="outline">
-            Save number path
+            Save business number path
           </Button>
         </form>
       );
@@ -576,7 +588,7 @@ export default async function AdminBusinessDetailPage({
             </div>
           </div>
 
-          {business.twilioNumberSetupMode === 'NEW_NUMBER' ? (
+          {business.phoneSetupPath !== 'PORT_EXISTING_NUMBER' ? (
             <form action={provisionBusinessAction} className="flex flex-col gap-3 rounded-xl border bg-background/80 p-4 md:flex-row md:items-end">
               <input name="businessId" type="hidden" value={business.id} />
               <input name="mode" type="hidden" value="NEW_NUMBER" />
@@ -586,34 +598,78 @@ export default async function AdminBusinessDetailPage({
                 <Input id="adminAreaCode" inputMode="numeric" maxLength={3} name="areaCode" placeholder="512" />
               </div>
               <Button size="sm" type="submit">
-                {managedTextingNumber ? 'Re-run number provisioning' : 'Provision number automatically'}
+                {managedTextingNumber ? 'Re-run routing number provisioning' : 'Provision routing number automatically'}
               </Button>
             </form>
           ) : (
-            <form action={provisionBusinessAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+            <div className="space-y-3 rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+              <p>Porting is tracked manually in this rollout. Save the Twilio routing number below only after the port is complete and the number is active inside Twilio.</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (step.key === 'forwarding_verified') {
+      if (business.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING') {
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+              CallbackCloser will auto-verify this step after a fresh inbound call reaches the routing number. If you already confirmed the carrier forward manually, record that below.
+            </div>
+            <form action={confirmForwardingVerificationAction} className="space-y-3 rounded-xl border bg-background/80 p-4">
               <input name="businessId" type="hidden" value={business.id} />
-              <input name="mode" type="hidden" value="EXISTING_NUMBER" />
               <input name="returnStep" type="hidden" value={step.key} />
               <div className="space-y-2">
-                <Label htmlFor="existingNumberSidSelect">Choose an existing number in the selected account</Label>
-                <Select defaultValue="" id="existingNumberSidSelect" name="existingNumberSidSelect">
-                  <option value="">Choose a number</option>
-                  {availableNumbers.numbers.map((number) => (
-                    <option key={number.sid} value={number.sid}>
-                      {(number.phoneNumber ? formatPhoneForDisplay(number.phoneNumber) : number.friendlyName || number.sid) ?? number.sid}
-                    </option>
-                  ))}
-                </Select>
+                <Label htmlFor="manualForwardingVerificationNote">Verification note</Label>
+                <Textarea
+                  id="manualForwardingVerificationNote"
+                  name="note"
+                  placeholder="Example: Confirmed the carrier forward from the public business line into the CallbackCloser routing number and watched the live test call ring through."
+                  rows={4}
+                />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="existingNumberSidManual">Or paste a number SID manually</Label>
-                <Input id="existingNumberSidManual" name="existingNumberSidManual" placeholder="PNXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
-              </div>
-              <Button size="sm" type="submit">
-                Attach existing number automatically
+              <Button size="sm" type="submit" variant="outline">
+                Mark forwarding verified
               </Button>
             </form>
-          )}
+          </div>
+        );
+      }
+
+      if (business.phoneSetupPath === 'PORT_EXISTING_NUMBER') {
+        return (
+          <form action={saveAdminTwilioSetupAction} className="space-y-4 rounded-xl border bg-background/80 p-4">
+            <HiddenAdminTwilioFields defaults={defaults} exclude={['portingStatus', 'portingNotes']} returnStep={step.key} />
+            <div className="space-y-2">
+              <Label htmlFor="adminPortingStatus">Porting status</Label>
+              <Select defaultValue={business.portingStatus} id="adminPortingStatus" name="portingStatus">
+                <option value="NOT_STARTED">Not started</option>
+                <option value="IN_PROGRESS">In progress</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="BLOCKED">Blocked</option>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="adminPortingNotes">Porting notes</Label>
+              <Textarea
+                defaultValue={business.portingNotes || ''}
+                id="adminPortingNotes"
+                name="portingNotes"
+                placeholder="Track the current porting state, carrier dependencies, or blockers here."
+                rows={4}
+              />
+            </div>
+            <Button size="sm" type="submit" variant="outline">
+              Save porting status
+            </Button>
+          </form>
+        );
+      }
+
+      return (
+        <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+          A new CallbackCloser number does not need separate forwarding verification. Once the routing number is assigned, this path is ready.
         </div>
       );
     }
@@ -815,6 +871,10 @@ export default async function AdminBusinessDetailPage({
             <Label htmlFor="manualOwnerPhone">Owner alert phone</Label>
             <Input defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''} id="manualOwnerPhone" name="ownerPhone" placeholder="+15551234567" />
           </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="manualPublicBusinessPhone">Public business number</Label>
+            <Input defaultValue={business.publicBusinessPhone || ''} id="manualPublicBusinessPhone" name="publicBusinessPhone" placeholder="+15551234567" />
+          </div>
           <div className="md:col-span-2">
             <Button size="sm" type="submit" variant="outline">
               Save owner contact info
@@ -930,12 +990,16 @@ export default async function AdminBusinessDetailPage({
           <input name="businessId" type="hidden" value={business.id} />
           <input name="returnStep" type="hidden" value={step.key} />
           <div className="space-y-2">
-            <Label htmlFor="manualForwardingNumber">Forwarding number</Label>
+            <Label htmlFor="manualForwardingNumber">Owner forwarding / answer number</Label>
             <Input defaultValue={business.forwardingNumber || ''} id="manualForwardingNumber" name="forwardingNumber" placeholder="+15551234567" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="manualValidationOwnerPhone">Owner alert phone</Label>
             <Input defaultValue={business.notificationSettings?.ownerPhone || business.notifyPhone || ''} id="manualValidationOwnerPhone" name="ownerPhone" placeholder="+15551234567" />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="manualValidationPublicBusinessPhone">Public business number</Label>
+            <Input defaultValue={business.publicBusinessPhone || ''} id="manualValidationPublicBusinessPhone" name="publicBusinessPhone" placeholder="+15551234567" />
           </div>
           <div className="md:col-span-2">
             <Button size="sm" type="submit" variant="outline">
@@ -1243,7 +1307,13 @@ export default async function AdminBusinessDetailPage({
             <p className="mt-2 text-muted-foreground">{ownerState.email || business.notificationSettings?.ownerEmail || 'Owner email missing'}</p>
           </div>
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
-            <p className="font-medium">Forwarding number</p>
+            <p className="font-medium">Public business number</p>
+            <p className="mt-2 text-muted-foreground">
+              {business.publicBusinessPhone ? formatPhoneForDisplay(business.publicBusinessPhone) : 'Not saved yet'}
+            </p>
+          </div>
+          <div className="rounded-xl border bg-background/80 p-4 text-sm">
+            <p className="font-medium">Owner answer number</p>
             <p className="mt-2 text-muted-foreground">{formatPhoneForDisplay(business.forwardingNumber)}</p>
           </div>
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
@@ -1255,8 +1325,8 @@ export default async function AdminBusinessDetailPage({
             </p>
           </div>
           <div className="rounded-xl border bg-background/80 p-4 text-sm">
-            <p className="font-medium">Account inventory source</p>
-            <p className="mt-2 text-muted-foreground">{availableNumbers.sourceLabel || 'Twilio not available'}</p>
+            <p className="font-medium">Business number path</p>
+            <p className="mt-2 text-muted-foreground">{getBusinessPhoneSetupPathLabel(business.phoneSetupPath)}</p>
           </div>
         </CardContent>
       </Card>

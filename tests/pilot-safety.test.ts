@@ -24,8 +24,8 @@ test('existing-number selection reports a truthful setup state instead of a fake
   assert.match(settingsAction, /redirect\('\/app\/settings\?existingNumberIntent=1'\)/);
   assert.doesNotMatch(settingsAction, /Keeping an existing number is still an admin-assisted launch step/);
   assert.match(settingsPage, /const existingNumberIntent = searchParams\?\.existingNumberIntent === '1';/);
-  assert.match(settingsPage, /Existing-number path saved\./);
-  assert.match(settingsPage, /admin-assisted existing-number rollout/i);
+  assert.match(settingsPage, /Porting path saved\./);
+  assert.match(settingsPage, /admin-assisted porting workflow/i);
 });
 
 test('onboarding page persists Twilio account mode before the shared setup flow continues', () => {
@@ -36,7 +36,7 @@ test('onboarding page persists Twilio account mode before the shared setup flow 
   assert.match(onboardingPage, /Twilio account mode/i);
   assert.match(onboardingPage, /TwilioSetupChecklist/);
   assert.match(onboardingPage, /twilioAccountModeOptions/);
-  assert.match(onboardingPage, /twilioNumberSetupModeOptions/);
+  assert.match(onboardingPage, /businessPhonePathOptions/);
   assert.match(twilioSetup, /Business subaccount \(recommended\)/i);
   assert.match(twilioSetup, /Main account/i);
   assert.doesNotMatch(onboardingAction, /provisionPhoneNumber/);

@@ -199,30 +199,31 @@ export function buildAdminSetupPanels(params: {
     },
     {
       key: 'number_path',
-      title: 'Number path',
-      currentState: `This business is currently set to ${setupFlow.numberSetupModeLabel}.`,
-      explanation: 'Number path tells CallbackCloser whether it should buy a new number automatically or attach an existing number that you already manage in Twilio.',
-      nextAction: 'Choose the number path before you work on number assignment.',
+      title: 'Business number path',
+      currentState: `This business is currently set to ${setupFlow.phoneSetupPathLabel}.`,
+      explanation: 'This choice separates the public business number from the CallbackCloser routing number and determines whether forwarding verification or porting status becomes part of the launch gate.',
+      nextAction: 'Choose the business number path before you work on number assignment.',
       instructions: [
-        'Use New business number if CallbackCloser should buy and wire a fresh Twilio number.',
-        'Use Existing number if you already have a number in the selected account context.',
+        'Use current-number forwarding when the owner keeps the public number and forwards it into CallbackCloser.',
+        'Use porting when the current number will move into Twilio later and the status needs manual tracking.',
+        'Use new CallbackCloser number when the business wants a fresh Twilio number from the start.',
         'Save the choice before you move to number assignment.',
       ],
       verification: [
-        `The step should show ${setupFlow.numberSetupModeLabel}.`,
+        `The step should show ${setupFlow.phoneSetupPathLabel}.`,
         'The number assignment panel should match the path you selected.',
       ],
-      latestEvidence: [`Current number path: ${setupFlow.numberSetupModeLabel}.`],
+      latestEvidence: [`Current business number path: ${setupFlow.phoneSetupPathLabel}.`],
       warnings: [],
       manualFields: [
         {
-          key: 'twilioNumberSetupMode',
-          label: 'Twilio number path',
-          placeholder: 'NEW_NUMBER or EXISTING_NUMBER',
-          helpText: 'Choose the path that matches how the number will be assigned.',
+          key: 'phoneSetupPath',
+          label: 'Business number path',
+          placeholder: 'CURRENT_NUMBER_FORWARDING',
+          helpText: 'Choose the path that matches how the business number will connect into CallbackCloser.',
         },
       ],
-      automaticActionLabel: 'Save number path',
+      automaticActionLabel: 'Save business number path',
       secondaryAutomaticActionLabel: null,
     },
     {
@@ -306,12 +307,12 @@ export function buildAdminSetupPanels(params: {
       currentState: `${numberLabel} • ${numberSid}`,
       explanation: 'CallbackCloser needs a real business texting number and number SID before voice, SMS, and status callbacks can be checked truthfully.',
       nextAction:
-        setupFlow.numberSetupModeLabel === 'Existing number'
-          ? 'Attach an existing number automatically if it is visible here, or paste the number and SID manually.'
+        setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER'
+          ? 'Wait until the port completes, then save the number and SID manually once Twilio is actually live.'
           : 'Buy or assign a new number automatically, or save the number mapping manually if you handled it outside the app.',
       instructions: [
         'If CallbackCloser should buy a number, use the automatic provisioning action here.',
-        'If you already have a Twilio number in the selected account, attach it from the list or paste the number SID manually.',
+        'If the business is porting a number, do not fake it here. Save the mapping only after the port completes in Twilio.',
         'If you did the work manually in Twilio, save both the E.164 phone number and the number SID here.',
         'Then move to the webhook steps so CallbackCloser can verify routing.',
       ],
@@ -332,8 +333,90 @@ export function buildAdminSetupPanels(params: {
           helpText: 'Save the exact incoming phone number SID from Twilio.',
         },
       ],
-      automaticActionLabel: setupFlow.numberSetupModeLabel === 'Existing number' ? 'Attach existing number automatically' : 'Provision number automatically',
+      automaticActionLabel: setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER' ? null : 'Provision number automatically',
       secondaryAutomaticActionLabel: 'Save number mapping',
+    },
+    {
+      key: 'forwarding_verified',
+      title:
+        setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING'
+          ? 'Forwarding verification'
+          : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER'
+            ? 'Porting status'
+            : 'Business number connection',
+      currentState: findStep(setupFlow, 'forwarding_verified').detail,
+      explanation:
+        setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING'
+          ? 'This step proves the customer’s existing public number really reaches the CallbackCloser routing number.'
+          : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER'
+            ? 'Porting is manual in this rollout, so the operator has to keep the real status current.'
+            : 'A fresh CallbackCloser number only needs its routing assignment. No separate forwarding proof is required.',
+      nextAction:
+        setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING'
+          ? 'Place a fresh test call through the forwarded number, or record a manual confirmation note if you validated it outside the app.'
+          : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER'
+            ? 'Update the porting status honestly and do not mark the business ready until the port completes.'
+            : 'Keep this step green by ensuring the assigned routing number stays current.',
+      instructions:
+        setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING'
+          ? [
+              'Forward the public business number into the CallbackCloser routing number.',
+              'Place a live test call through the forwarded number.',
+              'Let CallbackCloser auto-verify the step, or record a manual operator note if you already confirmed it with the carrier.',
+            ]
+          : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER'
+            ? [
+                'Track the port with the carrier or Twilio outside CallbackCloser.',
+                'Use this step to record whether the port is not started, in progress, completed, or blocked.',
+                'Only save the Twilio routing number after the ported number is truly active.',
+              ]
+            : ['No extra action is required here once the new CallbackCloser number is assigned correctly.'],
+      verification:
+        setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING'
+          ? ['The step should show Verified.', 'Recent activity should show the live call reaching the routing number or a manual verification note.']
+          : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER'
+            ? ['The step should show Completed only when the port is actually done.', 'Blocked or in-progress states should keep go-live honest.']
+            : ['The step should stay non-blocking once the routing number is assigned.'],
+      latestEvidence: [findStep(setupFlow, 'forwarding_verified').detail],
+      warnings:
+        setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING' && !findStep(setupFlow, 'forwarding_verified').complete
+          ? ['Without forwarding proof, CallbackCloser may have the right Twilio setup but still miss real business calls.']
+          : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER' && !findStep(setupFlow, 'forwarding_verified').complete
+            ? ['Porting is not complete yet, so the business should not be treated as fully ready.']
+            : [],
+      manualFields:
+        setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING'
+          ? [
+              {
+                key: 'forwardingVerificationNote',
+                label: 'Verification note',
+                placeholder: 'Describe how you confirmed the forward.',
+                helpText: 'Record the carrier check or live test evidence if you confirm this manually.',
+              },
+            ]
+          : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER'
+            ? [
+                {
+                  key: 'portingStatus',
+                  label: 'Porting status',
+                  placeholder: 'IN_PROGRESS',
+                  helpText: 'Keep this aligned with the real carrier or Twilio status.',
+                },
+                {
+                  key: 'portingNotes',
+                  label: 'Porting notes',
+                  placeholder: 'Record blockers or ETA.',
+                  helpText: 'Use plain English so the next operator sees the real blocker immediately.',
+                },
+              ]
+            : [],
+      automaticActionLabel:
+        setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING'
+          ? 'Mark forwarding verified'
+          : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER'
+            ? 'Save porting status'
+            : null,
+      secondaryAutomaticActionLabel: null,
     },
     {
       key: 'voice_webhook_synced',

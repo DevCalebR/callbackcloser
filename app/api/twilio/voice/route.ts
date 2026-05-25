@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import { BusinessPhoneSetupPath, ForwardingVerificationStatus } from '@prisma/client';
 
 import { findBusinessByTwilioNumber } from '@/lib/business';
+import { getBusinessRoutingNumber } from '@/lib/business-phone-setup';
 import { db } from '@/lib/db';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
 import { formatPhoneDetail, recordBusinessOperatorEvent } from '@/lib/operator-events';
@@ -170,6 +172,40 @@ export async function POST(request: Request) {
         eventType: 'incoming_call',
         businessId: business.id,
         decision: 'upsert_call',
+      });
+    }
+
+    if (
+      business.phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING &&
+      business.forwardingVerificationStatus !== ForwardingVerificationStatus.VERIFIED
+    ) {
+      const verifiedAt = new Date();
+      const routingNumber = getBusinessRoutingNumber(business);
+
+      await db.business.update({
+        where: { id: business.id },
+        data: {
+          forwardingVerificationStatus: ForwardingVerificationStatus.VERIFIED,
+          forwardingVerifiedAt: verifiedAt,
+          forwardingVerificationNote:
+            business.forwardingVerificationNote ||
+            `Verified automatically after an inbound call reached ${routingNumber || 'the CallbackCloser routing number'}.`,
+        },
+      });
+
+      await recordBusinessOperatorEvent({
+        businessId: business.id,
+        type: 'voice.forwarding_verified',
+        category: 'VOICE',
+        status: 'SUCCESS',
+        summary: 'Current-number forwarding verified',
+        details: {
+          callSid,
+          publicBusinessPhone: formatPhoneDetail(business.publicBusinessPhone),
+          routingNumber: formatPhoneDetail(routingNumber),
+        },
+        relatedEntityType: 'call',
+        relatedEntityId: callSid,
       });
     }
 
