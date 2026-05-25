@@ -15,6 +15,7 @@ import {
 import type { TwilioWebhookSnapshot } from '@/lib/admin-provisioning-presenters';
 import { DEMO_OWNER_CLERK_ID, isTestDemoBusiness } from '@/lib/admin-test-data-reset';
 import type { AdminMissedCallValidationTruth } from '@/lib/admin-operator-proof';
+import { getBusinessPhoneSetupGate, getPublicBusinessPhone } from '@/lib/business-phone-setup';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { formatMessageStatus, isMessageDeliveryIssueStatus } from '@/lib/lead-presenters';
 
@@ -54,7 +55,20 @@ type DashboardBusiness = Pick<
   | 'subscriptionStatus'
   | 'stripePriceId'
   | 'updatedAt'
->;
+> &
+  Partial<
+    Pick<
+      Business,
+      | 'publicBusinessPhone'
+      | 'phoneSetupPath'
+      | 'forwardingVerificationStatus'
+      | 'forwardingVerifiedAt'
+      | 'forwardingVerificationNote'
+      | 'portingStatus'
+      | 'portingNotes'
+      | 'portingCompletedAt'
+    >
+  >;
 
 type DashboardNotificationSettings = Pick<
   BusinessNotificationSettings,
@@ -114,6 +128,7 @@ export type OnboardingConfidenceMilestone = {
     | 'owner_alerts'
     | 'twilio_setup'
     | 'texting_number'
+    | 'business_number_path'
     | 'messaging_service'
     | 'webhooks'
     | 'a2p'
@@ -454,7 +469,13 @@ export function buildAdminOnboardingConfidence(params: {
   const nextStep = buildAdminNextStep({ business, notificationSettings, ownerConnected });
   const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
   const ownerPhone = notificationSettings?.ownerPhone?.trim() || business.notifyPhone || null;
-  const hasProfile = Boolean(business.name.trim() && business.forwardingNumber.trim());
+  const phoneSetupGate = getBusinessPhoneSetupGate(business);
+  const publicBusinessPhone = getPublicBusinessPhone(business);
+  const hasProfile = Boolean(
+    business.name.trim() &&
+      business.forwardingNumber.trim() &&
+      (publicBusinessPhone || phoneSetupGate.path === 'NEW_TWILIO_NUMBER')
+  );
   const ownerAlertsReady = Boolean(ownerPhone || ownerEmail);
   const twilioSetupReady = managedSummary.accountReady;
   const numberReady = Boolean(getManagedTextingNumber(business) && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid));
@@ -472,7 +493,15 @@ export function buildAdminOnboardingConfidence(params: {
     (event) => event.status === OperatorEventStatus.FAILED || event.status === OperatorEventStatus.WARNING
   );
   const missedCallValidated = missedCallValidation?.countsAsLaunchProof ?? successfulLeadCount > 0;
-  const readyForTest = ownerConnected && ownerAlertsReady && twilioSetupReady && numberReady && messagingServiceReady && webhooksReady && managedSummary.complianceReady;
+  const readyForTest =
+    ownerConnected &&
+    ownerAlertsReady &&
+    twilioSetupReady &&
+    numberReady &&
+    phoneSetupGate.complete &&
+    messagingServiceReady &&
+    webhooksReady &&
+    managedSummary.complianceReady;
   const readyForLive = readyForTest && hasTestSmsSuccess && missedCallValidated;
   const canSafelyMarkLive = readyForLive;
 
@@ -545,7 +574,9 @@ export function buildAdminOnboardingConfidence(params: {
       label: 'Business info complete',
       complete: hasProfile,
       variant: milestoneVariant({ complete: hasProfile, blocking: true }),
-      detail: hasProfile ? 'Business name and call-forwarding details are saved.' : 'Add the business name and forwarding number first.',
+      detail: hasProfile
+        ? 'Business name, public number, and owner answer number are saved.'
+        : 'Add the business name, public business number, and owner answer number first.',
     },
     {
       key: 'owner_connected',
@@ -579,7 +610,19 @@ export function buildAdminOnboardingConfidence(params: {
       label: 'Number assigned',
       complete: numberReady,
       variant: milestoneVariant({ complete: numberReady, blocking: true }),
-      detail: numberReady ? 'The business texting number is attached.' : 'Assign a new number or attach the approved existing number.',
+      detail: numberReady ? 'The CallbackCloser routing number is attached.' : 'Assign the CallbackCloser routing number.',
+    },
+    {
+      key: 'business_number_path',
+      label:
+        phoneSetupGate.path === 'CURRENT_NUMBER_FORWARDING'
+          ? 'Forwarding verified'
+          : phoneSetupGate.path === 'PORT_EXISTING_NUMBER'
+            ? 'Porting completed'
+            : 'Business number connected',
+      complete: phoneSetupGate.complete,
+      variant: milestoneVariant({ complete: phoneSetupGate.complete, blocking: true }),
+      detail: phoneSetupGate.detail,
     },
     {
       key: 'messaging_service',
@@ -635,7 +678,9 @@ export function buildAdminOnboardingConfidence(params: {
       label: 'Safe to mark live',
       complete: canSafelyMarkLive,
       variant: milestoneVariant({ complete: canSafelyMarkLive, blocking: business.provisioningStatus === BusinessProvisioningStatus.LIVE || readyForTest }),
-      detail: canSafelyMarkLive ? 'This business has passed the key operator checks for launch.' : 'Keep the business in onboarding until test SMS and a real missed-call validation are complete.',
+      detail: canSafelyMarkLive
+        ? 'This business has passed the key operator checks for launch.'
+        : 'Keep the business in onboarding until the phone path, test SMS, and a real missed-call validation are complete.',
     },
   ];
 

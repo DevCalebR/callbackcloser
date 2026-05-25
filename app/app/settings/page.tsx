@@ -8,13 +8,12 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
 import { getAdminSession } from '@/lib/admin';
 import { getAdminTestSmsConfidenceState } from '@/lib/admin-dashboard';
 import { getTwilioWebhookSnapshot } from '@/lib/admin-provisioning';
 import { requireBusiness } from '@/lib/auth';
 import { getBusinessNotificationSettingsForBusiness } from '@/lib/business-access';
-import { TwilioSetupTone, buildTwilioSetupFlow, getTwilioAccountModeLabel, twilioAccountModeOptions, twilioNumberSetupModeOptions } from '@/lib/twilio-setup';
+import { TwilioSetupTone, buildTwilioSetupFlow, businessPhonePathOptions, twilioAccountModeOptions } from '@/lib/twilio-setup';
 import { db } from '@/lib/db';
 import {
   getManagedTextingNumber,
@@ -28,7 +27,6 @@ import { averageJobValueCentsToDollars } from '@/lib/business-settings';
 
 import {
   buyTwilioNumberAction,
-  connectExistingTwilioNumberAction,
   resyncTwilioWebhooksAction,
   saveBusinessSettingsAction,
   saveBusinessTwilioAdminOverridesAction,
@@ -39,11 +37,16 @@ import {
 const adminChangedFieldLabels: Record<string, string> = {
   ownerPhone: 'owner alert phone',
   twilioAccountMode: 'Twilio account mode',
-  twilioNumberSetupMode: 'Twilio number path',
+  phoneSetupPath: 'business number path',
+  twilioNumberSetupMode: 'routing number mode',
   twilioSubaccountSid: 'Twilio subaccount SID',
   twilioPhoneNumber: 'Twilio number',
   twilioPhoneNumberSid: 'Twilio number SID',
   twilioMessagingServiceSid: 'messaging service SID',
+  forwardingVerificationStatus: 'forwarding verification status',
+  forwardingVerificationNote: 'forwarding verification note',
+  portingStatus: 'porting status',
+  portingNotes: 'porting notes',
   messagingComplianceType: 'number type',
   a2pCustomerProfileSid: 'A2P customer profile SID',
   a2pBrandSid: 'A2P brand SID',
@@ -57,11 +60,16 @@ const adminChangedFieldLabels: Record<string, string> = {
 
 type BusinessTwilioDefaults = {
   twilioAccountMode: string;
+  phoneSetupPath: string;
   twilioNumberSetupMode: string;
   twilioSubaccountSid: string;
   twilioPhoneNumber: string;
   twilioPhoneNumberSid: string;
   twilioMessagingServiceSid: string;
+  forwardingVerificationStatus: string;
+  forwardingVerificationNote: string;
+  portingStatus: string;
+  portingNotes: string;
   messagingComplianceType: string;
   a2pCustomerProfileSid: string;
   a2pBrandSid: string;
@@ -157,11 +165,16 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
   });
   const twilioDefaults: BusinessTwilioDefaults = {
     twilioAccountMode: business.twilioAccountMode,
+    phoneSetupPath: business.phoneSetupPath,
     twilioNumberSetupMode: business.twilioNumberSetupMode,
     twilioSubaccountSid: business.twilioSubaccountSid || '',
     twilioPhoneNumber: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || '',
     twilioPhoneNumberSid: business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || '',
     twilioMessagingServiceSid: business.twilioMessagingServiceSid || '',
+    forwardingVerificationStatus: business.forwardingVerificationStatus,
+    forwardingVerificationNote: business.forwardingVerificationNote || '',
+    portingStatus: business.portingStatus,
+    portingNotes: business.portingNotes || '',
     messagingComplianceType: business.messagingComplianceType,
     a2pCustomerProfileSid: business.a2pCustomerProfileSid || '',
     a2pBrandSid: business.a2pBrandSid || '',
@@ -228,7 +241,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         ...step,
         body: (
           <form action={saveBusinessTwilioSetupChoiceAction} className="space-y-4" id="account-mode-step">
-            <input type="hidden" name="twilioNumberSetupMode" value={setupFlow.numberSetupMode} />
+            <input type="hidden" name="phoneSetupPath" value={setupFlow.phoneSetupPath} />
             <div className="grid gap-3 md:grid-cols-2">
               {twilioAccountModeOptions.map((option) => (
                 <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
@@ -256,11 +269,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         body: (
           <form action={saveBusinessTwilioSetupChoiceAction} className="space-y-4" id="number-path-step">
             <input type="hidden" name="twilioAccountMode" value={setupFlow.accountMode} />
-            <div className="grid gap-3 md:grid-cols-2">
-              {twilioNumberSetupModeOptions.map((option) => (
+            <div className="grid gap-3">
+              {businessPhonePathOptions.map((option) => (
                 <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
                   <div className="flex items-start gap-3">
-                    <input defaultChecked={setupFlow.numberSetupMode === option.value} name="twilioNumberSetupMode" type="radio" value={option.value} />
+                    <input defaultChecked={setupFlow.phoneSetupPath === option.value} name="phoneSetupPath" type="radio" value={option.value} />
                     <div className="space-y-1">
                       <p className="font-medium">{option.label}</p>
                       <p className="text-muted-foreground">{option.description}</p>
@@ -269,11 +282,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                 </label>
               ))}
             </div>
-            {setupFlow.numberSetupMode === 'EXISTING_NUMBER' ? (
+            {setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER' ? (
               <p className="text-sm text-muted-foreground">{setupFlow.existingNumberMessage}</p>
             ) : null}
             <Button size="sm" type="submit" variant="outline">
-              Save number path
+              Save business number path
             </Button>
           </form>
         ),
@@ -355,28 +368,26 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               </div>
               <div className="rounded-xl border bg-background/80 p-4 text-sm">
                 <p className="font-medium">Number path</p>
-                <p className="mt-2 text-muted-foreground">{setupFlow.numberSetupModeLabel}</p>
+                <p className="mt-2 text-muted-foreground">{setupFlow.phoneSetupPathLabel}</p>
               </div>
             </div>
 
-            {setupFlow.numberSetupMode === 'NEW_NUMBER' ? (
+            {setupFlow.phoneSetupPath !== 'PORT_EXISTING_NUMBER' ? (
               <form action={buyTwilioNumberAction} className="flex flex-col gap-3 md:flex-row md:items-end">
                 <div className="w-full md:max-w-xs">
                   <Label htmlFor="setupAreaCode">Preferred area code</Label>
                   <Input id="setupAreaCode" name="areaCode" inputMode="numeric" maxLength={3} placeholder="512" />
                 </div>
                 <Button size="sm" type="submit" disabled={Boolean(managedTextingNumber)}>
-                  {managedTextingNumber ? 'Number already assigned' : 'Provision number'}
+                  {managedTextingNumber ? 'Routing number already assigned' : 'Provision routing number'}
                 </Button>
               </form>
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">{setupFlow.existingNumberMessage}</p>
-                <form action={connectExistingTwilioNumberAction}>
-                  <Button size="sm" type="submit" variant="outline">
-                    Keep existing number
-                  </Button>
-                </form>
+                <p className="text-sm text-muted-foreground">
+                  CallbackCloser does not automate porting in this step. Once the number is live in Twilio, an operator can save the routing number mapping.
+                </p>
               </div>
             )}
 
@@ -403,6 +414,30 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
                 </div>
               </form>
             ) : null}
+          </div>
+        ),
+      };
+    }
+
+    if (step.key === 'forwarding_verified') {
+      return {
+        ...step,
+        body: (
+          <div className="space-y-3 text-sm text-muted-foreground">
+            {setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING' ? (
+              <>
+                <p>
+                  Forward your current public business number into the CallbackCloser routing number shown above. CallbackCloser marks this step complete after a fresh inbound test call reaches the routing number or an operator confirms it manually.
+                </p>
+                <p>
+                  Public business number: {business.publicBusinessPhone ? formatPhoneForDisplay(business.publicBusinessPhone) : 'Not saved yet'}
+                </p>
+              </>
+            ) : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER' ? (
+              <p>Porting stays admin-assisted for now. Keep the porting status updated, then save the Twilio routing number after the port completes.</p>
+            ) : (
+              <p>The new CallbackCloser number becomes your connected business line once it is assigned and working.</p>
+            )}
           </div>
         ),
       };
@@ -545,9 +580,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         <Badge variant="outline">Twilio Setup</Badge>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">Business Twilio setup</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Connect your business number</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              One guided place to choose the Twilio account mode, track each provisioning step, and keep launch status honest without digging through admin screens.
+              One guided place to choose the Twilio account mode, connect the right business-number path, and keep launch status honest without digging through admin screens.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -566,7 +601,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">A new business number was provisioned for the selected Twilio account mode.</div> : null}
       {existingNumberIntent ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
-          Existing-number path saved. CallbackCloser will keep this business on the admin-assisted existing-number rollout until the Twilio account context and A2P path are reviewed.
+          Porting path saved. CallbackCloser will keep this business on the admin-assisted porting workflow until the number is active and mapped into Twilio.
         </div>
       ) : null}
       {twilioSynced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Webhook sync completed for the current business number.</div> : null}
@@ -590,16 +625,21 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
       <Card className="bg-card/90">
         <CardHeader>
           <CardTitle>Business basics</CardTitle>
-          <CardDescription>Keep the live call path and owner routing current while Twilio setup moves forward.</CardDescription>
+          <CardDescription>Keep the public business number, live call path, and owner routing current while setup moves forward.</CardDescription>
         </CardHeader>
         <CardContent>
           <form action={saveBusinessSettingsAction} className="grid gap-4 md:grid-cols-2">
+            <input type="hidden" name="phoneSetupPath" value={business.phoneSetupPath} />
             <div className="md:col-span-2">
               <Label htmlFor="settingsBusinessName">Business name</Label>
               <Input id="settingsBusinessName" name="name" defaultValue={business.name} required />
             </div>
             <div>
-              <Label htmlFor="settingsForwardingNumber">Forwarding number</Label>
+              <Label htmlFor="settingsPublicBusinessPhone">Public business number</Label>
+              <Input id="settingsPublicBusinessPhone" name="publicBusinessPhone" defaultValue={business.publicBusinessPhone || ''} />
+            </div>
+            <div>
+              <Label htmlFor="settingsForwardingNumber">Owner forwarding / answer number</Label>
               <Input id="settingsForwardingNumber" name="forwardingNumber" defaultValue={business.forwardingNumber} required />
             </div>
             <div>

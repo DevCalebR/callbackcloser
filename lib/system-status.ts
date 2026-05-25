@@ -1,5 +1,6 @@
 import { type Business, type SubscriptionStatus } from '@prisma/client';
 
+import { getBusinessPhoneSetupGate } from '@/lib/business-phone-setup';
 import { getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 
 type StatusBusiness = Pick<
@@ -25,16 +26,30 @@ type StatusBusiness = Pick<
   | 'subscriptionStatus'
   | 'forwardingNumber'
   | 'notifyPhone'
->;
+> &
+  Partial<
+    Pick<
+      Business,
+      | 'phoneSetupPath'
+      | 'publicBusinessPhone'
+      | 'forwardingVerificationStatus'
+      | 'forwardingVerifiedAt'
+      | 'forwardingVerificationNote'
+      | 'portingStatus'
+      | 'portingNotes'
+      | 'portingCompletedAt'
+    >
+  >;
 
 export type CustomerSystemStatusKey = 'not_live_yet' | 'activating' | 'live';
 export type AdminBusinessStatusKey = 'blocked' | 'activating' | 'live';
 
 export function getCustomerSystemStatus(business: StatusBusiness, successfulLeadCount: number) {
   const managedSummary = getManagedTwilioStatusSummary(business);
+  const phoneSetupGate = getBusinessPhoneSetupGate(business);
   const hasSuccessfulTestLead = successfulLeadCount > 0;
 
-  if (managedSummary.messagingReady && hasSuccessfulTestLead) {
+  if (managedSummary.messagingReady && phoneSetupGate.complete && hasSuccessfulTestLead) {
     return {
       key: 'live' as const,
       label: 'Live',
@@ -43,7 +58,7 @@ export function getCustomerSystemStatus(business: StatusBusiness, successfulLead
     };
   }
 
-  if (managedSummary.onboardingReady || managedSummary.complianceStarted || hasSuccessfulTestLead) {
+  if (managedSummary.onboardingReady || managedSummary.complianceStarted || phoneSetupGate.complete || hasSuccessfulTestLead) {
     return {
       key: 'activating' as const,
       label: 'Activating',

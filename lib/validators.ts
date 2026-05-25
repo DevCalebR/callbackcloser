@@ -4,6 +4,9 @@ import { MAX_AVERAGE_JOB_VALUE } from '@/lib/business-settings';
 
 const twilioAccountModeSchema = z.enum(['MAIN_ACCOUNT', 'BUSINESS_SUBACCOUNT']);
 const twilioNumberSetupModeSchema = z.enum(['NEW_NUMBER', 'EXISTING_NUMBER']);
+const businessPhoneSetupPathSchema = z.enum(['CURRENT_NUMBER_FORWARDING', 'PORT_EXISTING_NUMBER', 'NEW_TWILIO_NUMBER']);
+const forwardingVerificationStatusSchema = z.enum(['NOT_STARTED', 'PENDING', 'VERIFIED']);
+const portingStatusSchema = z.enum(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED']);
 const messagingComplianceTypeSchema = z.preprocess(
   (value) => (value === 'TOLL_FREE' ? 'TOLL_FREE_VERIFICATION' : value),
   z.enum(['UNKNOWN', 'LOCAL_A2P', 'TOLL_FREE_VERIFICATION'])
@@ -24,11 +27,29 @@ const averageJobValueSchema = z.preprocess(
     .optional(),
 );
 
-export const onboardingSchema = z.object({
+function requirePublicBusinessPhone<T extends z.AnyZodObject>(schema: T, message: string) {
+  return schema.superRefine((value: z.infer<T>, ctx) => {
+    const publicBusinessPhone = value.publicBusinessPhone?.trim() || '';
+    if (
+      (value.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING' || value.phoneSetupPath === 'PORT_EXISTING_NUMBER') &&
+      !publicBusinessPhone
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['publicBusinessPhone'],
+        message,
+      });
+    }
+  });
+}
+
+const onboardingBaseSchema = z.object({
   name: z.string().min(2).max(120),
+  publicBusinessPhone: z.string().max(30).optional().or(z.literal('')),
   forwardingNumber: z.string().min(7).max(30),
   notifyPhone: z.string().max(30).optional().or(z.literal('')),
   twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
+  phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
   twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
   missedCallSeconds: z.coerce.number().int().min(5).max(90).default(20),
   serviceLabel1: z.string().min(1).max(40),
@@ -37,14 +58,19 @@ export const onboardingSchema = z.object({
   timezone: z.string().min(2).max(100),
 });
 
-export const businessSettingsSchema = onboardingSchema.extend({
+export const onboardingSchema = requirePublicBusinessPhone(
+  onboardingBaseSchema,
+  'Current-number setup requires the public business phone number.'
+);
+
+export const businessSettingsSchema = requirePublicBusinessPhone(onboardingBaseSchema.extend({
   ownerEmail: z.string().email().optional().or(z.literal('')),
   averageJobValue: averageJobValueSchema,
   notifySms: z.coerce.boolean().optional().default(false),
   notifyEmail: z.coerce.boolean().optional().default(false),
   notifyInApp: z.coerce.boolean().optional().default(false),
   urgentOnly: z.coerce.boolean().optional().default(false),
-});
+}), 'Current-number setup requires the public business phone number.');
 
 export const leadStatusSchema = z.object({
   leadId: z.string().min(1),
@@ -64,11 +90,13 @@ export const buyNumberSchema = z.object({
     .or(z.literal('')),
 });
 
-export const adminBusinessDraftSchema = z.object({
+const adminBusinessDraftBaseSchema = z.object({
   name: z.string().min(2).max(120),
   ownerName: z.string().trim().max(120).optional().or(z.literal('')),
   ownerEmail: z.string().trim().email(),
   ownerPhone: z.string().max(30).optional().or(z.literal('')),
+  publicBusinessPhone: z.string().trim().max(30).optional().or(z.literal('')),
+  phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
   areaCode: z
     .string()
     .trim()
@@ -84,7 +112,12 @@ export const adminBusinessDraftSchema = z.object({
   serviceLabel3: z.string().min(1).max(40).default('Maintenance'),
 });
 
-export const adminBusinessUpdateSchema = adminBusinessDraftSchema.extend({
+export const adminBusinessDraftSchema = requirePublicBusinessPhone(
+  adminBusinessDraftBaseSchema,
+  'Save the public business number for current-number or porting setups.'
+);
+
+export const adminBusinessUpdateSchema = requirePublicBusinessPhone(adminBusinessDraftBaseSchema.extend({
   businessId: z.string().min(1),
   ownerClerkId: z.string().trim().optional().or(z.literal('')),
   internalNotes: z.string().trim().max(5_000).optional().or(z.literal('')),
@@ -119,7 +152,7 @@ export const adminBusinessUpdateSchema = adminBusinessDraftSchema.extend({
   notifyEmail: z.coerce.boolean().optional().default(false),
   notifyInApp: z.coerce.boolean().optional().default(false),
   urgentOnly: z.coerce.boolean().optional().default(false),
-});
+}), 'Save the public business number for current-number or porting setups.');
 
 export const adminInviteOwnerSchema = z.object({
   businessId: z.string().min(1),
@@ -192,17 +225,23 @@ export const adminSetupBasicsSchema = z.object({
   ownerName: z.string().trim().max(120).optional().or(z.literal('')),
   ownerEmail: z.string().trim().email().optional().or(z.literal('')),
   ownerPhone: z.string().trim().max(30).optional().or(z.literal('')),
+  publicBusinessPhone: z.string().trim().max(30).optional().or(z.literal('')),
   forwardingNumber: z.string().trim().min(7).max(30).optional().or(z.literal('')),
 });
 
 export const adminTwilioSetupSchema = z.object({
   businessId: z.string().min(1),
   twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
+  phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
   twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
   twilioSubaccountSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
   twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  forwardingVerificationStatus: forwardingVerificationStatusSchema.default('NOT_STARTED'),
+  forwardingVerificationNote: z.string().trim().max(500).optional().or(z.literal('')),
+  portingStatus: portingStatusSchema.default('NOT_STARTED'),
+  portingNotes: z.string().trim().max(500).optional().or(z.literal('')),
   messagingComplianceType: messagingComplianceTypeSchema.default('UNKNOWN'),
   a2pCustomerProfileSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pBrandSid: z.string().trim().max(64).optional().or(z.literal('')),
@@ -248,11 +287,16 @@ export const adminFounderDeleteAllBusinessesSchema = z.object({
 
 export const businessTwilioAdminOverrideSchema = z.object({
   twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
+  phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
   twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
   twilioSubaccountSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
   twilioPhoneNumberSid: z.string().trim().max(64).optional().or(z.literal('')),
   twilioMessagingServiceSid: z.string().trim().max(64).optional().or(z.literal('')),
+  forwardingVerificationStatus: forwardingVerificationStatusSchema.default('NOT_STARTED'),
+  forwardingVerificationNote: z.string().trim().max(500).optional().or(z.literal('')),
+  portingStatus: portingStatusSchema.default('NOT_STARTED'),
+  portingNotes: z.string().trim().max(500).optional().or(z.literal('')),
   messagingComplianceType: messagingComplianceTypeSchema.default('UNKNOWN'),
   a2pCustomerProfileSid: z.string().trim().max(64).optional().or(z.literal('')),
   a2pBrandSid: z.string().trim().max(64).optional().or(z.literal('')),
@@ -279,7 +323,13 @@ export const businessTwilioAdminOverrideSchema = z.object({
 
 export const businessTwilioSetupChoiceSchema = z.object({
   twilioAccountMode: twilioAccountModeSchema.default('BUSINESS_SUBACCOUNT'),
+  phoneSetupPath: businessPhoneSetupPathSchema.default('CURRENT_NUMBER_FORWARDING'),
   twilioNumberSetupMode: twilioNumberSetupModeSchema.default('NEW_NUMBER'),
+});
+
+export const adminForwardingVerificationSchema = z.object({
+  businessId: z.string().min(1),
+  note: z.string().trim().min(12).max(500),
 });
 
 export const businessTwilioTestSmsSchema = z.object({

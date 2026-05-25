@@ -1,5 +1,11 @@
 import Link from 'next/link';
 
+import {
+  getBusinessPhoneSetupGate,
+  getBusinessPhoneSetupPathLabel,
+  getBusinessRoutingNumber,
+  getPublicBusinessPhone,
+} from '@/lib/business-phone-setup';
 import { SetupChecklist } from '@/components/setup-checklist';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
@@ -31,16 +37,21 @@ export default async function CallFlowPage() {
       });
   const managedTextingNumber = getManagedTextingNumber(business);
   const managedTwilioSummary = getManagedTwilioStatusSummary(business);
+  const phoneSetupGate = getBusinessPhoneSetupGate(business);
+  const publicBusinessPhone = getPublicBusinessPhone(business);
+  const routingNumber = getBusinessRoutingNumber(business);
   const readiness = {
     ready:
       Boolean(business.forwardingNumber) &&
+      phoneSetupGate.complete &&
       managedTwilioSummary.messagingReady &&
       Boolean(business.notifyPhone) &&
       !ownerNotifyPhoneOptedOut &&
       billingAccess.billingActive,
     blockers: [
       !managedTextingNumber ? { key: 'texting_line', label: 'Texting line', detail: 'CallbackCloser still needs to provision your business texting line.' } : null,
-      !business.forwardingNumber ? { key: 'routing', label: 'Routing setup', detail: 'Add the business line that should still ring when new calls come in.' } : null,
+      !business.forwardingNumber ? { key: 'routing', label: 'Owner answer number', detail: 'Add the owner or staff number that should receive live forwarded calls.' } : null,
+      !phoneSetupGate.complete ? { key: 'phone_path', label: getBusinessPhoneSetupPathLabel(business.phoneSetupPath), detail: phoneSetupGate.detail } : null,
       !managedTwilioSummary.onboardingReady
         ? { key: 'messaging', label: 'Messaging infrastructure', detail: managedTwilioSummary.nextStep }
         : null,
@@ -74,18 +85,24 @@ export default async function CallFlowPage() {
   const setupItems = [
     {
       key: 'routing',
-      label: 'Phone routing ready',
+      label: 'Owner answer number ready',
       detail: business.forwardingNumber
-        ? `Forwarding to ${formatPhoneForDisplay(business.forwardingNumber)}`
-        : 'Add the forwarding number your team answers.',
+        ? `Live calls ring ${formatPhoneForDisplay(business.forwardingNumber)}`
+        : 'Add the owner or staff number your team answers.',
       complete: Boolean(business.forwardingNumber),
     },
     {
+      key: 'phone_path',
+      label: getBusinessPhoneSetupPathLabel(business.phoneSetupPath),
+      detail: phoneSetupGate.detail,
+      complete: phoneSetupGate.complete,
+    },
+    {
       key: 'twilio',
-      label: 'Texting line assigned',
+      label: 'CallbackCloser routing number assigned',
       detail: managedTextingNumber
-        ? `Your texting line is ${formatPhoneForDisplay(managedTextingNumber)}.`
-        : 'CallbackCloser still needs to provision your business texting line.',
+        ? `Your CallbackCloser routing number is ${formatPhoneForDisplay(managedTextingNumber)}.`
+        : 'CallbackCloser still needs to provision or map your routing number.',
       complete: Boolean(managedTextingNumber),
     },
     {
@@ -134,10 +151,15 @@ export default async function CallFlowPage() {
 
   const flowSteps = [
       {
-        title: 'A caller reaches your business texting line',
-        detail: managedTextingNumber
-          ? `Calls hit ${formatPhoneForDisplay(managedTextingNumber)} so CallbackCloser can catch the missed-call moment.`
-          : 'CallbackCloser still needs to provision the business texting line that will cover missed calls.',
+        title: 'A caller reaches your connected business number',
+        detail:
+          business.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING'
+            ? publicBusinessPhone && routingNumber
+              ? `Customers call ${formatPhoneForDisplay(publicBusinessPhone)}, which forwards into ${formatPhoneForDisplay(routingNumber)} so CallbackCloser can catch the missed-call moment.`
+              : phoneSetupGate.detail
+            : managedTextingNumber
+              ? `Calls hit ${formatPhoneForDisplay(managedTextingNumber)} so CallbackCloser can catch the missed-call moment.`
+              : 'CallbackCloser still needs to provision or map the routing number that will cover missed calls.',
     },
     {
       title: 'CallbackCloser sees the missed call',

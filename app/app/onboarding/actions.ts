@@ -4,6 +4,7 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
+import { deriveTwilioNumberSetupModeFromPhoneSetupPath } from '@/lib/business-phone-setup';
 import { upsertBusinessForOwner } from '@/lib/business';
 import { onboardingSchema } from '@/lib/validators';
 
@@ -41,8 +42,23 @@ export async function saveOnboardingAction(formData: FormData) {
     (user?.primaryEmailAddressId
       ? user.emailAddresses.find((email) => email.id === user.primaryEmailAddressId)?.emailAddress
       : user?.emailAddresses[0]?.emailAddress) || null;
+  const data = parsed.data;
 
-  await upsertBusinessForOwner(userId, { ...parsed.data, ownerEmail });
+  await upsertBusinessForOwner(userId, {
+    name: data.name,
+    publicBusinessPhone: data.publicBusinessPhone,
+    forwardingNumber: data.forwardingNumber,
+    notifyPhone: data.notifyPhone,
+    twilioAccountMode: data.twilioAccountMode,
+    phoneSetupPath: data.phoneSetupPath,
+    twilioNumberSetupMode: deriveTwilioNumberSetupModeFromPhoneSetupPath(data.phoneSetupPath),
+    missedCallSeconds: data.missedCallSeconds,
+    serviceLabel1: data.serviceLabel1,
+    serviceLabel2: data.serviceLabel2,
+    serviceLabel3: data.serviceLabel3,
+    timezone: data.timezone,
+    ownerEmail,
+  });
 
   revalidatePath('/app');
   revalidatePath('/app/settings');

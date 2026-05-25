@@ -1,9 +1,12 @@
 'use server';
 
 import {
+  BusinessPhoneSetupPath,
   BusinessProvisioningStatus,
+  ForwardingVerificationStatus,
   ManagedTwilioStatus,
   MessagingComplianceType,
+  PortingStatus,
   Prisma,
   SubscriptionStatus,
   TollFreeVerificationStatus,
@@ -39,6 +42,7 @@ import {
 } from '@/lib/admin-test-data-reset';
 import { logAuditEvent } from '@/lib/audit-log';
 import { buildAdminTestSmsTruth, buildTwilioSetupUpdateEventMetadata } from '@/lib/admin-operator-visibility';
+import { deriveTwilioNumberSetupModeFromPhoneSetupPath } from '@/lib/business-phone-setup';
 import { db } from '@/lib/db';
 import { formatPhoneDetail, listBusinessOperatorEvents, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
@@ -56,6 +60,7 @@ import {
   adminBusinessDraftSchema,
   adminConnectExistingOwnerSchema,
   adminDeleteBusinessSchema,
+  adminForwardingVerificationSchema,
   adminInviteOwnerSchema,
   adminMarkBusinessLiveSchema,
   adminMissedCallValidationConfirmationSchema,
@@ -93,6 +98,7 @@ const TWILIO_SETUP_STEP_KEYS = new Set([
   'account_ready',
   'messaging_service_ready',
   'number_assigned',
+  'forwarding_verified',
   'voice_webhook_synced',
   'sms_webhook_synced',
   'status_callback_synced',
@@ -325,6 +331,7 @@ export async function createDemoBusinessAction(formData: FormData) {
   const ownerPhone = normalizePhoneNumber(getString(formData, 'ownerPhone')) || null;
   const ownerEmail = getString(formData, 'ownerEmail').toLowerCase() || admin.email || null;
   const forwardingNumber = normalizePhoneNumber(getString(formData, 'forwardingNumber')) || ownerPhone || DEFAULT_DEMO_FORWARDING_NUMBER;
+  const publicBusinessPhone = normalizePhoneNumber(getString(formData, 'publicBusinessPhone')) || DEFAULT_DEMO_TEXTING_NUMBER;
   const existingBusiness = await db.business.findUnique({ where: { ownerClerkId: DEMO_OWNER_CLERK_ID } });
   const demoTextingNumber = existingBusiness?.twilioPrimaryPhoneNumber || DEFAULT_DEMO_TEXTING_NUMBER;
 
@@ -335,9 +342,11 @@ export async function createDemoBusinessAction(formData: FormData) {
       ownerName: 'CallbackCloser Demo',
       name: DEFAULT_DEMO_NAME,
       isTestBusiness: true,
+      publicBusinessPhone,
       forwardingNumber,
       notifyPhone: ownerPhone,
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
+      phoneSetupPath: BusinessPhoneSetupPath.NEW_TWILIO_NUMBER,
       missedCallSeconds: 20,
       serviceLabel1: 'Repair',
       serviceLabel2: 'Install',
@@ -355,9 +364,11 @@ export async function createDemoBusinessAction(formData: FormData) {
       name: DEFAULT_DEMO_NAME,
       isTestBusiness: true,
       archivedAt: null,
+      publicBusinessPhone,
       forwardingNumber,
       notifyPhone: ownerPhone,
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
+      phoneSetupPath: BusinessPhoneSetupPath.NEW_TWILIO_NUMBER,
       subscriptionStatus: SubscriptionStatus.ACTIVE,
       subscriptionStatusUpdatedAt: new Date(),
       managedTwilioStatusUpdatedAt: new Date(),
@@ -402,6 +413,8 @@ export async function createAdminBusinessAction(formData: FormData) {
   const data = parsed.data;
   const ownerPhone = normalizePhoneNumber(data.ownerPhone || '') || null;
   const forwardingNumber = normalizePhoneNumber(data.forwardingNumber);
+  const publicBusinessPhone = normalizePhoneNumber(data.publicBusinessPhone || '') || null;
+  const phoneSetupPath = data.phoneSetupPath as BusinessPhoneSetupPath;
 
   const business = await db.business.create({
     data: {
@@ -409,9 +422,16 @@ export async function createAdminBusinessAction(formData: FormData) {
       ownerName: data.ownerName || null,
       name: data.name,
       isTestBusiness: data.isTestBusiness,
+      publicBusinessPhone,
       forwardingNumber,
       notifyPhone: ownerPhone,
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
+      phoneSetupPath,
+      twilioNumberSetupMode: deriveTwilioNumberSetupModeFromPhoneSetupPath(phoneSetupPath),
+      forwardingVerificationStatus:
+        phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
+          ? ForwardingVerificationStatus.PENDING
+          : ForwardingVerificationStatus.NOT_STARTED,
       missedCallSeconds: data.missedCallSeconds,
       serviceLabel1: data.serviceLabel1,
       serviceLabel2: data.serviceLabel2,
@@ -771,7 +791,8 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   }
 
   const twilioAccountMode = data.twilioAccountMode as TwilioAccountMode;
-  const twilioNumberSetupMode = data.twilioNumberSetupMode as TwilioNumberSetupMode;
+  const phoneSetupPath = data.phoneSetupPath as BusinessPhoneSetupPath;
+  const twilioNumberSetupMode = deriveTwilioNumberSetupModeFromPhoneSetupPath(phoneSetupPath) as TwilioNumberSetupMode;
   const twilioSubaccountSid = twilioAccountMode === TwilioAccountMode.MAIN_ACCOUNT ? null : normalizeOptionalSid(data.twilioSubaccountSid);
   let twilioPhoneNumber: string | null;
 
@@ -783,6 +804,10 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
 
   const twilioPhoneNumberSid = normalizeOptionalSid(data.twilioPhoneNumberSid);
   const twilioMessagingServiceSid = normalizeOptionalSid(data.twilioMessagingServiceSid);
+  const forwardingVerificationStatus = data.forwardingVerificationStatus as ForwardingVerificationStatus;
+  const forwardingVerificationNote = data.forwardingVerificationNote?.trim() || null;
+  const portingStatus = data.portingStatus as PortingStatus;
+  const portingNotes = data.portingNotes?.trim() || null;
   const messagingComplianceType = data.messagingComplianceType as MessagingComplianceType;
   const a2pCustomerProfileSid = normalizeOptionalSid(data.a2pCustomerProfileSid);
   const a2pBrandSid = normalizeOptionalSid(data.a2pBrandSid);
@@ -833,11 +858,17 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   const managedTwilioStatusChanged = existingBusiness.managedTwilioStatus !== data.managedTwilioStatus;
   const twilioMappingChanged =
     existingBusiness.twilioAccountMode !== twilioAccountMode ||
+    existingBusiness.phoneSetupPath !== phoneSetupPath ||
     existingBusiness.twilioNumberSetupMode !== twilioNumberSetupMode ||
     existingBusiness.twilioSubaccountSid !== twilioSubaccountSid ||
     (existingBusiness.twilioPrimaryPhoneNumber || existingBusiness.twilioPhoneNumber) !== twilioPhoneNumber ||
     (existingBusiness.twilioPrimaryNumberSid || existingBusiness.twilioPhoneNumberSid) !== twilioPhoneNumberSid ||
     existingBusiness.twilioMessagingServiceSid !== twilioMessagingServiceSid;
+  const phonePathStatusChanged =
+    existingBusiness.forwardingVerificationStatus !== forwardingVerificationStatus ||
+    existingBusiness.forwardingVerificationNote !== forwardingVerificationNote ||
+    existingBusiness.portingStatus !== portingStatus ||
+    existingBusiness.portingNotes !== portingNotes;
   const a2pMetadataChanged =
     existingBusiness.a2pCustomerProfileSid !== a2pCustomerProfileSid ||
     existingBusiness.a2pBrandSid !== a2pBrandSid ||
@@ -852,6 +883,9 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
   const changedFields = [
     existingBusiness.twilioAccountMode !== twilioAccountMode
       ? { key: 'twilioAccountMode', label: 'Twilio account mode', before: existingBusiness.twilioAccountMode, after: twilioAccountMode }
+      : null,
+    existingBusiness.phoneSetupPath !== phoneSetupPath
+      ? { key: 'phoneSetupPath', label: 'business number path', before: existingBusiness.phoneSetupPath, after: phoneSetupPath }
       : null,
     existingBusiness.twilioNumberSetupMode !== twilioNumberSetupMode
       ? {
@@ -887,6 +921,28 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
           before: existingBusiness.twilioMessagingServiceSid,
           after: twilioMessagingServiceSid,
         }
+      : null,
+    existingBusiness.forwardingVerificationStatus !== forwardingVerificationStatus
+      ? {
+          key: 'forwardingVerificationStatus',
+          label: 'forwarding verification status',
+          before: existingBusiness.forwardingVerificationStatus,
+          after: forwardingVerificationStatus,
+        }
+      : null,
+    existingBusiness.forwardingVerificationNote !== forwardingVerificationNote
+      ? {
+          key: 'forwardingVerificationNote',
+          label: 'forwarding verification note',
+          before: existingBusiness.forwardingVerificationNote,
+          after: forwardingVerificationNote,
+        }
+      : null,
+    existingBusiness.portingStatus !== portingStatus
+      ? { key: 'portingStatus', label: 'porting status', before: existingBusiness.portingStatus, after: portingStatus }
+      : null,
+    existingBusiness.portingNotes !== portingNotes
+      ? { key: 'portingNotes', label: 'porting notes', before: existingBusiness.portingNotes, after: portingNotes }
       : null,
     existingBusiness.messagingComplianceType !== messagingComplianceType
       ? {
@@ -957,8 +1013,24 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
       where: { id: data.businessId },
       data: {
         twilioAccountMode,
+        phoneSetupPath,
         twilioNumberSetupMode,
         twilioSubaccountSid,
+        forwardingVerificationStatus:
+          phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING ? forwardingVerificationStatus : ForwardingVerificationStatus.NOT_STARTED,
+        forwardingVerifiedAt:
+          phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING &&
+          forwardingVerificationStatus === ForwardingVerificationStatus.VERIFIED
+            ? existingBusiness.forwardingVerifiedAt || new Date()
+            : null,
+        forwardingVerificationNote:
+          phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING ? forwardingVerificationNote : null,
+        portingStatus: phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? portingStatus : PortingStatus.NOT_STARTED,
+        portingNotes: phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER ? portingNotes : null,
+        portingCompletedAt:
+          phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER && portingStatus === PortingStatus.COMPLETED
+            ? existingBusiness.portingCompletedAt || new Date()
+            : null,
         managedTwilioStatus: data.managedTwilioStatus as ManagedTwilioStatus,
         managedTwilioStatusUpdatedAt: managedTwilioStatusChanged ? new Date() : existingBusiness.managedTwilioStatusUpdatedAt,
         twilioPhoneNumber,
@@ -990,6 +1062,7 @@ export async function saveAdminTwilioSetupAction(formData: FormData) {
         ...(twilioMappingChanged ? { twilioWebhookSyncedAt: null } : {}),
         ...(
           twilioMappingChanged ||
+          phonePathStatusChanged ||
           a2pMetadataChanged ||
           tollFreeMetadataChanged ||
           messagingComplianceTypeChanged ||
@@ -1075,8 +1148,12 @@ export async function saveAdminSetupBasicsAction(formData: FormData) {
 
   const ownerPhone = normalizeOptionalE164Phone(parsed.data.ownerPhone || '', 'Owner alert phone');
   const forwardingNumber = normalizeOptionalE164Phone(parsed.data.forwardingNumber || '', 'Forwarding number');
+  const publicBusinessPhone = normalizeOptionalE164Phone(parsed.data.publicBusinessPhone || '', 'Public business number');
   const ownerEmail = parsed.data.ownerEmail?.trim().toLowerCase() || null;
   const ownerName = parsed.data.ownerName?.trim() || null;
+  const shouldResetForwardingVerification =
+    business.phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING &&
+    publicBusinessPhone !== (business.publicBusinessPhone || null);
 
   const changedFields = [
     business.ownerName !== ownerName ? { key: 'ownerName', label: 'owner name', before: business.ownerName, after: ownerName } : null,
@@ -1099,14 +1176,26 @@ export async function saveAdminSetupBasicsAction(formData: FormData) {
     business.forwardingNumber !== forwardingNumber
       ? { key: 'forwardingNumber', label: 'forwarding number', before: business.forwardingNumber, after: forwardingNumber }
       : null,
+    (business.publicBusinessPhone || null) !== publicBusinessPhone
+      ? { key: 'publicBusinessPhone', label: 'public business number', before: business.publicBusinessPhone || null, after: publicBusinessPhone }
+      : null,
   ].filter(Boolean) as Array<{ key: string; label: string; before: string | null; after: string | null }>;
 
   await db.business.update({
     where: { id: business.id },
     data: {
       ownerName,
+      publicBusinessPhone,
       forwardingNumber: forwardingNumber || business.forwardingNumber,
       notifyPhone: ownerPhone,
+      forwardingVerificationStatus:
+        business.phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
+          ? shouldResetForwardingVerification
+            ? ForwardingVerificationStatus.PENDING
+            : business.forwardingVerificationStatus
+          : business.forwardingVerificationStatus,
+      forwardingVerifiedAt: shouldResetForwardingVerification ? null : business.forwardingVerifiedAt,
+      forwardingVerificationNote: shouldResetForwardingVerification ? null : business.forwardingVerificationNote,
       provisioningError: null,
       provisioningLastRunAt: changedFields.length > 0 ? new Date() : business.provisioningLastRunAt,
     },
@@ -1622,6 +1711,71 @@ export async function confirmMissedCallValidationAction(formData: FormData) {
 
   await revalidateAdminPaths(business.id);
   redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ validationSaved: 1 }, returnStep)));
+}
+
+export async function confirmForwardingVerificationAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const returnStep = getReturnStep(formData);
+  const parsed = adminForwardingVerificationSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    redirectToBusinessActionError(formData, parsed.error.issues[0]?.message || 'Add a short forwarding verification note.', returnStep);
+  }
+
+  const business = await db.business.findUnique({
+    where: { id: parsed.data.businessId },
+    select: {
+      id: true,
+      phoneSetupPath: true,
+    },
+  });
+
+  if (!business) {
+    redirectToBusinessActionError(formData, 'Business not found.', returnStep);
+  }
+
+  if (business.phoneSetupPath !== BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING) {
+    redirectToBusinessActionError(formData, 'Manual forwarding verification only applies to current-number forwarding.', returnStep);
+  }
+
+  const verifiedAt = new Date();
+  await db.business.update({
+    where: { id: business.id },
+    data: {
+      forwardingVerificationStatus: ForwardingVerificationStatus.VERIFIED,
+      forwardingVerifiedAt: verifiedAt,
+      forwardingVerificationNote: parsed.data.note,
+    },
+  });
+
+  await recordBusinessOperatorEvent({
+    businessId: business.id,
+    type: 'admin.forwarding_verification_confirmed',
+    category: 'ADMIN_ACTIONS',
+    status: 'SUCCESS',
+    summary: 'Current-number forwarding manually confirmed',
+    details: {
+      remediationStepKey: 'forwarding_verified',
+      note: parsed.data.note,
+    },
+  });
+
+  logAuditEvent({
+    event: 'admin_forwarding_verification_confirmed',
+    actorType: 'user',
+    actorId: admin.userId,
+    businessId: business.id,
+    targetType: 'business',
+    targetId: business.id,
+    metadata: {
+      actorEmail: admin.email,
+      source: 'admin_setup_panels',
+      note: parsed.data.note,
+    },
+  });
+
+  await revalidateAdminPaths(business.id);
+  redirect(buildAdminBusinessRedirectPath(business.id, withReturnStepParam({ saved: 1 }, returnStep)));
 }
 
 export async function setBusinessProvisioningStatusAction(formData: FormData) {

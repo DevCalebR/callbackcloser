@@ -42,6 +42,7 @@ import { searchBusinessesForAdmin } from '@/lib/business';
 import { db } from '@/lib/db';
 import { formatRelativeTime } from '@/lib/lead-presenters';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
+import { businessPhonePathOptions } from '@/lib/twilio-setup';
 import { OperatorEventStatus } from '@prisma/client';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { cn } from '@/lib/utils';
@@ -559,9 +560,32 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                 <Label htmlFor="ownerPhone">Owner alert phone</Label>
                 <Input id="ownerPhone" name="ownerPhone" type="tel" placeholder="+1 555 123 4567" />
               </div>
+              <div className="md:col-span-2 space-y-3 rounded-xl border bg-background/80 p-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Business number path</p>
+                  <p className="text-sm text-muted-foreground">Choose whether this business will forward its current number, port it later, or use a new CallbackCloser number.</p>
+                </div>
+                <div className="grid gap-3">
+                  {businessPhonePathOptions.map((option, index) => (
+                    <label key={option.value} className="rounded-xl border bg-card/80 p-4 text-sm">
+                      <div className="flex items-start gap-3">
+                        <input defaultChecked={index === 0} name="phoneSetupPath" type="radio" value={option.value} />
+                        <div className="space-y-1">
+                          <p className="font-medium">{option.label}</p>
+                          <p className="text-muted-foreground">{option.description}</p>
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="forwardingNumber">Forwarding number</Label>
-                <Input id="forwardingNumber" name="forwardingNumber" type="tel" placeholder="+1 555 111 0000" required />
+                <Label htmlFor="publicBusinessPhone">Public business number</Label>
+                <Input id="publicBusinessPhone" name="publicBusinessPhone" type="tel" placeholder="+1 555 111 0000" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="forwardingNumber">Owner forwarding / answer number</Label>
+                <Input id="forwardingNumber" name="forwardingNumber" type="tel" placeholder="+1 555 222 0000" required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="timezone">Timezone</Label>
@@ -575,7 +599,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
 
               <div className="md:col-span-2 flex flex-wrap items-center gap-3">
                 <Button type="submit">Create business workspace</Button>
-                <p className="text-sm text-muted-foreground">CallbackCloser will auto-connect an existing owner account or send an invite if needed. Twilio account mode and number setup stay explicit on the next screen.</p>
+                <p className="text-sm text-muted-foreground">CallbackCloser will auto-connect an existing owner account or send an invite if needed. Twilio account mode and number connection stay explicit on the next screen.</p>
               </div>
             </form>
           </CardContent>
@@ -609,7 +633,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="demoForwardingNumber">Forwarding number</Label>
+                <Label htmlFor="demoForwardingNumber">Owner forwarding / answer number</Label>
                 <Input
                   id="demoForwardingNumber"
                   name="forwardingNumber"

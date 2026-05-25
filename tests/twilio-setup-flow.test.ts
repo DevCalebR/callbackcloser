@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  BusinessPhoneSetupPath,
   BusinessProvisioningStatus,
+  ForwardingVerificationStatus,
   ManagedTwilioStatus,
   MessagingComplianceType,
+  PortingStatus,
   TollFreeVerificationStatus,
   TwilioAccountMode,
   TwilioNumberSetupMode,
@@ -15,11 +18,19 @@ import { buildTwilioSetupFlow } from '../lib/twilio-setup.ts';
 function createBusiness(overrides: Record<string, unknown> = {}) {
   return {
     name: 'Acme Plumbing',
+    publicBusinessPhone: '+15550009999',
     notifyPhone: '+15551234567',
     forwardingNumber: '+15557654321',
     provisioningStatus: BusinessProvisioningStatus.ONBOARDING,
     twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
+    phoneSetupPath: BusinessPhoneSetupPath.NEW_TWILIO_NUMBER,
     twilioNumberSetupMode: TwilioNumberSetupMode.NEW_NUMBER,
+    forwardingVerificationStatus: ForwardingVerificationStatus.NOT_STARTED,
+    forwardingVerifiedAt: null,
+    forwardingVerificationNote: null,
+    portingStatus: PortingStatus.NOT_STARTED,
+    portingNotes: null,
+    portingCompletedAt: null,
     twilioSubaccountSid: 'AC_TEST_SUBACCOUNT',
     twilioMessagingServiceSid: 'MG_TEST_SERVICE',
     twilioPrimaryNumberSid: 'PN_TEST_PRIMARY',
@@ -114,6 +125,7 @@ test('safe-to-go-live stays blocked until test SMS and missed-call validation bo
 test('existing-number path messaging stays truthful about admin assistance', () => {
   const flow = buildTwilioSetupFlow({
     business: createBusiness({
+      phoneSetupPath: 'PORT_EXISTING_NUMBER',
       twilioNumberSetupMode: 'EXISTING_NUMBER',
       twilioPrimaryNumberSid: null,
       twilioPhoneNumberSid: null,
@@ -132,8 +144,9 @@ test('existing-number path messaging stays truthful about admin assistance', () 
   });
 
   const numberPathStep = flow.steps.find((step) => step.key === 'number_path');
-  assert.match(numberPathStep?.detail || '', /admin-assisted/i);
-  assert.match(numberPathStep?.detail || '', /selected Twilio account context/i);
+  const numberAssignmentStep = flow.steps.find((step) => step.key === 'number_assigned');
+  assert.match(numberPathStep?.detail || '', /porting is tracked manually/i);
+  assert.match(numberAssignmentStep?.detail || '', /Porting stays manual/i);
 });
 
 test('messaging compliance step switches to toll-free verification copy', () => {
@@ -158,7 +171,7 @@ test('messaging compliance step switches to toll-free verification copy', () => 
   });
 
   const complianceStep = flow.steps.find((step) => step.key === 'a2p_status_recorded');
-  assert.equal(complianceStep?.label, '10. Messaging compliance status');
+  assert.equal(complianceStep?.label, '11. Messaging compliance status');
   assert.match(complianceStep?.detail || '', /toll-free verification/i);
 });
 

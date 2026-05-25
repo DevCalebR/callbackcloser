@@ -1,12 +1,14 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import {
+  BusinessPhoneSetupPath,
   BusinessProvisioningStatus,
+  ForwardingVerificationStatus,
   ManagedTwilioStatus,
   MessagingComplianceType,
+  PortingStatus,
   TollFreeVerificationStatus,
   TwilioAccountMode,
-  TwilioNumberSetupMode,
 } from '@prisma/client';
 
 import { saveOnboardingAction } from '@/app/app/onboarding/actions';
@@ -17,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '@/lib/db';
-import { buildTwilioSetupFlow, twilioAccountModeOptions, twilioNumberSetupModeOptions } from '@/lib/twilio-setup';
+import { buildTwilioSetupFlow, businessPhonePathOptions, twilioAccountModeOptions } from '@/lib/twilio-setup';
 
 const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/settings';
 
@@ -48,11 +50,13 @@ export default async function OnboardingPage({
   const setupPreviewFlow = buildTwilioSetupFlow({
     business: {
       name: 'New business workspace',
+      publicBusinessPhone: null,
       notifyPhone: null,
       forwardingNumber: '',
       provisioningStatus: BusinessProvisioningStatus.DRAFT,
       twilioAccountMode: TwilioAccountMode.BUSINESS_SUBACCOUNT,
-      twilioNumberSetupMode: TwilioNumberSetupMode.NEW_NUMBER,
+      phoneSetupPath: BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING,
+      twilioNumberSetupMode: 'NEW_NUMBER',
       twilioSubaccountSid: null,
       twilioMessagingServiceSid: null,
       twilioPrimaryNumberSid: null,
@@ -60,6 +64,12 @@ export default async function OnboardingPage({
       twilioPrimaryPhoneNumber: null,
       twilioPhoneNumber: null,
       twilioWebhookSyncedAt: null,
+      forwardingVerificationStatus: ForwardingVerificationStatus.NOT_STARTED,
+      forwardingVerifiedAt: null,
+      forwardingVerificationNote: null,
+      portingStatus: PortingStatus.NOT_STARTED,
+      portingNotes: null,
+      portingCompletedAt: null,
       messagingComplianceType: MessagingComplianceType.UNKNOWN,
       managedTwilioStatus: ManagedTwilioStatus.DRAFT,
       a2pCustomerProfileSid: null,
@@ -85,7 +95,7 @@ export default async function OnboardingPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Create your business workspace</h1>
           <p className="text-sm text-muted-foreground">
-            Start with the business details and Twilio setup choices here. After you save, CallbackCloser opens the same shared setup flow used later for ongoing business control, without auto-provisioning ahead of your chosen account mode.
+            Start with the business details and number-connection path here. After you save, CallbackCloser opens the same shared setup flow used later for ongoing business control, without auto-provisioning ahead of your chosen account mode.
           </p>
         </div>
       </div>
@@ -96,7 +106,7 @@ export default async function OnboardingPage({
         banner={{
           title: 'Create the business workspace first',
           detail:
-            'Save the business basics below. Then the shared Twilio setup flow opens with your account mode and number path already selected near the top.',
+            'Save the business basics below. Then the shared setup flow opens with your account mode and business-number path already selected near the top.',
           tone: 'pending',
           stepKey: 'account_mode',
         }}
@@ -111,10 +121,10 @@ export default async function OnboardingPage({
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <CardTitle>What happens after this form</CardTitle>
-          <CardDescription>Reduce onboarding drag by carrying your Twilio choices directly into the guided control panel.</CardDescription>
+          <CardDescription>Reduce onboarding drag by carrying your number-connection choices directly into the guided control panel.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-          <div className="rounded-xl border bg-background/80 p-4">1. The shared Twilio setup flow opens with your chosen account mode and number path already saved for this business.</div>
+          <div className="rounded-xl border bg-background/80 p-4">1. The shared setup flow opens with your chosen account mode and business-number path already saved for this business.</div>
           <div className="rounded-xl border bg-background/80 p-4">2. Nothing gets auto-provisioned before you can review Messaging Service, number assignment, webhooks, and honest A2P status in plain English.</div>
           <div className="rounded-xl border bg-background/80 p-4">3. You send the test SMS, run the missed-call validation, and only mark live after the checklist is actually clear.</div>
         </CardContent>
@@ -159,16 +169,16 @@ export default async function OnboardingPage({
             </div>
             <div className="sm:col-span-2 space-y-3 rounded-xl border bg-background/80 p-4">
               <div className="space-y-1">
-                <p className="text-sm font-medium">Number path</p>
-                <p className="text-sm text-muted-foreground">Choose whether CallbackCloser should provision a new number or keep the rollout on an existing Twilio number.</p>
+                <p className="text-sm font-medium">Connect your business number</p>
+                <p className="text-sm text-muted-foreground">Choose whether you want to keep your current public number, port it later, or start with a new CallbackCloser number.</p>
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {twilioNumberSetupModeOptions.map((option) => (
+              <div className="grid gap-3">
+                {businessPhonePathOptions.map((option) => (
                   <label key={option.value} className="rounded-xl border bg-card/80 p-4 text-sm">
                     <div className="flex items-start gap-3">
                       <input
-                        defaultChecked={option.value === TwilioNumberSetupMode.NEW_NUMBER}
-                        name="twilioNumberSetupMode"
+                        defaultChecked={option.value === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING}
+                        name="phoneSetupPath"
                         type="radio"
                         value={option.value}
                       />
@@ -181,7 +191,7 @@ export default async function OnboardingPage({
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                Existing-number support stays admin-assisted unless the number already lives in the chosen Twilio account context.
+                Porting is tracked manually for now. CallbackCloser still preserves the managed new-number path when that is the right fit.
               </p>
             </div>
             <div className="sm:col-span-2">
@@ -189,12 +199,18 @@ export default async function OnboardingPage({
               <Input id="name" name="name" required placeholder="Acme Plumbing" />
             </div>
             <div>
-              <Label htmlFor="forwardingNumber">Forwarding number</Label>
-              <Input id="forwardingNumber" name="forwardingNumber" required placeholder="+15551234567" />
+              <Label htmlFor="publicBusinessPhone">Public business number</Label>
+              <Input id="publicBusinessPhone" name="publicBusinessPhone" placeholder="+15551234567" />
+              <p className="mt-1 text-xs text-muted-foreground">For current-number forwarding or porting, this is the number customers already call.</p>
+            </div>
+            <div>
+              <Label htmlFor="forwardingNumber">Owner forwarding / answer number</Label>
+              <Input id="forwardingNumber" name="forwardingNumber" required placeholder="+15559876543" />
+              <p className="mt-1 text-xs text-muted-foreground">When CallbackCloser rings a live call through, this is the phone that should answer.</p>
             </div>
             <div>
               <Label htmlFor="notifyPhone">Owner notify phone</Label>
-              <Input id="notifyPhone" name="notifyPhone" placeholder="+15559876543" />
+              <Input id="notifyPhone" name="notifyPhone" placeholder="+15557654321" />
               <p className="mt-1 text-xs text-muted-foreground">Recommended. Ready-to-close lead summaries are sent here.</p>
             </div>
             <div>

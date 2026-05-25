@@ -1,4 +1,5 @@
 import {
+  BusinessPhoneSetupPath,
   BusinessProvisioningStatus,
   ManagedTwilioStatus,
   MessagingComplianceType,
@@ -9,6 +10,13 @@ import {
 } from '@prisma/client';
 
 import type { TwilioWebhookSnapshot } from '@/lib/admin-provisioning-presenters';
+import {
+  businessPhoneSetupPathOptions,
+  getBusinessPhoneSetupGate,
+  getBusinessPhoneSetupPathDescription,
+  getBusinessPhoneSetupPathLabel,
+  getBusinessRoutingNumber,
+} from '@/lib/business-phone-setup';
 import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
 import { formatPhoneForDisplay } from '@/lib/phone';
 
@@ -37,7 +45,20 @@ type SetupBusiness = Pick<
   | 'tollFreeVerificationStatus'
   | 'tollFreeVerificationSid'
   | 'tollFreeVerificationNote'
->;
+> &
+  Partial<
+    Pick<
+      Business,
+      | 'publicBusinessPhone'
+      | 'phoneSetupPath'
+      | 'forwardingVerificationStatus'
+      | 'forwardingVerifiedAt'
+      | 'forwardingVerificationNote'
+      | 'portingStatus'
+      | 'portingNotes'
+      | 'portingCompletedAt'
+    >
+  >;
 
 type SetupNotificationSettings = Pick<BusinessNotificationSettings, 'ownerPhone' | 'ownerEmail'> | null;
 
@@ -48,6 +69,7 @@ export type TwilioSetupStepKey =
   | 'account_ready'
   | 'messaging_service_ready'
   | 'number_assigned'
+  | 'forwarding_verified'
   | 'voice_webhook_synced'
   | 'sms_webhook_synced'
   | 'status_callback_synced'
@@ -76,10 +98,13 @@ export type TwilioSetupBanner = {
 
 export type TwilioSetupFlow = {
   accountMode: TwilioAccountMode;
+  phoneSetupPath: BusinessPhoneSetupPath;
   numberSetupMode: TwilioNumberSetupMode;
   accountModeLabel: string;
+  phoneSetupPathLabel: string;
   numberSetupModeLabel: string;
   accountModeDescription: string;
+  phoneSetupPathDescription: string;
   numberSetupModeDescription: string;
   existingNumberMessage: string;
   safeToMarkLive: boolean;
@@ -102,6 +127,8 @@ export const twilioAccountModeOptions = [
       'Create or reuse a dedicated Twilio subaccount for this business. This matches the managed per-business provisioning direction and keeps Twilio setup scoped cleanly.',
   },
 ] as const;
+
+export const businessPhonePathOptions = businessPhoneSetupPathOptions;
 
 export const twilioNumberSetupModeOptions = [
   {
@@ -261,9 +288,12 @@ export function buildTwilioSetupFlow(params: {
 }) {
   const { business, notificationSettings, ownerConnected, successfulLeadCount, testSmsState, webhookSnapshot, missedCallValidation } = params;
   const accountMode = business.twilioAccountMode || TwilioAccountMode.BUSINESS_SUBACCOUNT;
+  const phoneSetupPath = business.phoneSetupPath || BusinessPhoneSetupPath.NEW_TWILIO_NUMBER;
   const numberSetupMode = business.twilioNumberSetupMode || TwilioNumberSetupMode.NEW_NUMBER;
   const managedSummary = getManagedTwilioStatusSummary(business);
   const assignedNumber = getManagedTextingNumber(business);
+  const routingNumber = getBusinessRoutingNumber(business);
+  const phoneSetupGate = getBusinessPhoneSetupGate(business);
   const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
   const ownerPhone = notificationSettings?.ownerPhone?.trim() || business.notifyPhone || null;
   const usingSubaccount = usesBusinessSubaccount(accountMode);
@@ -276,10 +306,10 @@ export function buildTwilioSetupFlow(params: {
   const messagingCompliance = formatMessagingComplianceDetail(business);
   const testSmsDelivered = testSmsState === 'delivered';
   const hasOwnerRouting = Boolean(ownerPhone || ownerEmail);
-  const hasForwardingNumber = Boolean(business.forwardingNumber?.trim());
+  const hasOwnerForwardingNumber = Boolean(business.forwardingNumber?.trim());
   const missedCallValidated = missedCallValidation?.complete ?? successfulLeadCount > 0;
   const existingNumberMessage =
-    'Existing-number support stays truthful here: CallbackCloser can only attach a number that already lives in the selected Twilio account context. Numbers that live elsewhere still need admin assistance.';
+    'Porting stays manual in this rollout. Record the porting status honestly, then save the Twilio routing number only after the number is active in CallbackCloser.';
 
   const liveBlockers: string[] = [];
   if (!ownerConnected) liveBlockers.push('connect the owner account');
@@ -300,8 +330,9 @@ export function buildTwilioSetupFlow(params: {
   }
   if (!testSmsDelivered) liveBlockers.push('deliver a test SMS');
   if (!missedCallValidated) liveBlockers.push('validate the missed-call flow');
-  if (!hasForwardingNumber) liveBlockers.push('save the forwarding number');
+  if (!hasOwnerForwardingNumber) liveBlockers.push('save the owner answer number');
   if (!hasOwnerRouting) liveBlockers.push('save an owner alert destination');
+  if (!phoneSetupGate.complete && phoneSetupGate.blocker) liveBlockers.push(phoneSetupGate.blocker);
 
   const safeToMarkLive = liveBlockers.length === 0;
   const liveWithWarnings = business.provisioningStatus === BusinessProvisioningStatus.LIVE && !safeToMarkLive;
@@ -336,14 +367,11 @@ export function buildTwilioSetupFlow(params: {
     },
     {
       key: 'number_path',
-      label: '3. Number path chosen',
+      label: '3. Business number path chosen',
       complete: true,
       tone: 'success',
-      stateLabel: getTwilioNumberSetupModeLabel(numberSetupMode),
-      detail:
-        numberSetupMode === TwilioNumberSetupMode.EXISTING_NUMBER
-          ? `${getTwilioNumberSetupModeDescription(numberSetupMode)} ${existingNumberMessage}`
-          : getTwilioNumberSetupModeDescription(numberSetupMode),
+      stateLabel: getBusinessPhoneSetupPathLabel(phoneSetupPath),
+      detail: getBusinessPhoneSetupPathDescription(phoneSetupPath),
     },
     {
       key: 'account_ready',
@@ -373,19 +401,32 @@ export function buildTwilioSetupFlow(params: {
     },
     {
       key: 'number_assigned',
-      label: '6. Number assigned',
+      label: '6. CallbackCloser routing number assigned',
       complete: numberAssigned,
       tone: buildTone(numberAssigned),
       stateLabel: numberAssigned ? 'Ready' : 'Missing',
       detail: numberAssigned
-        ? `${formatPhoneForDisplay(assignedNumber)} is assigned to this business.`
-        : numberSetupMode === TwilioNumberSetupMode.EXISTING_NUMBER
+        ? `${formatPhoneForDisplay(assignedNumber)} is assigned as the CallbackCloser routing number for this business.`
+        : phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER
           ? existingNumberMessage
-          : 'Provision a new number for this business.',
+          : 'Provision a CallbackCloser routing number for this business.',
+    },
+    {
+      key: 'forwarding_verified',
+      label:
+        phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
+          ? '7. Forwarding verified'
+          : phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER
+            ? '7. Porting completed'
+            : '7. Business number connection ready',
+      complete: phoneSetupGate.complete,
+      tone: phoneSetupGate.tone,
+      stateLabel: phoneSetupGate.stateLabel,
+      detail: phoneSetupGate.detail,
     },
     {
       key: 'voice_webhook_synced',
-      label: '7. Voice webhook synced',
+      label: '8. Voice webhook synced',
       complete: voiceWebhook.synced,
       tone: buildTone(voiceWebhook.synced, voiceWebhook.attention),
       stateLabel: voiceWebhook.synced ? 'Synced' : 'Needs sync',
@@ -393,7 +434,7 @@ export function buildTwilioSetupFlow(params: {
     },
     {
       key: 'sms_webhook_synced',
-      label: '8. SMS webhook synced',
+      label: '9. SMS webhook synced',
       complete: smsWebhook.synced,
       tone: buildTone(smsWebhook.synced, smsWebhook.attention),
       stateLabel: smsWebhook.synced ? 'Synced' : 'Needs sync',
@@ -401,7 +442,7 @@ export function buildTwilioSetupFlow(params: {
     },
     {
       key: 'status_callback_synced',
-      label: '9. Status callback synced',
+      label: '10. Status callback synced',
       complete: statusWebhook.synced,
       tone: buildTone(statusWebhook.synced, statusWebhook.attention),
       stateLabel: statusWebhook.synced ? 'Synced' : 'Needs sync',
@@ -409,7 +450,7 @@ export function buildTwilioSetupFlow(params: {
     },
     {
       key: 'a2p_status_recorded',
-      label: '10. Messaging compliance status',
+      label: '11. Messaging compliance status',
       complete: messagingCompliance.complete,
       tone: messagingCompliance.tone,
       stateLabel: messagingCompliance.stateLabel,
@@ -417,7 +458,7 @@ export function buildTwilioSetupFlow(params: {
     },
     {
       key: 'test_sms_delivered',
-      label: '11. Test SMS delivered',
+      label: '12. Test SMS delivered',
       complete: testSmsDelivered,
       tone: buildTone(testSmsDelivered, testSmsState === 'failed'),
       stateLabel:
@@ -439,7 +480,7 @@ export function buildTwilioSetupFlow(params: {
     },
     {
       key: 'missed_call_validated',
-      label: '12. Missed-call flow validated',
+      label: '13. Missed-call flow validated',
       complete: missedCallValidated,
       tone: missedCallValidation?.tone ?? buildTone(missedCallValidated),
       stateLabel: missedCallValidation?.stateLabel ?? (missedCallValidated ? 'Validated' : 'Still needed'),
@@ -447,15 +488,19 @@ export function buildTwilioSetupFlow(params: {
         missedCallValidation?.detail ??
         (missedCallValidated
           ? `${successfulLeadCount} missed-call test${successfulLeadCount === 1 ? '' : 's'} reached owner-notification visibility.`
-          : !hasForwardingNumber
-            ? 'Save the forwarding number first so the live call path is accurate before testing.'
+          : !hasOwnerForwardingNumber
+            ? 'Save the owner answer number first so the live call path is accurate before testing.'
             : !hasOwnerRouting
               ? 'Save an owner alert destination before the missed-call validation test.'
+              : phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING && !phoneSetupGate.complete
+                ? `Verify that ${business.publicBusinessPhone ? formatPhoneForDisplay(business.publicBusinessPhone) : 'the public business number'} forwards into ${routingNumber ? formatPhoneForDisplay(routingNumber) : 'the CallbackCloser routing number'} before you rely on the missed-call test.`
+                : phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER && !phoneSetupGate.complete
+                  ? 'Finish the porting workflow before you rely on a missed-call validation test.'
               : 'Run one real missed call and confirm the owner alert and lead handoff both land correctly.'),
     },
     {
       key: 'safe_to_mark_live',
-      label: '13. Safe to mark live',
+      label: '14. Safe to mark live',
       complete: safeToMarkLive,
       tone: liveWithWarnings ? 'attention' : safeToMarkLive ? 'success' : 'pending',
       stateLabel:
@@ -477,7 +522,13 @@ export function buildTwilioSetupFlow(params: {
           nextIncompleteStep.key === 'account_mode'
             ? 'Choose how this business should use Twilio'
             : nextIncompleteStep.key === 'number_path'
-              ? 'Choose the number path before provisioning'
+              ? 'Choose how to connect the business number'
+              : nextIncompleteStep.key === 'forwarding_verified'
+                ? phoneSetupPath === BusinessPhoneSetupPath.CURRENT_NUMBER_FORWARDING
+                  ? 'Verify current-number forwarding next'
+                  : phoneSetupPath === BusinessPhoneSetupPath.PORT_EXISTING_NUMBER
+                    ? 'Track the porting status next'
+                    : 'Finish assigning the live business number'
               : nextIncompleteStep.key === 'a2p_status_recorded' && managedSummary.complianceReady === false
                 ? 'Keep messaging compliance accurate before launch'
                 : nextIncompleteStep.key === 'test_sms_delivered'
@@ -498,10 +549,13 @@ export function buildTwilioSetupFlow(params: {
 
   return {
     accountMode,
+    phoneSetupPath,
     numberSetupMode,
     accountModeLabel: getTwilioAccountModeLabel(accountMode),
+    phoneSetupPathLabel: getBusinessPhoneSetupPathLabel(phoneSetupPath),
     numberSetupModeLabel: getTwilioNumberSetupModeLabel(numberSetupMode),
     accountModeDescription: getTwilioAccountModeDescription(accountMode),
+    phoneSetupPathDescription: getBusinessPhoneSetupPathDescription(phoneSetupPath),
     numberSetupModeDescription: getTwilioNumberSetupModeDescription(numberSetupMode),
     existingNumberMessage,
     safeToMarkLive,
