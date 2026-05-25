@@ -52,12 +52,14 @@ function LeadStatusActionForm({
   leadId,
   status,
   redirectTo,
+  successRedirectTo,
   label,
   variant,
 }: {
   leadId: string;
   status: 'CONTACTED' | 'BOOKED' | 'LOST';
   redirectTo: string;
+  successRedirectTo: string;
   label: string;
   variant?: 'default' | 'outline' | 'destructive';
 }) {
@@ -66,6 +68,7 @@ function LeadStatusActionForm({
       <input type="hidden" name="leadId" value={leadId} />
       <input type="hidden" name="status" value={status} />
       <input type="hidden" name="redirectTo" value={redirectTo} />
+      <input type="hidden" name="successRedirectTo" value={successRedirectTo} />
       <Button className="w-full" type="submit" variant={variant}>
         {label}
       </Button>
@@ -100,7 +103,9 @@ export default async function LeadDetailPage({
   const primaryLabel = lead.callerName || lead.contactName || formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone);
   const secondaryLabel =
     lead.callerName || lead.contactName ? formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone) : 'Caller name not captured yet';
-  const redirectTo = `/app/leads/${lead.id}`;
+  const detailRedirectTo =
+    returnPath === '/app/leads' ? `/app/leads/${lead.id}` : `/app/leads/${lead.id}?from=${encodeURIComponent(returnPath)}`;
+  const successRedirectTo = '/app/leads';
   const recordingHref = lead.call?.recordingUrl ? `/api/leads/${lead.id}/recording` : null;
   const nextStepLabel = getLeadNextStepLabel(lead.status);
   const isOpenLead = isLeadOpenStatus(lead.status);
@@ -151,9 +156,29 @@ export default async function LeadDetailPage({
               <Link className={buttonVariants({ className: 'w-full' })} href={`tel:${lead.callerPhoneNormalized || lead.callerPhone}`}>
                 Call now
               </Link>
-              <LeadStatusActionForm leadId={lead.id} status="CONTACTED" redirectTo={redirectTo} label="Mark contacted" variant="outline" />
-              <LeadStatusActionForm leadId={lead.id} status="BOOKED" redirectTo={redirectTo} label="Mark as Closed (Won)" />
-              <LeadStatusActionForm leadId={lead.id} status="LOST" redirectTo={redirectTo} label="Mark as Lost" variant="destructive" />
+              <LeadStatusActionForm
+                leadId={lead.id}
+                status="CONTACTED"
+                redirectTo={detailRedirectTo}
+                successRedirectTo={successRedirectTo}
+                label="Mark contacted"
+                variant="outline"
+              />
+              <LeadStatusActionForm
+                leadId={lead.id}
+                status="BOOKED"
+                redirectTo={detailRedirectTo}
+                successRedirectTo={successRedirectTo}
+                label="Mark as Closed (Won)"
+              />
+              <LeadStatusActionForm
+                leadId={lead.id}
+                status="LOST"
+                redirectTo={detailRedirectTo}
+                successRedirectTo={successRedirectTo}
+                label="Mark as Lost"
+                variant="destructive"
+              />
             </div>
           </div>
         </CardHeader>
