@@ -4,7 +4,12 @@ import { redirect } from 'next/navigation';
 
 import { getAdminSession } from '@/lib/admin';
 import { getBusinessForOwnerClerkId } from '@/lib/business-access';
-import { DEFAULT_CLERK_AFTER_AUTH_URL, getClerkAuthUrls } from '@/lib/clerk-config';
+import {
+  DEFAULT_CLERK_AFTER_AUTH_URL,
+  DEFAULT_CLERK_SIGN_IN_URL,
+  DEFAULT_CLERK_SIGN_UP_URL,
+  hasRequiredValidClerkEnv,
+} from '@/lib/clerk-config';
 import { resolveSignedInAppDestination } from '@/lib/public-auth-routing';
 
 function getIntentCopy(intent: string | undefined) {
@@ -30,6 +35,32 @@ export default async function SignUpPage({
 }: {
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
+  if (!hasRequiredValidClerkEnv()) {
+    const intent = typeof searchParams?.intent === 'string' ? searchParams.intent : undefined;
+    const copy = getIntentCopy(intent);
+
+    return (
+      <main className="container grid min-h-screen gap-8 py-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <section className="space-y-4">
+          <p className="text-sm font-medium text-muted-foreground">{copy.label}</p>
+          <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
+          <p className="text-muted-foreground">{copy.detail}</p>
+          <p className="text-sm text-muted-foreground">
+            Existing users should sign in. CallbackCloser operators setting up a customer pilot should use the admin new-business flow, not public signup.
+          </p>
+        </section>
+        <div className="flex justify-center lg:justify-end">
+          <div className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-sm">
+            <p className="font-medium">Authentication is temporarily unavailable.</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              CallbackCloser sign-up is unavailable until Clerk production configuration is restored. Please try again shortly or contact support.
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const { userId } = await auth();
   if (userId) {
     const [adminSession, business] = await Promise.all([
@@ -45,7 +76,6 @@ export default async function SignUpPage({
     );
   }
 
-  const { signInUrl, signUpUrl } = getClerkAuthUrls();
   const intent = typeof searchParams?.intent === 'string' ? searchParams.intent : undefined;
   const copy = getIntentCopy(intent);
 
@@ -60,7 +90,12 @@ export default async function SignUpPage({
         </p>
       </section>
       <div className="flex justify-center lg:justify-end">
-        <SignUp path={signUpUrl} routing="path" signInUrl={signInUrl} fallbackRedirectUrl={DEFAULT_CLERK_AFTER_AUTH_URL} />
+        <SignUp
+          path={DEFAULT_CLERK_SIGN_UP_URL}
+          routing="path"
+          signInUrl={DEFAULT_CLERK_SIGN_IN_URL}
+          fallbackRedirectUrl={DEFAULT_CLERK_AFTER_AUTH_URL}
+        />
       </div>
     </main>
   );

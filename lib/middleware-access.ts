@@ -19,6 +19,11 @@ const CLERK_CONTEXT_PUBLIC_ROUTE_PREFIXES = [
   '/buy',
 ] as const;
 
+const CLERK_FALLBACK_RENDER_ROUTE_PREFIXES = [
+  '/sign-in',
+  '/sign-up',
+] as const;
+
 function matchesRoutePrefix(pathname: string, prefix: string) {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
@@ -41,4 +46,8 @@ export function routeNeedsClerkContext(pathname: string) {
 
 export function routeCanRenderWithoutClerk(pathname: string) {
   return !routeNeedsClerkContext(pathname);
+}
+
+export function routeCanRenderClerkFallback(pathname: string) {
+  return matchesAnyPrefix(pathname, CLERK_FALLBACK_RENDER_ROUTE_PREFIXES);
 }
