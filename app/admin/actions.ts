@@ -2247,7 +2247,13 @@ export async function deleteTestBusinessAction(formData: FormData) {
   });
 
   revalidatePath('/admin');
-  redirect(clearBusinessSelectionFromReturnPath(parsed.data.returnTo, { deleted: 1 }, '/admin?deleted=1'));
+  redirect(
+    clearBusinessSelectionFromReturnPath(
+      parsed.data.returnTo,
+      { deleted: 1, deletedBusinessName: business.name },
+      `/admin?deleted=1&deletedBusinessName=${encodeURIComponent(business.name)}`
+    )
+  );
 }
 
 export async function founderDeleteAllBusinessesAction(formData: FormData) {

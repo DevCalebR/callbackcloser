@@ -11,6 +11,7 @@ import {
   restoreBusinessAction,
   sendBusinessTestSmsAction,
 } from '@/app/admin/actions';
+import { FounderDeleteBusinessCard } from '@/components/founder-delete-business-card';
 import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
 import { FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION } from '@/lib/admin-business-lifecycle';
 import {
@@ -32,6 +33,7 @@ import {
 } from '@/lib/admin-operator-visibility';
 import { AdminBusinessPicker } from '@/components/admin-business-picker';
 import { requireAdmin } from '@/lib/admin';
+import { isTestDemoBusiness } from '@/lib/admin-test-data-reset';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -163,6 +165,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
             ownerEmail: true,
           },
         },
+        ownerClerkId: true,
       },
     }),
     db.lead.groupBy({
@@ -483,6 +486,16 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   ];
   const founderResetBusinessCount = businessPickerOptions.length;
   const founderResetBusinessPreview = businessPickerOptions.slice(0, 4).map((business) => business.name);
+  const founderDeleteCandidates = businessPickerOptions.map((business) => ({
+    id: business.id,
+    name: business.name,
+    ownerEmail: business.notificationSettings?.ownerEmail || null,
+    isTestDemo: isTestDemoBusiness(business),
+    isArchived: isBusinessArchived(business),
+    deleteEligible: canDeleteTestBusiness(business),
+    deleteBlockedReason: getDeleteTestBusinessBlockedReason(business),
+  }));
+  const deletedBusinessName = getQueryValue(searchParams, 'deletedBusinessName');
 
   return (
     <div className="container space-y-6 py-8">
@@ -514,7 +527,11 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived. Permanent delete stays locked until the workspace is clearly demo/test.</div> : null}
       {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored to active triage.</div> : null}
-      {deleted ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Demo/test business deleted permanently.</div> : null}
+      {deleted ? (
+        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
+          {deletedBusinessName ? `Deleted ${deletedBusinessName} permanently.` : 'Demo/test business deleted permanently.'}
+        </div>
+      ) : null}
       {founderResetResult === 'deleted' && Number.isFinite(founderResetDeleted) ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           Deleted {founderResetDeleted} current {founderResetDeleted === 1 ? 'business' : 'businesses'}. You can create one clean business workspace now.
@@ -670,47 +687,66 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
           <CardHeader>
             <CardTitle>Founder reset</CardTitle>
             <CardDescription>
-              One-time founder-only cleanup. Use this only because there are no real customer businesses yet. Normal real-customer lifecycle should still be archive or disable, not hard delete.
+              Founder-only cleanup. Archive real customers. Hard delete test/demo businesses only, and only when the business is already archived.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-xl border bg-background/80 p-4 text-sm">
-              <p className="font-medium text-foreground">
-                {founderResetBusinessCount} current {founderResetBusinessCount === 1 ? 'business' : 'businesses'} will be deleted
-              </p>
-              <p className="mt-2 text-muted-foreground">
-                This permanently deletes every current business record, including archived ones, so you can restart from one clean workspace.
-              </p>
-              {founderResetBusinessPreview.length > 0 ? (
-                <p className="mt-3 text-muted-foreground">
-                  Preview: {founderResetBusinessPreview.join(', ')}
-                  {founderResetBusinessCount > founderResetBusinessPreview.length
-                    ? ` and ${founderResetBusinessCount - founderResetBusinessPreview.length} more.`
-                    : '.'}
-                </p>
-              ) : (
-                <p className="mt-3 text-muted-foreground">No businesses are currently present.</p>
-              )}
+          <CardContent className="space-y-4">
+            <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
+              Delete one test/demo business is the primary founder cleanup tool. Real customer workspaces should be archived or disabled, not hard deleted.
             </div>
 
-            <form action={founderDeleteAllBusinessesAction} className="rounded-xl border border-destructive/30 bg-background/80 p-4">
-              <div className="space-y-2">
-                <Label htmlFor="founderResetConfirmationText">Type {FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION}</Label>
-                <Input
-                  id="founderResetConfirmationText"
-                  name="confirmationText"
-                  autoComplete="off"
-                  placeholder={FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION}
-                />
+            <div>
+              <div className="mb-3 space-y-1">
+                <p className="text-base font-semibold text-foreground">Delete one test/demo business</p>
+                <p className="text-sm text-muted-foreground">
+                  Select a workspace, review whether it is test/demo or real, then type the exact business name before permanent deletion is allowed.
+                </p>
               </div>
-              <p className="mt-3 text-xs text-muted-foreground">
-                This is irreversible. Deleting a business also removes its leads, calls, messages, owner notifications, business settings, operator events,
-                simulator runs, SMS consent records, and other business-owned data through the existing schema cascades.
-              </p>
-              <Button className="mt-4" type="submit" variant="destructive" disabled={founderResetBusinessCount === 0}>
-                Delete all current businesses
-              </Button>
-            </form>
+              <FounderDeleteBusinessCard candidates={founderDeleteCandidates} deleteAction={deleteTestBusinessAction} />
+            </div>
+
+            <details className="rounded-xl border border-destructive/30 bg-background/80 p-4 text-sm">
+              <summary className="cursor-pointer font-medium text-foreground">Advanced founder reset: delete all current businesses</summary>
+              <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                <div className="rounded-xl border bg-background/80 p-4 text-sm">
+                  <p className="font-medium text-foreground">
+                    {founderResetBusinessCount} current {founderResetBusinessCount === 1 ? 'business' : 'businesses'} would be deleted
+                  </p>
+                  <p className="mt-2 text-muted-foreground">
+                    This permanently deletes every current business record, including archived ones. Keep this as a last-resort cleanup path only.
+                  </p>
+                  {founderResetBusinessPreview.length > 0 ? (
+                    <p className="mt-3 text-muted-foreground">
+                      Preview: {founderResetBusinessPreview.join(', ')}
+                      {founderResetBusinessCount > founderResetBusinessPreview.length
+                        ? ` and ${founderResetBusinessCount - founderResetBusinessPreview.length} more.`
+                        : '.'}
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-muted-foreground">No businesses are currently present.</p>
+                  )}
+                </div>
+
+                <form action={founderDeleteAllBusinessesAction} className="rounded-xl border border-destructive/30 bg-background/80 p-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="founderResetConfirmationText">Type {FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION}</Label>
+                    <Input
+                      id="founderResetConfirmationText"
+                      name="confirmationText"
+                      autoComplete="off"
+                      placeholder={FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION}
+                    />
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    This is irreversible. Deleting a business also removes its leads, calls, messages, owner notifications, business settings, operator events,
+                    simulator runs, SMS consent records, and other business-owned data through the existing schema cascades.
+                  </p>
+                  <Button className="mt-4" type="submit" variant="destructive" disabled={founderResetBusinessCount === 0}>
+                    Delete all current businesses
+                  </Button>
+                </form>
+              </div>
+            </details>
           </CardContent>
         </Card>
       ) : null}
