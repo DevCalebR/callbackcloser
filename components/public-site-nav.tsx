@@ -6,6 +6,7 @@ import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_SIGN_IN_PATH, PUBLIC_START_FREE_PILO
 
 const primaryLinks = [
   { href: '/demo', label: 'Demo' },
+  { href: '/simulator', label: 'Simulator' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/contact', label: 'Contact' },
   { href: '/sms-consent', label: 'SMS Consent' },

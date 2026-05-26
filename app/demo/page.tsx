@@ -54,14 +54,16 @@ export default function DemoPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <Link className={buttonVariants({ size: 'lg' })} href="/contact">
-                    Want this running on your number?
+                  <Link className={buttonVariants({ size: 'lg' })} href="/simulator">
+                    Try the interactive simulator
                   </Link>
                   <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="#demo-workspace">
-                    See it in action
+                    See the quick overview
                   </Link>
                 </div>
-                <p className="text-sm text-muted-foreground">Get this live on your number fast, without changing how your team already works.</p>
+                <p className="text-sm text-muted-foreground">
+                  This page is the fast visual walkthrough. The simulator lets you reply like the caller and see the full handoff yourself.
+                </p>
                 <p className="text-xs text-muted-foreground">Demo only: fake business, fake callers, and no live customer or Twilio data.</p>
               </div>
 
@@ -103,7 +105,7 @@ export default function DemoPage() {
 
         <section className="container space-y-8 py-12" id="demo-workspace">
           <div className="max-w-2xl space-y-3">
-            <Badge variant="outline">Live-looking product view</Badge>
+            <Badge variant="outline">Quick overview</Badge>
             <h2 className="text-3xl font-semibold tracking-tight">Here&apos;s what happens after a missed HVAC call</h2>
             <p className="text-muted-foreground">
               They call. You miss it. We text them right away, ask what they need, and send you the lead while they&apos;re still ready to book.
@@ -220,11 +222,11 @@ export default function DemoPage() {
                   <p className="mt-4 text-sm text-muted-foreground">{demoOwnerAlert.summary}</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <Link className={buttonVariants()} href="/contact">
-                    Want this on your business?
+                  <Link className={buttonVariants()} href="/simulator">
+                    Try the interactive simulator
                   </Link>
                   <Link className={buttonVariants({ variant: 'outline' })} href={PUBLIC_START_FREE_PILOT_PATH}>
-                    See it on your number
+                    Start 14-Day Pilot
                   </Link>
                 </div>
               </CardContent>
@@ -257,17 +259,17 @@ export default function DemoPage() {
           <div className="container space-y-6 py-16 text-center">
             <Badge variant="outline">Close with a demo, not a long explanation</Badge>
             <div className="space-y-3">
-              <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Want this on your business?</h2>
+              <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Ready to try the missed-call flow yourself?</h2>
               <p className="mx-auto max-w-2xl text-muted-foreground">
-                We can set it up on your number and get you live fast.
+                Use the simulator for the hands-on experience, then start a pilot when you&apos;re ready to put it on your number.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <Link className={buttonVariants({ size: 'lg' })} href={PUBLIC_START_FREE_PILOT_PATH}>
-                See it on your number
+              <Link className={buttonVariants({ size: 'lg' })} href="/simulator">
+                Try the interactive simulator
               </Link>
-              <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/contact">
-                Book a quick setup call
+              <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href={PUBLIC_START_FREE_PILOT_PATH}>
+                Start 14-Day Pilot
               </Link>
             </div>
           </div>

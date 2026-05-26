@@ -13,16 +13,20 @@ test('homepage and nav both point See Demo directly to /demo', () => {
 
   assert.match(home, /href="\/demo"/);
   assert.match(nav, /href: '\/demo'/);
+  assert.match(nav, /href: '\/simulator'/);
 });
 
-test('simulator route is a distinct public page with its own metadata and disabled-state copy', () => {
+test('simulator route is a distinct public page with a safe interactive preview', () => {
   const simulatorPage = read('app/simulator/page.tsx');
+  const simulatorExperience = read('components/demo/public-simulator-experience.tsx');
   const middleware = read('middleware.ts');
 
   assert.match(simulatorPage, /Missed-Call Simulator \| CallbackCloser/);
-  assert.match(simulatorPage, /See the full CallbackCloser lead loop in minutes/);
-  assert.match(simulatorPage, /The public simulator is not configured on this environment yet\./);
-  assert.match(simulatorPage, /Preview mode is active/);
-  assert.match(simulatorPage, /Real SMS mode is active/);
+  assert.match(simulatorPage, /PublicSimulatorExperience/);
+  assert.match(simulatorExperience, /Interactive preview mode/);
+  assert.match(simulatorExperience, /No real SMS will be sent in this demo/);
+  assert.match(simulatorExperience, /See how CallbackCloser would recover a missed call/);
+  assert.match(simulatorExperience, /Start 14-Day Pilot/);
+  assert.doesNotMatch(simulatorExperience, /Demo number unavailable|not configured on this environment yet|Real SMS mode is active/);
   assert.doesNotMatch(middleware, /\/simulator\(.\*\)/);
 });
