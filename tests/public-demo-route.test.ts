@@ -17,13 +17,15 @@ test('public demo route is auth-free and built from isolated demo data', () => {
   assert.match(demoPage, /Live Product Demo \| CallbackCloser/);
   assert.match(demoPage, /PublicDemoReplay/);
   assert.match(demoPage, /Stop losing jobs when you miss the call/i);
+  assert.match(demoPage, /Try the interactive simulator/);
   assert.match(demoPage, /This is exactly what your customer sees after you miss their call/i);
   assert.match(demoPage, /Demo only: fake business, fake callers, and no live customer or Twilio data\./);
   assert.match(demoData, /No login, no real customer data, no live Twilio traffic/i);
   assert.match(demoPage, /from ['"]@\/lib\/demo-data['"]/);
   assert.doesNotMatch(demoPage, /requireBusiness|getBusinessForOwnerClerkId|db\./);
   assert.match(simulatorExperience, /PUBLIC_START_FREE_PILOT_PATH/);
-  assert.match(simulatorExperience, /PUBLIC_CREATE_ACCOUNT_PATH/);
+  assert.match(simulatorExperience, /Start 14-Day Pilot/);
+  assert.match(demoPage, /href="\/simulator"/);
   assert.doesNotMatch(simulatorPage, /ENABLE_PUBLIC_SIMULATOR_REAL_SMS|SIMULATOR_BUSINESS_ID|db\./);
   assert.doesNotMatch(simulatorExperience, /ENABLE_PUBLIC_SIMULATOR_REAL_SMS|SIMULATOR_BUSINESS_ID|db\.|startMissedCallRecovery/);
   assert.equal(existsSync(path.join(process.cwd(), 'app/simulator/actions.ts')), false);

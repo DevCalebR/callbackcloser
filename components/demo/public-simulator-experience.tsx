@@ -21,7 +21,7 @@ import {
   startPublicSimulatorSession,
   type PublicSimulatorSession,
 } from '@/lib/public-simulator';
-import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
+import { PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 import { cn } from '@/lib/utils';
 
 const timelineCopy: Record<(typeof publicSimulatorStages)[number], { detail: string; label: string }> = {
@@ -143,6 +143,13 @@ export function PublicSimulatorExperience() {
             <h1 className="max-w-4xl text-4xl font-semibold tracking-tight sm:text-5xl">See how CallbackCloser would recover a missed call</h1>
             <p className="max-w-2xl text-lg text-muted-foreground">
               Start a private demo run, watch the missed-call text flow appear instantly, and see exactly what the business would get back.
+            </p>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Want the quick overview first?{' '}
+              <Link className="font-medium text-foreground underline underline-offset-4" href="/demo">
+                See the visual demo
+              </Link>
+              . This page is the hands-on version.
             </p>
           </div>
 
@@ -382,21 +389,22 @@ export function PublicSimulatorExperience() {
         <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="space-y-3">
             <Badge variant="outline">Final CTA</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight">Show this flow on your own number next</h2>
+            <h2 className="text-3xl font-semibold tracking-tight">Turn missed calls into booked jobs on your number next</h2>
             <p className="max-w-2xl text-muted-foreground">
-              The interactive preview shows how CallbackCloser recovers a missed call, qualifies the lead, and prepares the owner follow-up. The next step is getting that flow live for your business.
+              The interactive preview shows how CallbackCloser recovers a missed call, qualifies the lead, and prepares the owner follow-up. The next step is starting a pilot for your service business.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="space-y-3">
             <Link className={buttonVariants({ size: 'lg' })} href={PUBLIC_START_FREE_PILOT_PATH}>
-              Start Free Pilot
+              Start 14-Day Pilot
             </Link>
-            <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
-              Create Account
-            </Link>
-            <Link className={buttonVariants({ size: 'lg', variant: 'ghost' })} href="/contact">
-              Contact support
-            </Link>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Need a quick walkthrough before you start?{' '}
+              <Link className="font-medium text-foreground underline underline-offset-4" href="/contact">
+                Contact support
+              </Link>
+              .
+            </p>
           </div>
         </div>
       </section>

@@ -13,6 +13,7 @@ test('homepage and nav both point See Demo directly to /demo', () => {
 
   assert.match(home, /href="\/demo"/);
   assert.match(nav, /href: '\/demo'/);
+  assert.match(nav, /href: '\/simulator'/);
 });
 
 test('simulator route is a distinct public page with a safe interactive preview', () => {
@@ -25,6 +26,7 @@ test('simulator route is a distinct public page with a safe interactive preview'
   assert.match(simulatorExperience, /Interactive preview mode/);
   assert.match(simulatorExperience, /No real SMS will be sent in this demo/);
   assert.match(simulatorExperience, /See how CallbackCloser would recover a missed call/);
+  assert.match(simulatorExperience, /Start 14-Day Pilot/);
   assert.doesNotMatch(simulatorExperience, /Demo number unavailable|not configured on this environment yet|Real SMS mode is active/);
   assert.doesNotMatch(middleware, /\/simulator\(.\*\)/);
 });
