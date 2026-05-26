@@ -112,6 +112,8 @@ async function createArchivedTestBusinessGraph(seed: string) {
 test('deleteDeletableTestBusiness hard deletes an archived demo/test business and its dependent records', async () => {
   const seed = makeSeed('delete-demo');
   const { business, call, lead } = await createArchivedTestBusinessGraph(seed);
+  const preservedSeed = makeSeed('preserve-demo');
+  const preserved = await createArchivedTestBusinessGraph(preservedSeed);
 
   try {
     await deleteDeletableTestBusiness(business.id);
@@ -126,6 +128,7 @@ test('deleteDeletableTestBusiness hard deletes an archived demo/test business an
       deletedOperatorEventCount,
       deletedSimulatorRunCount,
       deletedConsentCount,
+      stillPresentBusiness,
     ] = await Promise.all([
       db.business.findUnique({ where: { id: business.id } }),
       db.call.findUnique({ where: { id: call.id } }),
@@ -136,6 +139,7 @@ test('deleteDeletableTestBusiness hard deletes an archived demo/test business an
       db.businessOperatorEvent.count({ where: { businessId: business.id } }),
       db.simulatorRun.count({ where: { businessId: business.id } }),
       db.smsConsent.count({ where: { businessId: business.id } }),
+      db.business.findUnique({ where: { id: preserved.business.id } }),
     ]);
 
     assert.equal(deletedBusiness, null);
@@ -147,8 +151,15 @@ test('deleteDeletableTestBusiness hard deletes an archived demo/test business an
     assert.equal(deletedOperatorEventCount, 0);
     assert.equal(deletedSimulatorRunCount, 0);
     assert.equal(deletedConsentCount, 0);
+    assert.equal(stillPresentBusiness?.id, preserved.business.id);
   } finally {
-    await db.business.deleteMany({ where: { ownerClerkId: `owner-${seed}` } });
+    await db.business.deleteMany({
+      where: {
+        ownerClerkId: {
+          in: [`owner-${seed}`, `owner-${preservedSeed}`],
+        },
+      },
+    });
   }
 });
 

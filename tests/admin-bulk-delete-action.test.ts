@@ -9,6 +9,9 @@ function read(path: string) {
 test('founder bulk delete action keeps redirect outside the try/catch and returns plain admin UI states', () => {
   const actions = read('app/admin/actions.ts');
   const adminPage = read('app/admin/page.tsx');
+  const deleteActionStart = actions.indexOf('export async function deleteTestBusinessAction');
+  const deleteActionEnd = actions.indexOf('export async function founderDeleteAllBusinessesAction');
+  const deleteActionSection = actions.slice(deleteActionStart, deleteActionEnd);
 
   const actionStart = actions.indexOf('export async function founderDeleteAllBusinessesAction');
   const nextActionStart = actions.indexOf('export async function bulkDeleteTestBusinessesAction');
@@ -26,10 +29,21 @@ test('founder bulk delete action keeps redirect outside the try/catch and return
   assert.notEqual(finalRedirectStart, -1);
   assert.doesNotMatch(catchSection, /redirect\(/);
 
+  assert.match(actions, /export async function deleteTestBusinessAction/);
+  assert.match(deleteActionSection, /const admin = await requireAdmin\(\)/);
+  assert.match(deleteActionSection, /parsed\.data\.confirmationName !== business\.name/);
+  assert.match(deleteActionSection, /Type the exact business name to delete it\./);
+  assert.doesNotMatch(deleteActionSection, /catch \(error\)/);
+  assert.match(deleteActionSection, /deletedBusinessName: business\.name/);
+
   assert.match(adminPage, /admin\.isFounder \?/);
+  assert.match(adminPage, /Delete one test\/demo business/);
+  assert.match(adminPage, /Select a workspace, review whether it is test\/demo or real, then type the exact business name/);
+  assert.match(adminPage, /Archive real customers\. Hard delete test\/demo businesses only/);
+  assert.match(adminPage, /Advanced founder reset: delete all current businesses/);
   assert.match(adminPage, /founderResetResult === 'deleted'/);
   assert.match(adminPage, /Deleted \{founderResetDeleted\} current/);
   assert.match(adminPage, /founderResetResult === 'noop'/);
   assert.match(adminPage, /No businesses were available for founder reset/);
-  assert.match(adminPage, /All businesses have been removed\. Create your first clean business workspace with Fast onboard\./);
+  assert.match(adminPage, /deletedBusinessName \? `Deleted \$\{deletedBusinessName\} permanently\.`/);
 });
