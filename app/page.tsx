@@ -121,9 +121,9 @@ const planTeasers = [
 ];
 
 const onboardingSteps = [
-  'We provision your business texting line and connect routing so missed callers are covered fast.',
-  'We confirm the first text and lead questions before live traffic starts.',
-  'We verify owner notifications and run a missed-call test with you before go-live.',
+  'We set up your business texting line and missed-call follow-up so you can see the full flow clearly.',
+  'We test the first text, lead questions, and handoff details with you before real callers rely on it.',
+  'We confirm owner alerts and run a missed-call practice test before you go live.',
 ];
 
 export default function LandingPage() {
@@ -147,12 +147,9 @@ export default function LandingPage() {
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Link className={buttonVariants({ size: 'lg' })} href={PUBLIC_START_FREE_PILOT_PATH}>
-                    Start Free Pilot
+                    Start 14-Day Pilot
                   </Link>
-                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
-                    Create Account
-                  </Link>
-                  <Link className={buttonVariants({ size: 'lg', variant: 'ghost' })} href="/demo">
+                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/demo">
                     See Demo
                   </Link>
                 </div>
@@ -164,8 +161,14 @@ export default function LandingPage() {
                 </div>
                 <p className="text-base font-medium text-foreground">Close one extra job and this can pay for itself.</p>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  Start Free Pilot creates a new account or takes an existing user to the right next step automatically.
-                  Founder-operated customer pilot setup stays separate in the admin new-business flow.
+                  Start a hands-on pilot and we&apos;ll help you get set up, test the missed-call text flow, and confirm owner
+                  alerts before you go live.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Need a new owner login first?{' '}
+                  <Link className="font-medium text-foreground underline underline-offset-4" href={PUBLIC_CREATE_ACCOUNT_PATH}>
+                    Create account
+                  </Link>
                 </p>
               </div>
 
@@ -226,7 +229,7 @@ export default function LandingPage() {
                     Open the public demo to show the missed-call follow-up, owner alert, and dashboard handoff without login or setup.
                   </p>
                   <Link className={buttonVariants({ className: 'mt-4' })} href="/demo">
-                    Open public demo
+                    See Demo
                   </Link>
                 </div>
               </CardContent>
@@ -285,8 +288,8 @@ export default function LandingPage() {
               <Badge variant="outline">Trust and proof</Badge>
               <h2 className="text-3xl font-semibold tracking-tight">Proof that missed calls can still turn into paying work</h2>
               <p className="text-muted-foreground">
-                The public site should make the operational value obvious: faster response, cleaner handoff, and trust pages that are
-                easy to verify before a business ever goes live.
+                CallbackCloser helps you reply faster, qualify the lead before you call back, and keep the setup clear before you put
+                it in front of real customers.
               </p>
             </div>
 
@@ -304,8 +307,8 @@ export default function LandingPage() {
 
             <Card className="border-primary/20 bg-gradient-to-r from-card via-card to-primary/5">
               <CardHeader>
-                <CardTitle>White-glove pilot onboarding</CardTitle>
-                <CardDescription>Hands-on setup so your missed calls are covered fast and the first test goes cleanly.</CardDescription>
+                <CardTitle>14-Day Pilot</CardTitle>
+                <CardDescription>Try CallbackCloser with hands-on setup before you rely on it with real customers.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
                 <div className="space-y-3 text-sm text-muted-foreground">
@@ -317,18 +320,18 @@ export default function LandingPage() {
                     </div>
                   ))}
                   <p>
-                    We help you get live fast, cover the missed-call gap, and confirm the first real handoff before your team depends on it.
+                    We help you test missed-call texting, owner alerts, and lead handoff before your team depends on it every day.
                   </p>
                 </div>
                 <div className="rounded-2xl border bg-background/80 p-5 text-sm text-muted-foreground">
-                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Launch standard</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">What the pilot covers</p>
                   <p className="mt-3 text-lg font-medium text-foreground">
-                    Every rollout is built to give the business a managed texting line, visible trust pages, and a clean first test call.
+                    A short pilot is the fastest way to confirm the system fits your team before you rely on it with real customers.
                   </p>
                   <div className="mt-4 space-y-2">
-                  <p>- One business texting number is included in the base service.</p>
-                    <p>- SMS Consent, Privacy Policy, Refund, and Terms &amp; Conditions pages stay public before activation.</p>
+                    <p>- Missed-call texting and lead questions are tested with you.</p>
                     <p>- Owner alerts and callback summaries are verified before launch.</p>
+                    <p>- Trust pages stay visible before activation.</p>
                   </div>
                 </div>
               </CardContent>
@@ -375,7 +378,7 @@ export default function LandingPage() {
             <Card className="bg-card/90">
               <CardHeader>
                 <CardTitle>Simple plan choices</CardTitle>
-                <CardDescription>Visitors should understand the offer in under 20 seconds.</CardDescription>
+                <CardDescription>Pick the setup that matches your call volume, team size, and rollout pace.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm text-muted-foreground">
                 {planTeasers.map((plan) => (
@@ -386,7 +389,7 @@ export default function LandingPage() {
                 ))}
                 <div className="pt-2">
                   <Link className={buttonVariants({ variant: 'outline' })} href="/pricing">
-                    Start capturing missed leads
+                    See pricing
                   </Link>
                 </div>
               </CardContent>
@@ -394,16 +397,17 @@ export default function LandingPage() {
 
             <Card className="bg-card/90">
               <CardHeader>
-                <CardTitle>Compliance stays visible</CardTitle>
-                <CardDescription>Trust language remains present without dominating the pitch.</CardDescription>
+                <CardTitle>Trust stays visible</CardTitle>
+                <CardDescription>Review the details before you start your pilot or turn it on for customers.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-muted-foreground">
                 <p>
                   CallbackCloser keeps pricing, refund, Privacy Policy, Terms &amp; Conditions, contact, and SMS Consent pages visible
-                  before a business ever starts a pilot.
+                  before your business starts a pilot.
                 </p>
                 <p>
-                  STOP, START, and HELP support remain part of the product flow, and the public consent page still explains message frequency and message/data rates.
+                  Your customers can also see clear SMS consent language, including STOP, START, HELP, message frequency, and
+                  message/data rates.
                 </p>
                 <div className="flex flex-wrap gap-3 pt-2">
                   <Link className={buttonVariants({ size: 'sm' })} href="/sms-consent">

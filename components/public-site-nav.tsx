@@ -40,11 +40,11 @@ export function PublicSiteNav() {
             <Link className={buttonVariants({ size: 'sm', variant: 'ghost' })} href={PUBLIC_SIGN_IN_PATH}>
               Sign in
             </Link>
-            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
+            <Link className="text-sm text-muted-foreground transition-colors hover:text-foreground" href={PUBLIC_CREATE_ACCOUNT_PATH}>
               Create account
             </Link>
             <Link className={buttonVariants({ size: 'sm' })} href={PUBLIC_START_FREE_PILOT_PATH}>
-              Start Free Pilot
+              Start 14-Day Pilot
             </Link>
           </div>
         </div>
