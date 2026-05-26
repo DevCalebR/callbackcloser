@@ -30,8 +30,8 @@ export const smsStateLabels: Record<SmsConversationState, string> = {
   NOT_STARTED: 'Not started',
   AWAITING_SERVICE: 'Awaiting service',
   AWAITING_URGENCY: 'Awaiting urgency',
-  AWAITING_ZIP: 'Awaiting ZIP',
-  AWAITING_BEST_TIME: 'Awaiting best time',
+  AWAITING_ZIP: 'Awaiting name + location',
+  AWAITING_BEST_TIME: 'Awaiting callback time',
   AWAITING_NAME: 'Awaiting name',
   COMPLETED: 'Completed',
 };

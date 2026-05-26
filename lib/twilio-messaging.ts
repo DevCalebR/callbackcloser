@@ -254,19 +254,21 @@ export function buildOwnerNotificationMessage(params: {
   businessName: string;
   leadId: string;
   callerPhone: string;
+  customerName?: string | null;
   serviceRequested?: string | null;
   urgency?: string | null;
-  zipCode?: string | null;
+  location?: string | null;
   bestTime?: string | null;
   leadUrl: string;
 }) {
   const parts = [
-    `[CallbackCloser] ${params.businessName} missed-call lead`,
-    `Caller: ${params.callerPhone}`,
+    `🔥 ${params.businessName} missed-call lead`,
+    `Name: ${params.customerName || 'Not captured'}`,
     `Service: ${params.serviceRequested || 'Unknown'}`,
     `Urgency: ${params.urgency || 'Unknown'}`,
-    `ZIP: ${params.zipCode || 'Unknown'}`,
-    `Best time: ${params.bestTime || 'Unknown'}`,
+    `Location: ${params.location || 'Unknown'}`,
+    `Callback: ${params.bestTime || 'Unknown'}`,
+    `Call now: ${params.callerPhone}`,
     `Lead: ${params.leadUrl}`,
   ];
 

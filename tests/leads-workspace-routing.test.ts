@@ -45,6 +45,10 @@ test('lead inbox stays list-only while lead detail is the main action workspace'
   assert.match(leadDetailPage, /Conversation history/);
   assert.match(leadDetailPage, /Qualification info/);
   assert.match(leadDetailPage, /Missed call details/);
+  assert.match(leadDetailPage, /Customer name/);
+  assert.match(leadDetailPage, /Preferred callback time/);
+  assert.match(leadDetailPage, /Location \/ address/);
+  assert.match(leadDetailPage, /No preferred time yet/);
   assert.match(leadDetailPage, /const error = typeof searchParams\?\.error === 'string' \? searchParams\.error : undefined;/);
   assert.match(leadDetailPage, /border-destructive\/30 bg-destructive\/5 p-3 text-sm text-destructive/);
 

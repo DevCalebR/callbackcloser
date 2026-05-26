@@ -22,6 +22,8 @@ type CustomerLeadRowLead = {
   serviceType: string | null;
   serviceRequested: string | null;
   urgency: string | null;
+  location: string | null;
+  zipCode: string | null;
   status: LeadStatus;
   readiness: LeadReadiness;
   createdAt: Date;
@@ -46,6 +48,10 @@ function getServiceLabel(lead: CustomerLeadRowLead) {
 
 function getUrgencyLabel(lead: CustomerLeadRowLead) {
   return lead.urgency || 'Urgency pending';
+}
+
+function getLocationLabel(lead: CustomerLeadRowLead) {
+  return lead.location || lead.zipCode || 'Location pending';
 }
 
 function getReadinessVariant(readiness: LeadReadiness) {
@@ -87,6 +93,7 @@ export function CustomerLeadRow({
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span>{getServiceLabel(lead)}</span>
             <span>{getUrgencyLabel(lead)}</span>
+            <span>{getLocationLabel(lead)}</span>
             <span>{formatRelativeTime(activityAt)}</span>
           </div>
         </div>
