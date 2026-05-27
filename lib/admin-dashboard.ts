@@ -83,9 +83,10 @@ type EventCall = Pick<Call, 'id' | 'status' | 'missed' | 'answered' | 'dialCallS
 
 export type AdminBoardFilter =
   | 'all'
+  | 'pending_setup'
+  | 'in_setup'
   | 'needs_attention'
   | 'pending_a2p'
-  | 'not_fully_provisioned'
   | 'live'
   | 'paused'
   | 'archived';
@@ -162,9 +163,10 @@ export type AdminTestSmsConfidenceState = 'not_started' | 'pending_delivery' | '
 
 export const adminBoardFilterOptions: AdminBoardFilterOption[] = [
   { key: 'all', label: 'All' },
+  { key: 'pending_setup', label: 'Pending setup' },
+  { key: 'in_setup', label: 'In setup' },
   { key: 'needs_attention', label: 'Needs attention' },
   { key: 'pending_a2p', label: 'Pending compliance' },
-  { key: 'not_fully_provisioned', label: 'Not fully provisioned' },
   { key: 'live', label: 'Live' },
   { key: 'paused', label: 'Paused' },
   { key: 'archived', label: 'Archived' },
@@ -807,8 +809,12 @@ export function matchesAdminBoardFilter(
     return managedSummary.compliancePendingReview;
   }
 
-  if (filter === 'not_fully_provisioned') {
-    return !managedSummary.onboardingReady || !ownerConnected;
+  if (filter === 'pending_setup') {
+    return business.provisioningStatus === BusinessProvisioningStatus.DRAFT;
+  }
+
+  if (filter === 'in_setup') {
+    return business.provisioningStatus === BusinessProvisioningStatus.ONBOARDING || (!managedSummary.onboardingReady && ownerConnected);
   }
 
   if (filter === 'needs_attention') {

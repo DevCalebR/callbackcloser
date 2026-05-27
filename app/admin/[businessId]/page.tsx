@@ -31,6 +31,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
 import { buildAdminOnboardingConfidence, canDeleteTestBusiness, getDeleteTestBusinessBlockedReason, isBusinessArchived } from '@/lib/admin-dashboard';
+import { customerSetupStatusLabels, shouldShowCustomerSetupWaitingPage } from '@/lib/customer-setup';
 import { buildAdminMissedCallValidationTruth, buildAdminOperationalProofs } from '@/lib/admin-operator-proof';
 import { buildAdminNextStepGuide, buildAdminSetupPanels } from '@/lib/admin-setup-remediation';
 import {
@@ -367,6 +368,7 @@ export default async function AdminBusinessDetailPage({
   const nextStep = getStepByKey(setupFlow.steps, nextStepGuide.key);
   const nextStepHref = buildStepPath(business.id, nextStepGuide.key, timelineFilter, activityExpanded);
   const selectedStep = getStepByKey(setupFlow.steps, selectedStepKey);
+  const showPendingSetupBanner = shouldShowCustomerSetupWaitingPage(business.provisioningStatus);
 
   const created = getQueryValue(searchParams, 'created') === '1';
   const saved = getQueryValue(searchParams, 'saved') === '1';
@@ -1135,6 +1137,20 @@ export default async function AdminBusinessDetailPage({
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
           {liveAcknowledged === 'warnings' ? 'Business marked live with explicit warning acknowledgment.' : 'Business marked live after launch checks.'}
         </div>
+      ) : null}
+      {showPendingSetupBanner ? (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle>This business is waiting for founder setup</CardTitle>
+            <CardDescription>
+              The owner should only see the setup-in-progress page until you finish the launch checklist and mark the workspace live.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3 text-sm">
+            <Badge variant="secondary">{customerSetupStatusLabels[business.provisioningStatus]}</Badge>
+            <span className="text-muted-foreground">Next action: {onboardingConfidence.nextAction}</span>
+          </CardContent>
+        </Card>
       ) : null}
       {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived safely. Automation is paused.</div> : null}
       {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored and ready for review.</div> : null}

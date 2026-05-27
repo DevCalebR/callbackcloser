@@ -34,7 +34,7 @@ export default async function BuyPage({ searchParams }: { searchParams?: Record<
 
   const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
   if (!business) {
-    redirect(`/app/onboarding?next=${encodeURIComponent(billingPath)}`);
+    redirect('/app');
   }
 
   redirect(billingPath);

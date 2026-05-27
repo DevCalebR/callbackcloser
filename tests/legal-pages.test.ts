@@ -72,8 +72,8 @@ test('public-facing surfaces link to trust and contact routes', () => {
   const footer = read('components/public-site-footer.tsx');
   const nav = read('components/public-site-nav.tsx');
 
-  assert.match(home, /href="\/pricing"/);
-  assert.match(home, /href="\/sms-consent"/);
+  assert.match(home, /href: '\/pricing'|href="\/pricing"/);
+  assert.match(home, /href: '\/sms-consent'|href="\/sms-consent"/);
   assert.match(home, /PUBLIC_CREATE_ACCOUNT_PATH/);
   assert.match(home, /PUBLIC_START_FREE_PILOT_PATH/);
   assert.match(nav, /href: '\/demo'/);

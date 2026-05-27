@@ -15,18 +15,18 @@ import { resolveSignedInAppDestination } from '@/lib/public-auth-routing';
 function getIntentCopy(intent: string | undefined) {
   if (intent === 'pilot') {
     return {
-      label: 'Start Free Pilot',
-      title: 'Create your account and start pilot onboarding',
+      label: 'Start 14-day pilot',
+      title: 'Create your account and start your 14-day pilot',
       detail:
-        'This path is for a business owner creating a new CallbackCloser account. If you are already signed in, CallbackCloser will send you to onboarding, your dashboard, or the admin new-business flow based on your role.',
+        'Create your CallbackCloser account here. Once you are in, we create your workspace, handle the setup for you, and notify you when your Lead Recovery Command Center is ready.',
     };
   }
 
   return {
     label: 'Create Account',
     title: 'Create your CallbackCloser account',
-    detail:
-      'Create a new owner account here. Founder-operated customer pilot setup is separate and stays inside the admin new-business flow.',
+      detail:
+      'Create a new owner account here. CallbackCloser handles setup for you, then unlocks your workspace when everything is ready.',
   };
 }
 
@@ -46,7 +46,7 @@ export default async function SignUpPage({
           <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
           <p className="text-muted-foreground">{copy.detail}</p>
           <p className="text-sm text-muted-foreground">
-            Existing users should sign in. CallbackCloser operators setting up a customer pilot should use the admin new-business flow, not public signup.
+            Existing users should sign in. We keep customer setup managed, so you do not need to configure the phone or messaging system yourself.
           </p>
         </section>
         <div className="flex justify-center lg:justify-end">
@@ -86,7 +86,7 @@ export default async function SignUpPage({
         <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="text-muted-foreground">{copy.detail}</p>
         <p className="text-sm text-muted-foreground">
-          Existing users should sign in. CallbackCloser operators setting up a customer pilot should use the admin new-business flow, not public signup.
+          Existing users should sign in. We keep customer setup managed, so you do not need to configure the phone or messaging system yourself.
         </p>
       </section>
       <div className="flex justify-center lg:justify-end">

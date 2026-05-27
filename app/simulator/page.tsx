@@ -31,7 +31,7 @@ export default function SimulatorPage() {
               </div>
               <div className="flex flex-wrap gap-3">
                 <Link className={buttonVariants()} href={PUBLIC_START_FREE_PILOT_PATH}>
-                  Start Free Pilot
+                  Start 14-day pilot
                 </Link>
                 <Link className={buttonVariants({ variant: 'outline' })} href="/demo">
                   View product demo

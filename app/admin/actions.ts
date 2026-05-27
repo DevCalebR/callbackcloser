@@ -45,6 +45,7 @@ import {
 import { logAuditEvent } from '@/lib/audit-log';
 import { buildAdminTestSmsTruth, buildTwilioSetupUpdateEventMetadata } from '@/lib/admin-operator-visibility';
 import { deriveTwilioNumberSetupModeFromPhoneSetupPath } from '@/lib/business-phone-setup';
+import { sendCustomerReadyNotification } from '@/lib/customer-setup-handoff';
 import { db } from '@/lib/db';
 import { formatPhoneDetail, listBusinessOperatorEvents, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
@@ -1882,6 +1883,7 @@ export async function markBusinessLiveAction(formData: FormData) {
   }
 
   await updateBusinessProvisioningStatus(business.id, BusinessProvisioningStatus.LIVE, null);
+  await sendCustomerReadyNotification(business.id);
   await recordBusinessOperatorEvent({
     businessId: business.id,
     type: confidence.canSafelyMarkLive ? 'admin.go_live_marked_safe' : 'admin.go_live_marked_with_warnings',
