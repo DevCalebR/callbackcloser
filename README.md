@@ -35,7 +35,7 @@ When a customer calls a business's Twilio number and the forwarded call is misse
 - Twilio SMS webhook (`/api/twilio/sms`) with lead qualification steps
 - Qualified-lead delivery with idempotent SMS/email/in-app owner notifications
 - Lead dashboard + filters + lead detail transcript + status updates
-- Public missed-call simulator (`/simulator`) with isolated demo lead runs
+- Public missed-call simulator (`/simulator`) with a self-contained interactive preview flow
 - Stripe billing page + checkout + billing portal
 - Public purchase entry route (`/buy`) for external marketing-site links
 - Stripe webhook sync for subscription status gating
@@ -74,9 +74,13 @@ Required categories:
 - Stripe keys + price IDs + webhook secret
 - Twilio credentials + webhook auth token
 - Optional owner email delivery (`RESEND_API_KEY`, `CALLBACKCLOSER_FROM_EMAIL`)
-- Optional public simulator config (`ENABLE_PUBLIC_MISSED_CALL_SIMULATOR`, `SIMULATOR_BUSINESS_ID`, `ENABLE_PUBLIC_SIMULATOR_REAL_SMS`)
 - Database URL
 - Optional rate-limit tuning vars (defaults are built in)
+
+Local note:
+
+- Use Clerk test/dev keys for localhost work.
+- If you point `.env.local` at production-domain-restricted Clerk keys, public pages can still render, but Clerk will log browser origin errors on `http://localhost:3000`.
 
 ### 4. Run Prisma migrations / generate client
 
@@ -150,6 +154,7 @@ Turn it off after smoke testing by unsetting `ALLOW_FOUNDER_BILLING_BYPASS` or s
    - `https://YOUR_DOMAIN/sign-in`
    - `https://YOUR_DOMAIN/sign-up`
 4. Ensure your app origin(s) are allowed in Clerk.
+5. For localhost development, prefer Clerk test/dev keys. Production keys that are locked to `callbackcloser.com` will reject browser requests from `http://localhost:3000`.
 
 ## Stripe Setup (Required)
 
@@ -374,9 +379,16 @@ What it demonstrates:
 
 Simulator safety:
 
-- The public `/simulator` experience is self-contained and runs entirely in the browser
-- It does not require Twilio, login, `SIMULATOR_BUSINESS_ID`, or a configured demo business
-- It never sends real SMS or writes customer-facing records
+- The public `/simulator` page is self-contained and does not require Twilio, login, or backend simulator config
+- No real SMS is sent and no Twilio calls are made
+- Public visitor input stays inside the browser demo and does not create customer-facing records
+- Caller numbers are masked in the UI before the owner-alert preview is shown
+- The public `/simulator` experience runs entirely in the browser and does not require `SIMULATOR_BUSINESS_ID` or a configured demo business
+
+Legacy internal simulator backend:
+
+- The repo still includes isolated simulator-record models and env flags for internal/admin demo tooling
+- Those flags are not required for the current public `/simulator` experience
 - The optional env-backed simulator helpers remain separate from the public route and can still be used for internal preview workflows if needed
 
 Creating a dedicated simulator workspace:
@@ -473,7 +485,7 @@ Use this checklist before sending paid traffic to `callbackcloser.com` or allowi
 - `/privacy` - privacy policy
 - `/refund` - refund policy
 - `/contact` - public support/contact page
-- `/simulator` - public missed-call simulator
+- `/simulator` - public interactive missed-call simulator
 - `/sign-in` - Clerk sign-in
 - `/sign-up` - Clerk sign-up
 - `/app/onboarding` - create business record

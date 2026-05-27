@@ -158,7 +158,7 @@ export function applyPublicSimulatorReply(session: PublicSimulatorSession, reply
       {
         role: 'system',
         body: getMissedCallUrgencyPrompt(),
-      }
+      },
     );
 
     return nextSession;
@@ -178,7 +178,7 @@ export function applyPublicSimulatorReply(session: PublicSimulatorSession, reply
       {
         role: 'system',
         body: getMissedCallContactLocationPrompt(),
-      }
+      },
     );
 
     return nextSession;
@@ -202,7 +202,7 @@ export function applyPublicSimulatorReply(session: PublicSimulatorSession, reply
       {
         role: 'system',
         body: getMissedCallCallbackPrompt(),
-      }
+      },
     );
 
     return nextSession;
@@ -215,7 +215,7 @@ export function applyPublicSimulatorReply(session: PublicSimulatorSession, reply
       buildLead({
         ...nextSession.lead,
         callbackTime,
-      })
+      }),
     );
     const stage: PublicSimulatorStage = 'qualified';
 
@@ -230,7 +230,7 @@ export function applyPublicSimulatorReply(session: PublicSimulatorSession, reply
       {
         role: 'system',
         body: getMissedCallCompletionPrompt(finalLead.customerName),
-      }
+      },
     );
 
     return nextSession;

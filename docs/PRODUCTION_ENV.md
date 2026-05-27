@@ -34,9 +34,9 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `DEBUG_ENV_ENDPOINT_TOKEN` | Server-only | Optional | Vercel | Protects `/api/debug/env` in production. If unset, the endpoint returns `404` in production. |
 | `PORTFOLIO_DEMO_MODE` | Server-only | Optional | Local / Vercel | Enables demo data/auth bypass mode for portfolio/demo screenshots. Keep disabled in production unless intentionally using demo mode. |
 | `ALLOW_PRODUCTION_DEMO_MODE` | Server-only | Optional (break-glass only) | Vercel | Required only when intentionally running demo mode in production. If unset while `PORTFOLIO_DEMO_MODE` is enabled in production, startup is blocked. |
-| `ENABLE_PUBLIC_MISSED_CALL_SIMULATOR` | Server-only | Optional | Vercel | Legacy internal simulator toggle. The public `/simulator` page no longer depends on this env var. |
-| `SIMULATOR_BUSINESS_ID` | Server-only | Optional | Vercel | Legacy internal simulator business ID. If used, it must point to an isolated demo workspace, never a real customer business. |
-| `ENABLE_PUBLIC_SIMULATOR_REAL_SMS` | Server-only | Optional | Vercel | Legacy internal simulator flag for real caller-side SMS. Keep off by default. The public `/simulator` page does not require it. |
+| `ENABLE_PUBLIC_MISSED_CALL_SIMULATOR` | Server-only | Optional | Vercel | Legacy/internal simulator backend flag. The current public `/simulator` page does not require it. |
+| `SIMULATOR_BUSINESS_ID` | Server-only | Optional | Vercel | Legacy/internal simulator backend business ID for isolated admin/demo tooling. Never point this at a real customer business. |
+| `ENABLE_PUBLIC_SIMULATOR_REAL_SMS` | Server-only | Optional | Vercel | Legacy/internal simulator backend SMS flag. Keep off by default. The current public `/simulator` page does not send real SMS. |
 | `RATE_LIMIT_WINDOW_MS` | Server-only | Optional | Vercel | Shared rate-limit window in milliseconds. Default `60000`. |
 | `RATE_LIMIT_TWILIO_AUTH_MAX` | Server-only | Optional | Vercel | Max Twilio webhook requests per window for valid/authorized traffic. Default `240`. |
 | `RATE_LIMIT_TWILIO_UNAUTH_MAX` | Server-only | Optional | Vercel | Max Twilio webhook requests per window for unauthorized traffic. Default `40`. |

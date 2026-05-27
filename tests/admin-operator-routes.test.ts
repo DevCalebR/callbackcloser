@@ -14,13 +14,17 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   const supportWorkspace = read('app/admin/[businessId]/workspace/page.tsx');
   const adminActions = read('app/admin/actions.ts');
   const businessPicker = read('components/admin-business-picker.tsx');
+  const founderDeleteCard = read('components/founder-delete-business-card.tsx');
   const appLayout = read('app/app/layout.tsx');
 
   assert.match(adminHome, /Operator control panel/);
   assert.match(adminHome, /Fast onboard/);
   assert.match(adminHome, /Create business workspace/);
   assert.match(adminHome, /Founder reset/);
-  assert.match(adminHome, /Delete all current businesses/);
+  assert.match(adminHome, /Delete one test\/demo business/);
+  assert.match(adminHome, /Advanced founder reset: delete all current businesses/);
+  assert.match(founderDeleteCard, /Delete this business/);
+  assert.match(founderDeleteCard, /Type the exact business name/);
   assert.match(adminHome, /FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION/);
   assert.match(adminHome, /Business triage board/);
   assert.match(adminHome, /Go-live blocker/);
