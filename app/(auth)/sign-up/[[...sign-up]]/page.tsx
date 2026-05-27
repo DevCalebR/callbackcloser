@@ -23,7 +23,7 @@ function getIntentCopy(intent: string | undefined) {
   }
 
   return {
-    label: 'Create Account',
+    label: 'Create account',
     title: 'Create your CallbackCloser account',
       detail:
       'Create a new owner account here. CallbackCloser handles setup for you, then unlocks your workspace when everything is ready.',

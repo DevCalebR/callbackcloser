@@ -5,7 +5,7 @@ import { PublicSiteNav } from '@/components/public-site-nav';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
+import { PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const pilotFeatures = [
   '14-day pilot',
@@ -82,8 +82,8 @@ export default function PricingPage() {
                 If you need multi-location rollout help or a custom setup path, contact us before activation so the pilot matches your operating model.
               </div>
               <div className="flex flex-wrap gap-3 pt-2">
-                <Link className={buttonVariants({ size: 'sm' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
-                  Create account
+                <Link className={buttonVariants({ size: 'sm' })} href={PUBLIC_START_FREE_PILOT_PATH}>
+                  Start 14-day pilot
                 </Link>
                 <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/contact">
                   Talk to us

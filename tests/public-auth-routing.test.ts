@@ -61,6 +61,7 @@ test('clerk auth surfaces use explicit path routing and fallback redirects', () 
   assert.match(signUpPage, /hasRequiredValidClerkEnv/);
   assert.match(signUpPage, /Authentication is temporarily unavailable\./);
   assert.match(signUpPage, /resolveSignedInAppDestination/);
+  assert.match(signUpPage, /Start 14-day pilot/);
   assert.match(signUpPage, /we create your workspace, handle the setup for you/i);
   assert.match(signUpPage, /do not need to configure the phone or messaging system yourself/i);
   assert.match(pilotEntryPage, /resolvePublicPilotDestination/);

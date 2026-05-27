@@ -74,25 +74,25 @@ test('public-facing surfaces link to trust and contact routes', () => {
 
   assert.match(home, /href: '\/pricing'|href="\/pricing"/);
   assert.match(home, /href: '\/sms-consent'|href="\/sms-consent"/);
-  assert.match(home, /PUBLIC_CREATE_ACCOUNT_PATH/);
   assert.match(home, /PUBLIC_START_FREE_PILOT_PATH/);
-  assert.match(nav, /href: '\/demo'/);
   assert.match(nav, /href: '\/pricing'/);
   assert.match(nav, /href: '\/contact'/);
-  assert.match(nav, /href: '\/sms-consent'/);
-  assert.match(nav, /href: '\/privacy'/);
-  assert.match(nav, /href: '\/terms'/);
+  assert.match(nav, /href: '\/simulator'/);
+  assert.doesNotMatch(nav, /href: '\/demo'/);
+  assert.doesNotMatch(nav, /href: '\/sms-consent'/);
+  assert.doesNotMatch(nav, /href: '\/privacy'/);
+  assert.doesNotMatch(nav, /href: '\/terms'/);
   assert.match(nav, /PUBLIC_SIGN_IN_PATH/);
-  assert.match(nav, /PUBLIC_CREATE_ACCOUNT_PATH/);
   assert.match(nav, /PUBLIC_START_FREE_PILOT_PATH/);
   assert.match(footer, /href: '\/privacy'/);
   assert.match(footer, /href: '\/terms'/);
   assert.match(footer, /href: '\/refund'/);
   assert.match(footer, /href: '\/contact'/);
   assert.match(footer, /href: '\/sms-consent'/);
-  assert.match(footer, /PUBLIC_CREATE_ACCOUNT_PATH/);
   assert.match(footer, /PUBLIC_START_FREE_PILOT_PATH/);
   assert.match(footer, /PUBLIC_SIGN_IN_PATH/);
+  assert.doesNotMatch(footer, /PUBLIC_CREATE_ACCOUNT_PATH/);
+  assert.doesNotMatch(footer, /href: '\/demo'/);
 
   assert.match(billing, /href="\/pricing"/);
   assert.match(billing, /href="\/refund"/);

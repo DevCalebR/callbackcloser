@@ -5,7 +5,7 @@ import { PublicSiteNav } from '@/components/public-site-nav';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
+import { PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const flowSteps = [
   {
@@ -183,12 +183,9 @@ export default function LandingPage() {
                   {pilotIncludes.map((item) => (
                     <p key={item}>- {item}</p>
                   ))}
-                  <div className="flex flex-wrap gap-3 pt-4">
+                  <div className="pt-4">
                     <Link className={buttonVariants()} href={PUBLIC_START_FREE_PILOT_PATH}>
                       Start 14-day pilot
-                    </Link>
-                    <Link className={buttonVariants({ variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
-                      Create account
                     </Link>
                   </div>
                 </CardContent>

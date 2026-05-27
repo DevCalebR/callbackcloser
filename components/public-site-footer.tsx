@@ -1,18 +1,16 @@
 import Link from 'next/link';
 
-import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_SIGN_IN_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
+import { PUBLIC_SIGN_IN_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const footerLinks = [
-  { href: PUBLIC_CREATE_ACCOUNT_PATH, label: 'Create account' },
-  { href: PUBLIC_START_FREE_PILOT_PATH, label: 'Start 14-day pilot' },
-  { href: PUBLIC_SIGN_IN_PATH, label: 'Sign in' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/demo', label: 'Missed-Call Demo' },
   { href: '/contact', label: 'Contact' },
-  { href: '/privacy', label: 'Privacy Policy' },
-  { href: '/terms', label: 'Terms & Conditions' },
-  { href: '/refund', label: 'Refund' },
   { href: '/sms-consent', label: 'SMS Consent' },
+  { href: '/privacy', label: 'Privacy' },
+  { href: '/terms', label: 'Terms' },
+  { href: '/refund', label: 'Refund' },
+  { href: PUBLIC_SIGN_IN_PATH, label: 'Sign in' },
+  { href: PUBLIC_START_FREE_PILOT_PATH, label: 'Start 14-day pilot' },
 ];
 
 export function PublicSiteFooter() {
@@ -22,7 +20,7 @@ export function PublicSiteFooter() {
         <div className="space-y-1">
           <p className="font-medium text-foreground">CallbackCloser</p>
           <p>Stop missed calls from turning into lost jobs with fast follow-up and clearer owner handoff.</p>
-          <p>Try the simulator, start a 14-day pilot, and let CallbackCloser handle the setup before your workspace goes live.</p>
+          <p>Try the simulator, start a 14-day pilot, and review pricing, contact, refund, privacy, terms, and SMS consent before your workspace goes live.</p>
           <p>
             Contact:{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
