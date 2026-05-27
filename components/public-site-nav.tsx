@@ -44,7 +44,7 @@ export function PublicSiteNav() {
               Create account
             </Link>
             <Link className={buttonVariants({ size: 'sm' })} href={PUBLIC_START_FREE_PILOT_PATH}>
-              Start Free Pilot
+              Start 14-day pilot
             </Link>
           </div>
         </div>

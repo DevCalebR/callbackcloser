@@ -6,7 +6,7 @@ import test from 'node:test';
 import {
   ADMIN_NEW_BUSINESS_PILOT_PATH,
   OWNER_DASHBOARD_PATH,
-  OWNER_ONBOARDING_PATH,
+  OWNER_SETUP_STATUS_PATH,
   resolvePublicPilotDestination,
   resolveSignedInAppDestination,
 } from '../lib/public-auth-routing.ts';
@@ -55,13 +55,14 @@ test('clerk auth surfaces use explicit path routing and fallback redirects', () 
   assert.match(signUpPage, /routing="path"/);
   assert.match(signUpPage, /fallbackRedirectUrl=\{DEFAULT_CLERK_AFTER_AUTH_URL\}/);
   assert.match(signUpPage, /<SignUp/);
-  assert.match(signUpPage, /Create your account and start pilot onboarding/);
+  assert.match(signUpPage, /Create your account and start your 14-day pilot/);
   assert.match(signUpPage, /path=\{DEFAULT_CLERK_SIGN_UP_URL\}/);
   assert.match(signUpPage, /signInUrl=\{DEFAULT_CLERK_SIGN_IN_URL\}/);
   assert.match(signUpPage, /hasRequiredValidClerkEnv/);
   assert.match(signUpPage, /Authentication is temporarily unavailable\./);
   assert.match(signUpPage, /resolveSignedInAppDestination/);
-  assert.match(signUpPage, /Founder-operated customer pilot setup is separate/i);
+  assert.match(signUpPage, /we create your workspace, handle the setup for you/i);
+  assert.match(signUpPage, /do not need to configure the phone or messaging system yourself/i);
   assert.match(pilotEntryPage, /resolvePublicPilotDestination/);
 });
 
@@ -81,7 +82,7 @@ test('public pilot routing keeps logged-out, owner, and admin flows separate', (
       isAdmin: false,
       hasBusiness: false,
     }),
-    OWNER_ONBOARDING_PATH
+    OWNER_SETUP_STATUS_PATH
   );
 
   assert.equal(
