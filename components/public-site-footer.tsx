@@ -4,7 +4,7 @@ import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_SIGN_IN_PATH, PUBLIC_START_FREE_PILO
 
 const footerLinks = [
   { href: PUBLIC_CREATE_ACCOUNT_PATH, label: 'Create account' },
-  { href: PUBLIC_START_FREE_PILOT_PATH, label: 'Start Free Pilot' },
+  { href: PUBLIC_START_FREE_PILOT_PATH, label: 'Start 14-Day Pilot' },
   { href: PUBLIC_SIGN_IN_PATH, label: 'Sign in' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/demo', label: 'Missed-Call Demo' },
