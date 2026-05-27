@@ -34,32 +34,77 @@ function normalizeText(text: string) {
   return text.trim();
 }
 
+function normalizeWhitespace(text: string) {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 function lower(text: string) {
   return normalizeText(text).toLowerCase();
 }
 
-export function getServicePrompt(business: BusinessPromptConfig) {
-  return `CallbackCloser: We missed your call. What service do you need? Reply 1 for ${business.serviceLabel1}, 2 for ${business.serviceLabel2}, 3 for ${business.serviceLabel3}, or reply with a short description. Reply STOP to opt out or HELP for help. Msg freq varies. Msg & data rates may apply.`;
+function cleanSegment(value: string) {
+  return value.replace(/^[\s,;:.-]+|[\s,;:.-]+$/g, '').trim();
+}
+
+function looksLikeName(value: string) {
+  const trimmed = normalizeWhitespace(value);
+  if (!trimmed || /\d/.test(trimmed)) return false;
+
+  const tokens = trimmed.split(' ');
+  if (tokens.length < 1 || tokens.length > 4) return false;
+
+  return tokens.every((token) => /^[A-Za-z][A-Za-z'.-]*$/.test(token));
+}
+
+function looksLikeLocation(value: string) {
+  const trimmed = normalizeWhitespace(value);
+  if (!trimmed) return false;
+
+  if (/\d{5}(?:-\d{4})?/.test(trimmed) || /\d/.test(trimmed)) return true;
+  if (/\b(st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|boulevard|way|hwy|highway|suite|ste|apt|unit)\b/i.test(trimmed)) {
+    return true;
+  }
+
+  return trimmed.length >= 3;
+}
+
+export function getServicePrompt(_business: BusinessPromptConfig) {
+  return `Hey, sorry we missed your call. What can we help you with today?
+
+You can reply with something like:
+Repair, estimate, installation, emergency, or anything else.
+Reply STOP to opt out.`;
 }
 
 export function getUrgencyPrompt() {
-  return 'How urgent is it? Reply emergency, today, this week, or quote.';
+  return `Got it — how soon do you need help?
+
+Reply:
+1 Emergency
+2 Today
+3 This week
+4 Just getting a quote`;
 }
 
-export function getZipPrompt() {
-  return 'What ZIP code or service area should the tech know about?';
+export function getContactLocationPrompt() {
+  return 'Thanks. What name should we put on the request, and what city/ZIP or service address is this for?';
 }
 
 export function getBestTimePrompt() {
-  return 'Would you like a callback today? Reply yes, no, or tell us a preferred time.';
+  return `What’s the best time for someone to call you back?
+
+Reply:
+1 ASAP
+2 Morning
+3 Afternoon
+4 Evening`;
 }
 
-export function getNamePrompt() {
-  return 'What name should we ask for? Reply with your name or type skip.';
-}
+export function getCompletionPrompt(customerName?: string | null) {
+  const greeting = customerName ? `Thanks, ${customerName} —` : 'Thanks —';
+  return `${greeting} we have your request. Someone will reach out as soon as possible.
 
-export function getCompletionPrompt() {
-  return 'Thanks. CallbackCloser has your details and will pass them along for follow-up shortly.';
+If there’s anything important we should know, you can reply here.`;
 }
 
 function parseService(input: string, business: BusinessPromptConfig) {
@@ -86,10 +131,12 @@ function parseUrgency(input: string) {
     '3': 'This week',
     week: 'This week',
     'this week': 'This week',
-    '4': 'Quote',
-    quote: 'Quote',
-    estimate: 'Quote',
+    '4': 'Just getting a quote',
+    quote: 'Just getting a quote',
+    estimate: 'Just getting a quote',
+    'just getting a quote': 'Just getting a quote',
   };
+
   return map[value] ?? null;
 }
 
@@ -101,24 +148,108 @@ function parseZip(input: string) {
   return null;
 }
 
+function parseContactLocation(input: string) {
+  const text = normalizeWhitespace(input);
+  if (!text) {
+    return {
+      callerName: null,
+      contactName: null,
+      location: null,
+      zipCode: null,
+    };
+  }
+
+  const delimitedMatch = text.match(/^(.+?)(?:\s*(?:,|;|-|–|—)\s*)(.+)$/);
+  if (delimitedMatch) {
+    const candidateName = cleanSegment(delimitedMatch[1] || '');
+    const candidateLocation = cleanSegment(delimitedMatch[2] || '');
+
+    if (looksLikeName(candidateName) && looksLikeLocation(candidateLocation)) {
+      return {
+        callerName: candidateName,
+        contactName: candidateName,
+        location: candidateLocation,
+        zipCode: parseZip(candidateLocation),
+      };
+    }
+  }
+
+  const inMatch = text.match(/^(.+?)\s+\bin\b\s+(.+)$/i);
+  if (inMatch) {
+    const candidateName = cleanSegment(inMatch[1] || '');
+    const candidateLocation = cleanSegment(inMatch[2] || '');
+
+    if (looksLikeName(candidateName) && looksLikeLocation(candidateLocation)) {
+      return {
+        callerName: candidateName,
+        contactName: candidateName,
+        location: candidateLocation,
+        zipCode: parseZip(candidateLocation),
+      };
+    }
+  }
+
+  if (looksLikeName(text)) {
+    return {
+      callerName: text,
+      contactName: text,
+      location: null,
+      zipCode: null,
+    };
+  }
+
+  return {
+    callerName: null,
+    contactName: null,
+    location: text,
+    zipCode: parseZip(text),
+  };
+}
+
 function parseCallbackPreference(input: string) {
   const value = lower(input);
   if (!value) return null;
-  if (['no', 'no callback', 'text only'].includes(value)) {
-    return { callbackRequested: false, bestTime: null };
-  }
-  if (['yes', 'call', 'call me', 'please call', 'today'].includes(value)) {
-    return { callbackRequested: true, bestTime: 'Today' };
+
+  const map: Record<string, { callbackRequested: boolean; bestTime: string | null }> = {
+    '1': { callbackRequested: true, bestTime: 'ASAP' },
+    asap: { callbackRequested: true, bestTime: 'ASAP' },
+    urgent: { callbackRequested: true, bestTime: 'ASAP' },
+    now: { callbackRequested: true, bestTime: 'ASAP' },
+    soon: { callbackRequested: true, bestTime: 'ASAP' },
+    anytime: { callbackRequested: true, bestTime: 'ASAP' },
+    '2': { callbackRequested: true, bestTime: 'Morning' },
+    morning: { callbackRequested: true, bestTime: 'Morning' },
+    am: { callbackRequested: true, bestTime: 'Morning' },
+    '3': { callbackRequested: true, bestTime: 'Afternoon' },
+    afternoon: { callbackRequested: true, bestTime: 'Afternoon' },
+    '4': { callbackRequested: true, bestTime: 'Evening' },
+    evening: { callbackRequested: true, bestTime: 'Evening' },
+    tonight: { callbackRequested: true, bestTime: 'Evening' },
+    yes: { callbackRequested: true, bestTime: 'ASAP' },
+    call: { callbackRequested: true, bestTime: 'ASAP' },
+    'call me': { callbackRequested: true, bestTime: 'ASAP' },
+    'please call': { callbackRequested: true, bestTime: 'ASAP' },
+    no: { callbackRequested: false, bestTime: 'Text only' },
+    'no callback': { callbackRequested: false, bestTime: 'Text only' },
+    'text only': { callbackRequested: false, bestTime: 'Text only' },
+  };
+
+  if (map[value]) {
+    return map[value];
   }
 
-  if (value.length >= 2 && value.length <= 40) {
+  if (value.length >= 2 && value.length <= 80) {
     return { callbackRequested: true, bestTime: normalizeText(input) };
   }
 
   return null;
 }
 
-export function advanceLeadConversation(lead: Pick<Lead, 'smsState'>, body: string, business: BusinessPromptConfig): TransitionResult {
+export function advanceLeadConversation(
+  lead: Pick<Lead, 'smsState' | 'callerName' | 'contactName'>,
+  body: string,
+  business: BusinessPromptConfig
+): TransitionResult {
   const state = lead.smsState;
   const text = normalizeText(body);
 
@@ -135,9 +266,12 @@ export function advanceLeadConversation(lead: Pick<Lead, 'smsState'>, body: stri
       if (!service) {
         return {
           ok: false,
-          responseText: `Please reply 1, 2, or 3, or send a short service description. ${getServicePrompt(business)}`,
+          responseText: `Please tell us what you need help with in a few words.
+
+${getServicePrompt(business)}`,
         };
       }
+
       return {
         ok: true,
         nextState: SmsConversationState.AWAITING_URGENCY,
@@ -151,31 +285,31 @@ export function advanceLeadConversation(lead: Pick<Lead, 'smsState'>, body: stri
       if (!urgency) {
         return {
           ok: false,
-          responseText: 'Please reply 1, 2, 3, or 4 for urgency. ' + getUrgencyPrompt(),
+          responseText: 'Please reply 1, 2, 3, or 4 for urgency.\n\n' + getUrgencyPrompt(),
         };
       }
+
       return {
         ok: true,
         nextState: SmsConversationState.AWAITING_ZIP,
         leadUpdates: { urgency },
-        responseText: getZipPrompt(),
+        responseText: getContactLocationPrompt(),
         markQualified: true,
       };
     }
 
     case SmsConversationState.AWAITING_ZIP: {
-      const location = normalizeText(text);
-      if (!location || location.length < 3 || location.length > 80) {
+      if (!text || text.length < 2 || text.length > 140) {
         return {
           ok: false,
-          responseText: 'Please reply with a ZIP code or short service area description.',
+          responseText: 'Please reply with your name and the city, ZIP, or service address if you can.',
         };
       }
-      const zipCode = parseZip(text);
+
       return {
         ok: true,
         nextState: SmsConversationState.AWAITING_BEST_TIME,
-        leadUpdates: { location, zipCode },
+        leadUpdates: parseContactLocation(text),
         responseText: getBestTimePrompt(),
       };
     }
@@ -185,15 +319,18 @@ export function advanceLeadConversation(lead: Pick<Lead, 'smsState'>, body: stri
       if (!callback) {
         return {
           ok: false,
-          responseText: 'Please reply yes, no, or tell us the best callback time.',
+          responseText: 'Please reply 1, 2, 3, 4, or tell us the best callback time.',
         };
       }
+
       return {
         ok: true,
-        nextState: SmsConversationState.AWAITING_NAME,
+        nextState: SmsConversationState.COMPLETED,
         leadUpdates: { callbackRequested: callback.callbackRequested, bestTime: callback.bestTime },
-        responseText: getNamePrompt(),
+        responseText: getCompletionPrompt(lead.callerName || lead.contactName),
         markQualified: true,
+        notifyOwner: true,
+        completed: true,
       };
     }
 
@@ -204,7 +341,7 @@ export function advanceLeadConversation(lead: Pick<Lead, 'smsState'>, body: stri
         ok: true,
         nextState: SmsConversationState.COMPLETED,
         leadUpdates: { contactName, callerName: contactName },
-        responseText: getCompletionPrompt(),
+        responseText: getCompletionPrompt(contactName),
         notifyOwner: true,
         completed: true,
       };

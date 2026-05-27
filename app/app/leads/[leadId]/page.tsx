@@ -100,9 +100,13 @@ export default async function LeadDetailPage({
     ownerNotifications.find((notification) => notification.channel === OwnerNotificationChannel.EMAIL) ?? null;
   const latestInAppNotification =
     ownerNotifications.find((notification) => notification.channel === OwnerNotificationChannel.IN_APP) ?? null;
-  const primaryLabel = lead.callerName || lead.contactName || formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone);
-  const secondaryLabel =
-    lead.callerName || lead.contactName ? formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone) : 'Caller name not captured yet';
+  const customerName = lead.callerName || lead.contactName || 'Name not captured yet';
+  const customerPhone = formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone);
+  const primaryLabel = lead.callerName || lead.contactName || customerPhone;
+  const secondaryLabel = lead.callerName || lead.contactName ? customerPhone : 'Caller name not captured yet';
+  const serviceLabel = lead.serviceType || lead.serviceRequested || 'Still being captured';
+  const locationLabel = lead.location || lead.zipCode || 'Still being captured';
+  const callbackLabel = lead.bestTime || (lead.callbackRequested === false ? 'Text only' : 'No preferred time yet');
   const detailRedirectTo =
     returnPath === '/app/leads' ? `/app/leads/${lead.id}` : `/app/leads/${lead.id}?from=${encodeURIComponent(returnPath)}`;
   const successRedirectTo = '/app/leads';
@@ -184,25 +188,26 @@ export default async function LeadDetailPage({
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border bg-background/90 p-4 text-sm">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Phone</p>
-            <p className="mt-2 font-medium">{formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone)}</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Customer</p>
+            <p className="mt-2 font-medium">{customerName}</p>
+            <p className="mt-2 text-muted-foreground">{customerPhone}</p>
             <p className="mt-2 text-muted-foreground">Created {formatRelativeTime(lead.createdAt)}.</p>
           </div>
           <div className="rounded-2xl border bg-background/90 p-4 text-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Service</p>
-            <p className="mt-2 font-medium">{lead.serviceType || lead.serviceRequested || 'Still being captured'}</p>
+            <p className="mt-2 font-medium">{serviceLabel}</p>
             <p className="mt-2 text-muted-foreground">Urgency: {lead.urgency || 'Pending reply'}</p>
           </div>
           <div className="rounded-2xl border bg-background/90 p-4 text-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Callback timing</p>
-            <p className="mt-2 font-medium">{lead.bestTime || 'No preferred time yet'}</p>
+            <p className="mt-2 font-medium">{callbackLabel}</p>
             <p className="mt-2 text-muted-foreground">
               Callback requested: {typeof lead.callbackRequested === 'boolean' ? (lead.callbackRequested ? 'Yes' : 'No') : 'Not answered'}
             </p>
           </div>
           <div className="rounded-2xl border bg-background/90 p-4 text-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Location</p>
-            <p className="mt-2 font-medium">{lead.location || lead.zipCode || 'Still being captured'}</p>
+            <p className="mt-2 font-medium">{locationLabel}</p>
             <p className="mt-2 text-muted-foreground">{isOpenLead ? 'Still needs an outcome update.' : 'Outcome already captured.'}</p>
           </div>
         </CardContent>
@@ -249,16 +254,32 @@ export default async function LeadDetailPage({
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2">
+                <span className="text-muted-foreground">Customer name</span>
+                <span>{customerName}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <span className="text-muted-foreground">Phone number</span>
+                <span>{customerPhone}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <span className="text-muted-foreground">Summary</span>
                 <span>{lead.summary || 'Summary will update as the intake progresses.'}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <span className="text-muted-foreground">Service requested</span>
-                <span>{lead.serviceType || lead.serviceRequested || 'Still being captured'}</span>
+                <span className="text-muted-foreground">Service needed</span>
+                <span>{serviceLabel}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <span className="text-muted-foreground">Urgency</span>
                 <span>{lead.urgency || 'Pending reply'}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <span className="text-muted-foreground">Location / address</span>
+                <span>{locationLabel}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <span className="text-muted-foreground">Preferred callback time</span>
+                <span>{callbackLabel}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <span className="text-muted-foreground">Qualified at</span>

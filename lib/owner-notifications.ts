@@ -5,7 +5,14 @@ import { isBusinessAutomationPaused } from '@/lib/admin-dashboard';
 import { getEffectiveBusinessNotificationSettings } from '@/lib/business-notification-settings';
 import { db } from '@/lib/db';
 import { sendTransactionalEmail } from '@/lib/email';
-import { buildLeadSummary, getLeadServiceType, isLeadQualified } from '@/lib/lead-qualification';
+import {
+  buildLeadSummary,
+  getLeadCallerName,
+  getLeadLocation,
+  getLeadPreferredCallbackTime,
+  getLeadServiceType,
+  isLeadQualified,
+} from '@/lib/lead-qualification';
 import { formatPhoneDetail, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { logTwilioError, logTwilioInfo, logTwilioWarn } from '@/lib/twilio-logging';
@@ -44,29 +51,52 @@ function buildLeadUrl(leadId: string) {
 }
 
 function buildOwnerSmsBody(lead: NotificationLeadRecord) {
-  const serviceType = getLeadServiceType(lead) || 'Service request';
-  const readinessLabel =
-    lead.readiness === LeadReadiness.URGENT ? 'Urgent' : lead.readiness === LeadReadiness.QUALIFIED ? 'Qualified' : 'Pending';
+  const header = lead.readiness === LeadReadiness.URGENT ? '🔥 Hot missed-call lead' : 'New missed-call lead';
   const leadUrl = buildLeadUrl(lead.id);
+  const customerName = getLeadCallerName(lead) || 'Not captured';
+  const serviceType = getLeadServiceType(lead) || 'Not captured';
+  const location = getLeadLocation(lead) || 'Not captured';
+  const callbackTime = getLeadPreferredCallbackTime(lead) || 'Not captured';
+  const callerPhone = lead.callerPhoneNormalized || lead.callerPhone;
 
   return compactSummary(
-    `CallbackCloser lead for ${lead.business.name}: ${serviceType}. ${lead.urgency ? `Urgency: ${lead.urgency}. ` : ''}${
-      lead.location || lead.zipCode ? `Location: ${lead.location || lead.zipCode}. ` : ''
-    }${lead.callbackRequested === false ? 'Callback not requested. ' : ''}Readiness: ${readinessLabel}. Open lead: ${leadUrl}`
+    [
+      header,
+      '',
+      `Name: ${customerName}`,
+      `Service: ${serviceType}`,
+      `Urgency: ${lead.urgency || 'Not captured'}`,
+      `Location: ${location}`,
+      `Callback: ${callbackTime}`,
+      '',
+      `Call now: ${callerPhone}`,
+      `View lead: ${leadUrl}`,
+    ].join('\n'),
+    640
   );
 }
 
 function buildOwnerEmailContent(lead: NotificationLeadRecord) {
   const leadUrl = buildLeadUrl(lead.id);
   const summary = buildLeadSummary(lead);
+  const customerName = getLeadCallerName(lead) || 'Not captured';
+  const serviceType = getLeadServiceType(lead) || 'Missed call follow-up';
+  const location = getLeadLocation(lead) || 'Not captured';
+  const callbackTime = getLeadPreferredCallbackTime(lead) || 'Not captured';
   const subject = `CallbackCloser lead: ${getLeadServiceType(lead) || 'Missed call follow-up'} for ${lead.business.name}`;
   const text = [
     `CallbackCloser qualified a missed-call lead for ${lead.business.name}.`,
     '',
-    summary,
-    '',
+    `Name: ${customerName}`,
+    `Service: ${serviceType}`,
+    `Urgency: ${lead.urgency || 'Not captured'}`,
+    `Location: ${location}`,
+    `Callback: ${callbackTime}`,
     `Caller: ${formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone)}`,
     `Lead status: ${lead.status}`,
+    '',
+    summary,
+    '',
     `Open lead: ${leadUrl}`,
   ].join('\n');
 
@@ -74,9 +104,14 @@ function buildOwnerEmailContent(lead: NotificationLeadRecord) {
     <div style="font-family: Arial, sans-serif; line-height: 1.5;">
       <h2>CallbackCloser qualified a missed-call lead</h2>
       <p><strong>Business:</strong> ${lead.business.name}</p>
-      <p><strong>Summary:</strong> ${summary}</p>
+      <p><strong>Name:</strong> ${customerName}</p>
+      <p><strong>Service:</strong> ${serviceType}</p>
+      <p><strong>Urgency:</strong> ${lead.urgency || 'Not captured'}</p>
+      <p><strong>Location:</strong> ${location}</p>
+      <p><strong>Callback:</strong> ${callbackTime}</p>
       <p><strong>Caller:</strong> ${formatPhoneForDisplay(lead.callerPhoneNormalized || lead.callerPhone)}</p>
       <p><strong>Lead status:</strong> ${lead.status}</p>
+      <p><strong>Summary:</strong> ${summary}</p>
       <p><a href="${leadUrl}">Open lead in CallbackCloser</a></p>
     </div>
   `;

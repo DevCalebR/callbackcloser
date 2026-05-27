@@ -120,6 +120,7 @@ function buildLeadLifecycleUpdate(
     | 'location'
     | 'zipCode'
     | 'callbackRequested'
+    | 'bestTime'
     | 'callerName'
     | 'contactName'
     | 'callerPhoneNormalized'
