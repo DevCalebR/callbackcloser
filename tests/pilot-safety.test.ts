@@ -28,25 +28,39 @@ test('existing-number selection reports a truthful setup state instead of a fake
   assert.match(settingsPage, /admin-assisted porting workflow/i);
 });
 
-test('onboarding page persists Twilio account mode before the shared setup flow continues', () => {
+test('managed setup handoff replaces the old self-serve onboarding route', () => {
   const onboardingPage = read('app/app/onboarding/page.tsx');
-  const onboardingAction = read('app/app/onboarding/actions.ts');
-  const twilioSetup = read('lib/twilio-setup.ts');
+  const auth = read('lib/auth.ts');
+  const appLayout = read('app/app/layout.tsx');
+  const waitingPage = read('components/customer-setup-waiting-page.tsx');
+  const setupHandoff = read('lib/customer-setup-handoff.ts');
+  const stripeCheckoutRoute = read('app/api/stripe/checkout/route.ts');
+  const buyPage = read('app/buy/page.tsx');
 
-  assert.match(onboardingPage, /Twilio account mode/i);
-  assert.match(onboardingPage, /TwilioSetupChecklist/);
-  assert.match(onboardingPage, /twilioAccountModeOptions/);
-  assert.match(onboardingPage, /businessPhonePathOptions/);
-  assert.match(twilioSetup, /Business subaccount \(recommended\)/i);
-  assert.match(twilioSetup, /Main account/i);
-  assert.doesNotMatch(onboardingAction, /provisionPhoneNumber/);
+  assert.match(onboardingPage, /redirect\('\/app'\)/);
+  assert.match(auth, /ensurePendingBusinessForOwner/);
+  assert.match(appLayout, /CustomerSetupWaitingPage/);
+  assert.match(waitingPage, /Your missed-call recovery system is being set up/);
+  assert.match(waitingPage, /You do not need to configure anything right now/i);
+  assert.match(waitingPage, /Try the missed-call simulator/);
+  assert.match(setupHandoff, /New CallbackCloser signup needs setup/);
+  assert.match(setupHandoff, /Your CallbackCloser account is ready/);
+  assert.match(stripeCheckoutRoute, /absoluteUrl\('\/app'\)/);
+  assert.match(buyPage, /redirect\('\/app'\)/);
 });
 
 test('landing page product promise stays aligned to missed-call recovery workflow', () => {
   const home = read('app/page.tsx');
 
-  assert.match(home, /Stop losing jobs from missed calls/i);
-  assert.match(home, /ready-to-close lead/i);
+  assert.match(home, /Turn missed calls into qualified leads automatically/i);
+  assert.match(home, /Try the missed-call simulator/i);
+  assert.match(home, /Start 14-day pilot/i);
+  assert.match(home, /we help set up your missed-call recovery flow and notify you when it is ready/i);
+  assert.doesNotMatch(home, /Simple plan choices/i);
+  assert.doesNotMatch(home, /Founder-operated customer pilot setup stays separate/i);
+  assert.doesNotMatch(home, /Starter/i);
+  assert.doesNotMatch(home, /Growth/i);
+  assert.doesNotMatch(home, /Agency \/ Multi-location/i);
 });
 
 test('message delivery issue helpers flag failed and fallback statuses', () => {

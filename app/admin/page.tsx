@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BusinessProvisioningStatus } from '@prisma/client';
 
 import {
   archiveBusinessAction,
@@ -479,10 +480,10 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
   });
 
   const summaryStats = [
+    { label: 'Pending setup', value: businessRows.filter((row) => row.business.provisioningStatus === BusinessProvisioningStatus.DRAFT).length },
+    { label: 'In setup', value: businessRows.filter((row) => row.business.provisioningStatus === BusinessProvisioningStatus.ONBOARDING).length },
     { label: 'Needs attention', value: businessRows.filter((row) => row.onboardingConfidence.state === 'needs_attention').length },
-    { label: 'Waiting on compliance', value: businessRows.filter((row) => row.onboardingConfidence.state === 'waiting_on_a2p').length },
     { label: 'Ready for live', value: businessRows.filter((row) => row.onboardingConfidence.state === 'ready_to_go_live').length },
-    { label: 'Live with warnings', value: businessRows.filter((row) => row.onboardingConfidence.state === 'live_with_warnings').length },
   ];
   const founderResetBusinessCount = businessPickerOptions.length;
   const founderResetBusinessPreview = businessPickerOptions.slice(0, 4).map((business) => business.name);
@@ -548,7 +549,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       ) : null}
       {setupIntent === 'new-business-pilot' ? (
         <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-          Customer pilot setup starts here. Public signup is for business owners creating their own account; founder/operator setup for a real customer stays in this admin new-business flow.
+          New public pilot signups land here waiting for founder setup. Finish the owner details, launch prep, and go-live checks before the customer sees the full workspace.
         </div>
       ) : null}
 
@@ -977,6 +978,8 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                           {business.name}
                         </Link>
                         <Badge variant={overallStatus.variant}>{overallStatus.label}</Badge>
+                        {business.provisioningStatus === BusinessProvisioningStatus.DRAFT ? <Badge variant="secondary">Pending setup</Badge> : null}
+                        {business.provisioningStatus === BusinessProvisioningStatus.ONBOARDING ? <Badge variant="outline">In setup</Badge> : null}
                         <Badge variant={onboardingConfidence.stateVariant}>{onboardingConfidence.stateLabel}</Badge>
                         {business.isTestBusiness ? <Badge variant="outline">Test</Badge> : null}
                         {isBusinessArchived(business) ? <Badge variant="outline">Archived</Badge> : null}

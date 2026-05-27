@@ -40,13 +40,13 @@ export default function ContactPage() {
                   support@callbackcloser.com
                 </a>
               </p>
-              <p>If you are already ready to try the product, you can also create an account and complete the in-app setup flow.</p>
+              <p>If you are ready to try the product, create your account and we will handle the setup for you.</p>
               <p>If you are an active pilot customer, include your business name, texting line, and the recent call or SMS time when reporting an issue.</p>
               <p>
                 For SMS consent, STOP or HELP behavior, or public trust-page questions, email support and reference{' '}
                 <span className="font-medium text-foreground">callbackcloser.com</span> so we can match the request to the live pilot setup.
               </p>
-              <p>Founder/operator customer pilot setup is separate from public signup and stays inside the admin new-business flow.</p>
+              <p>We keep the launch managed and notify you when your Lead Recovery Command Center is ready.</p>
               <div className="flex flex-wrap gap-3 pt-2">
                 <Link className={buttonVariants()} href={PUBLIC_START_FREE_PILOT_PATH}>
                   Start 14-day pilot

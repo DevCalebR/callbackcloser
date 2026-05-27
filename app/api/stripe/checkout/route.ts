@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
   const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
   if (!business) {
-    return withCorrelation(NextResponse.redirect(absoluteUrl('/app/onboarding'), { status: 303 }));
+    return withCorrelation(NextResponse.redirect(absoluteUrl('/app'), { status: 303 }));
   }
 
   const formData = await request.formData();

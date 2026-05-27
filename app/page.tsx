@@ -7,123 +7,43 @@ import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
-const roiPoints = [
+const flowSteps = [
   {
-    title: 'Reply before they move on',
-    description: 'Missed callers hear back fast instead of calling the next business on the list.',
+    title: 'Missed call comes in',
+    detail: 'Your customer calls. If the call is missed, CallbackCloser starts the follow-up immediately.',
   },
   {
-    title: 'Get the details without chasing them',
-    description: 'You get the job type, urgency, ZIP, and callback timing without manually texting back and forth.',
+    title: 'Text goes out in seconds',
+    detail: 'The customer gets a simple reply asking what they need help with and how soon they need it.',
   },
   {
-    title: 'Know who is worth calling first',
-    description: 'Qualified leads are handed off with a ready-to-close summary instead of a cold voicemail.',
+    title: 'The lead gets qualified',
+    detail: 'CallbackCloser captures service need, urgency, location, and the best callback time without dragging the customer through a long form.',
   },
   {
-    title: 'One extra job can cover the cost',
-    description: 'For most service businesses, a single recovered repair or install pays for CallbackCloser.',
-  },
-];
-
-const painPoints = [
-  {
-    title: 'Every missed call can become a lost job',
-    description: 'When the phone rings and nobody answers, that customer usually needs help now, not tomorrow.',
-  },
-  {
-    title: 'Customers move on fast',
-    description: 'If they do not hear back quickly, they call the next shop and you never get the chance to close them.',
-  },
-  {
-    title: 'Voicemail rarely saves the lead',
-    description: 'Most callers do not leave enough detail to help you call back with confidence, if they leave one at all.',
-  },
-  {
-    title: 'Most owners never see the lost revenue',
-    description: 'Missed calls feel small until you add up how many booked jobs disappear every month.',
+    title: 'You get a ready-to-call summary',
+    detail: 'Instead of a cold voicemail, you see a clear lead handoff and know who to call first.',
   },
 ];
 
-const workflowSteps = [
-  {
-    title: 'A customer calls and you miss it',
-    description: 'The lead does not have to sit in voicemail while your team is on jobs or with other customers.',
-  },
-  {
-    title: 'CallbackCloser texts them right away',
-    description: 'They hear back in seconds, not hours, so you stay in the running for the job.',
-  },
-  {
-    title: 'We find out what they need',
-    description: 'The conversation captures the job type, urgency, and location without your team doing the back-and-forth.',
-  },
-  {
-    title: 'You get a qualified lead to follow up with',
-    description: 'You get a ready-to-close handoff so the next call is focused on booking the job.',
-  },
+const pilotIncludes = [
+  '14-day pilot',
+  'White-glove setup included',
+  'Missed-call SMS recovery',
+  'Qualified lead summaries',
+  'Owner alerts',
+  'Lead Recovery Command Center',
+  'One business texting number included',
+  'You approve before continuing',
 ];
 
-const proofStats = [
-  {
-    label: 'Response timing',
-    value: 'Seconds, not hours',
-    detail: 'Missed callers hear back quickly while the job is still active and the lead still wants help.',
-  },
-  {
-    label: 'Lead handoff',
-    value: 'Qualified before callback',
-    detail: 'Owners see the job type, urgency, ZIP, and callback context before the next phone call.',
-  },
-  {
-    label: 'Setup model',
-    value: 'Managed for you',
-    detail: 'CallbackCloser handles the texting line, routing support, and activation checklist in one place.',
-  },
-  {
-    label: 'Public trust',
-    value: 'Visible and clear',
-    detail: 'Privacy Policy, Terms & Conditions, Refund Policy, and SMS Consent stay public and easy to review.',
-  },
-];
-
-const screenshotCards = [
-  {
-    label: 'Leads list',
-    title: 'Recovered leads prioritized for callback',
-    description: 'See new leads, urgency, location, and follow-up status in one clean queue.',
-  },
-  {
-    label: 'Conversation detail',
-    title: 'Full SMS thread with quick follow-up actions',
-    description: 'Read the conversation, confirm what the caller needs, and move the lead forward fast.',
-  },
-  {
-    label: 'Business settings',
-    title: 'Activation checklist, routing, and owner alerts in one place',
-    description: 'Keep routing, owner alerts, and launch status visible before your team depends on it.',
-  },
-];
-
-const planTeasers = [
-  {
-    name: 'Starter',
-    description: 'Start turning missed calls into real opportunities with one included business texting number and less admin work.',
-  },
-  {
-    name: 'Growth',
-    description: 'Handle more missed-call opportunities and keep follow-up clean as your team gets busier.',
-  },
-  {
-    name: 'Agency / Multi-location',
-    description: 'Hands-on rollout planning for teams covering multiple brands or locations.',
-  },
-];
-
-const onboardingSteps = [
-  'We provision your business texting line and connect routing so missed callers are covered fast.',
-  'We confirm the first text and lead questions before live traffic starts.',
-  'We verify owner notifications and run a missed-call test with you before go-live.',
+const trustLinks = [
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/refund', label: 'Refund' },
+  { href: '/privacy', label: 'Privacy' },
+  { href: '/terms', label: 'Terms' },
+  { href: '/sms-consent', label: 'SMS Consent' },
+  { href: '/contact', label: 'Contact' },
 ];
 
 export default function LandingPage() {
@@ -134,99 +54,68 @@ export default function LandingPage() {
       <main>
         <section className="border-b bg-gradient-to-b from-background via-background to-muted/30">
           <div className="container grid gap-10 py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-24">
-            <section className="space-y-8">
+            <section className="space-y-6">
+              <Badge variant="outline">14-day pilot with white-glove setup</Badge>
               <div className="space-y-4">
-                <Badge variant="outline">Built for service businesses that lose jobs to missed calls</Badge>
-                <div className="space-y-4">
-                  <h1 className="max-w-4xl text-4xl font-semibold tracking-tight sm:text-5xl">
-                    Stop losing jobs from missed calls
-                  </h1>
-                  <p className="max-w-2xl text-lg text-muted-foreground">
-                    CallbackCloser texts missed callers instantly, qualifies them, and sends you a ready-to-close lead.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Link className={buttonVariants({ size: 'lg' })} href={PUBLIC_START_FREE_PILOT_PATH}>
-                    Start 14-day pilot
-                  </Link>
-                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/simulator">
-                    Try the simulator
-                  </Link>
-                  <Link className={buttonVariants({ size: 'lg', variant: 'ghost' })} href="/demo">
-                    See demo
-                  </Link>
-                </div>
-                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                  <span className="rounded-full border bg-card px-3 py-1">Reply in seconds</span>
-                  <span className="rounded-full border bg-card px-3 py-1">Recover more jobs</span>
-                  <span className="rounded-full border bg-card px-3 py-1">Ready-to-close leads</span>
-                  <span className="rounded-full border bg-card px-3 py-1">Less admin chasing</span>
-                </div>
-                <p className="text-base font-medium text-foreground">Close one extra job and this can pay for itself.</p>
+                <h1 className="max-w-4xl text-4xl font-semibold tracking-tight sm:text-5xl">
+                  Turn missed calls into qualified leads automatically
+                </h1>
+                <p className="max-w-2xl text-lg text-muted-foreground">
+                  CallbackCloser texts missed callers in seconds, collects the job details, and sends you a ready-to-call lead summary.
+                </p>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  Start 14-day pilot creates a new account or takes an existing user to the right next step automatically.
-                  Founder-operated customer pilot setup stays separate in the admin new-business flow.
+                  Start a 14-day pilot. We help set up your missed-call recovery flow and notify you when it is ready.
                 </p>
               </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {roiPoints.map((point) => (
-                  <div key={point.title} className="rounded-2xl border bg-card/85 p-4 shadow-sm">
-                    <p className="font-medium">{point.title}</p>
-                    <p className="mt-2 text-sm text-muted-foreground">{point.description}</p>
-                  </div>
-                ))}
+              <div className="flex flex-wrap gap-3">
+                <Link className={buttonVariants({ size: 'lg' })} href="/simulator">
+                  Try the missed-call simulator
+                </Link>
+                <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href={PUBLIC_START_FREE_PILOT_PATH}>
+                  Start 14-day pilot
+                </Link>
+              </div>
+              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                <span className="rounded-full border bg-card px-3 py-1">Reply in seconds</span>
+                <span className="rounded-full border bg-card px-3 py-1">Qualified before callback</span>
+                <span className="rounded-full border bg-card px-3 py-1">White-glove setup</span>
+                <span className="rounded-full border bg-card px-3 py-1">Live dashboard when ready</span>
               </div>
             </section>
 
             <Card className="overflow-hidden border-primary/20 bg-card/95 shadow-lg">
-              <CardHeader className="border-b bg-gradient-to-r from-primary/10 via-background to-secondary/40">
-                <CardTitle>What you get back</CardTitle>
-                <CardDescription>Faster response, fewer cold leads, and a clearer path to closing the job.</CardDescription>
+              <CardHeader className="border-b bg-gradient-to-r from-primary/10 via-background to-secondary/30">
+                <CardTitle>What the owner sees</CardTitle>
+                <CardDescription>A short missed-call recovery flow that ends with a ready-to-call lead.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 p-6 text-sm">
-                <div className="rounded-2xl border bg-muted/40 p-4">
+                <div className="rounded-2xl border bg-muted/30 p-4">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="font-medium">2:14 PM</p>
                     <Badge variant="outline">Missed call</Badge>
                   </div>
-                  <p className="text-muted-foreground">Homeowner calls about same-day AC repair while your techs are on jobs.</p>
+                  <p className="text-muted-foreground">A homeowner calls while your team is on jobs.</p>
                 </div>
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="font-medium">2:14 PM</p>
-                    <Badge variant="secondary">Auto-text sent</Badge>
-                  </div>
-                  <p className="text-muted-foreground">
-                    CallbackCloser replies right away so the customer does not disappear before you can get back to them.
-                  </p>
-                </div>
-                <div className="rounded-2xl border bg-muted/40 p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="font-medium">2:16 PM</p>
-                    <Badge variant="secondary">Lead qualified</Badge>
-                  </div>
-                  <p className="text-muted-foreground">
-                    The job type, urgency, ZIP, and callback timing come in before you even make the next call.
-                  </p>
+                  <p className="font-medium">Customer reply</p>
+                  <p className="mt-2 text-muted-foreground">“Repair. Today. John, Knoxville. ASAP.”</p>
                 </div>
                 <div className="rounded-2xl border border-accent/40 bg-accent/20 p-4">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="font-medium">2:16 PM</p>
-                    <Badge variant="success">Owner alert sent</Badge>
+                    <p className="font-medium">Owner alert</p>
+                    <Badge variant="success">Qualified lead</Badge>
                   </div>
-                  <p className="font-medium">Ready-to-close lead</p>
+                  <p className="font-medium">John · Repair · Today · Knoxville · ASAP</p>
                   <p className="mt-2 text-muted-foreground">
-                    AC repair, urgent today, ZIP 78660, asked for an afternoon callback. Your team can call back ready to book the job, not hunt for details.
+                    CallbackCloser hands off a clear summary so the callback can focus on booking the job instead of hunting for details.
                   </p>
                 </div>
-                <div className="rounded-2xl border bg-background/80 p-4">
-                  <p className="font-medium">Show the product in 30 seconds</p>
-                  <p className="mt-2 text-muted-foreground">
-                    Open the public demo to show the missed-call follow-up, owner alert, and dashboard handoff without login or setup.
-                  </p>
-                  <Link className={buttonVariants({ className: 'mt-4' })} href="/demo">
-                    Open public demo
+                <div className="flex flex-wrap gap-3">
+                  <Link className={buttonVariants()} href="/simulator">
+                    Run the simulator
+                  </Link>
+                  <Link className={buttonVariants({ variant: 'outline' })} href="/demo">
+                    See the product story
                   </Link>
                 </div>
               </CardContent>
@@ -234,187 +123,91 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="border-y bg-muted/20">
-          <div className="container space-y-6 py-16">
-            <div className="max-w-2xl space-y-3">
-              <Badge variant="outline">The real problem</Badge>
-              <h2 className="text-3xl font-semibold tracking-tight">Most missed calls are not just missed calls</h2>
-              <p className="text-muted-foreground">
-                They are missed estimates, missed repairs, missed installs, and missed revenue you never get a clean chance to win back.
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {painPoints.map((point) => (
-                <Card key={point.title} className="bg-card/90">
-                  <CardHeader>
-                    <CardTitle>{point.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">{point.description}</CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="container space-y-6 py-16" id="how-it-works">
+        <section className="container space-y-6 py-16">
           <div className="max-w-2xl space-y-3">
-            <Badge variant="outline">Simple follow-up</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight">What happens when you miss a call</h2>
+            <Badge variant="outline">How it works</Badge>
+            <h2 className="text-3xl font-semibold tracking-tight">A simple missed-call recovery flow built for service businesses</h2>
             <p className="text-muted-foreground">
-              CallbackCloser keeps the handoff simple so you can focus on calling back the right lead and closing the work.
+              The goal is straightforward: keep the customer engaged, qualify the request quickly, and get the owner to the callback with context.
             </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {workflowSteps.map((step, index) => (
-              <Card key={step.title} className="bg-card/85">
+            {flowSteps.map((step) => (
+              <Card key={step.title} className="bg-card/90">
                 <CardHeader>
-                  <CardDescription>Step {index + 1}</CardDescription>
                   <CardTitle>{step.title}</CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">{step.description}</CardContent>
+                <CardContent className="text-sm text-muted-foreground">{step.detail}</CardContent>
               </Card>
             ))}
           </div>
         </section>
 
-        <section className="border-y bg-muted/20" id="proof">
-          <div className="container space-y-8 py-16">
-            <div className="max-w-2xl space-y-3">
-              <Badge variant="outline">Trust and proof</Badge>
-              <h2 className="text-3xl font-semibold tracking-tight">Proof that missed calls can still turn into paying work</h2>
-              <p className="text-muted-foreground">
-                The public site should make the operational value obvious: faster response, cleaner handoff, and trust pages that are
-                easy to verify before a business ever goes live.
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {proofStats.map((stat) => (
-                <Card key={stat.label} className="bg-card/90">
-                  <CardHeader>
-                    <CardDescription>{stat.label}</CardDescription>
-                    <CardTitle className="text-2xl">{stat.value}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">{stat.detail}</CardContent>
-                </Card>
-              ))}
-            </div>
-
-            <Card className="border-primary/20 bg-gradient-to-r from-card via-card to-primary/5">
+        <section className="border-y bg-muted/20">
+          <div className="container grid gap-6 py-16 lg:grid-cols-[0.95fr_1.05fr]">
+            <Card className="bg-card/95">
               <CardHeader>
-                <CardTitle>White-glove pilot onboarding</CardTitle>
-                <CardDescription>Hands-on setup so your missed calls are covered fast and the first test goes cleanly.</CardDescription>
+                <CardTitle>Owner alert preview</CardTitle>
+                <CardDescription>The handoff is short, practical, and ready for a callback.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  {onboardingSteps.map((step, index) => (
-                    <div key={step} className="rounded-2xl border bg-background/80 p-4">
-                      <p className="font-medium text-foreground">
-                        {index + 1}. {step}
-                      </p>
-                    </div>
-                  ))}
-                  <p>
-                    We help you get live fast, cover the missed-call gap, and confirm the first real handoff before your team depends on it.
-                  </p>
-                </div>
-                <div className="rounded-2xl border bg-background/80 p-5 text-sm text-muted-foreground">
-                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Launch standard</p>
-                  <p className="mt-3 text-lg font-medium text-foreground">
-                    Every rollout is built to give the business a managed texting line, visible trust pages, and a clean first test call.
-                  </p>
-                  <div className="mt-4 space-y-2">
-                  <p>- One business texting number is included in the base service.</p>
-                    <p>- SMS Consent, Privacy Policy, Refund, and Terms &amp; Conditions pages stay public before activation.</p>
-                    <p>- Owner alerts and callback summaries are verified before launch.</p>
-                  </div>
-                </div>
+              <CardContent className="rounded-3xl border bg-background/90 p-6 font-mono text-sm leading-7">
+                <p>Hot missed-call lead</p>
+                <p className="mt-4">Name: John</p>
+                <p>Service: Repair</p>
+                <p>Urgency: Today</p>
+                <p>Location: Knoxville</p>
+                <p>Callback: ASAP</p>
+                <p className="mt-4">Call now: (555) 123-4567</p>
+                <p>View lead: /app/leads/demo</p>
               </CardContent>
             </Card>
+
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <Badge variant="outline">Pilot offer</Badge>
+                <h2 className="text-3xl font-semibold tracking-tight">Start with a 14-day pilot</h2>
+                <p className="text-muted-foreground">
+                  We&apos;re onboarding a small number of local service businesses with hands-on setup. We set up your missed-call recovery flow, verify the first test, and notify you when your account is ready.
+                </p>
+              </div>
+
+              <Card className="border-primary/20 bg-primary/5">
+                <CardHeader>
+                  <CardTitle>Early pilot pricing</CardTitle>
+                  <CardDescription>
+                    Early pilot pricing starts at $50 for the first 14 days to cover setup, texting, and usage while we prove the system can recover leads for your business.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  {pilotIncludes.map((item) => (
+                    <p key={item}>- {item}</p>
+                  ))}
+                  <div className="pt-4">
+                    <Link className={buttonVariants()} href={PUBLIC_START_FREE_PILOT_PATH}>
+                      Start 14-day pilot
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </section>
 
-        <section className="container space-y-8 py-16" id="product-preview">
+        <section className="container space-y-4 py-16">
+          <Badge variant="outline">Trust</Badge>
           <div className="max-w-2xl space-y-3">
-            <Badge variant="outline">Product preview</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight">See how missed calls turn into follow-up-ready leads</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">Everything important stays visible</h2>
             <p className="text-muted-foreground">
-              A quick look at the product surfaces that keep missed-call follow-up organized for the owner and the office.
+              Trust pages stay public and easy to review, without taking over the main product story.
             </p>
           </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            {screenshotCards.map((card) => (
-              <Card key={card.label} className="overflow-hidden bg-card/90">
-                <div className="aspect-[4/3] border-b bg-[linear-gradient(135deg,rgba(234,88,12,0.08),rgba(13,148,136,0.12),rgba(255,255,255,0.85))] p-6">
-                  <div className="flex h-full flex-col justify-between rounded-2xl border border-dashed border-foreground/20 bg-background/70 p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <Badge variant="outline">{card.label}</Badge>
-                      <span className="text-xs text-muted-foreground">Inside CallbackCloser</span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-3 w-2/3 rounded-full bg-muted" />
-                      <div className="h-3 w-5/6 rounded-full bg-muted" />
-                      <div className="h-20 rounded-2xl border bg-card/90" />
-                    </div>
-                  </div>
-                </div>
-                <CardHeader>
-                  <CardTitle>{card.title}</CardTitle>
-                  <CardDescription>{card.description}</CardDescription>
-                </CardHeader>
-              </Card>
+          <div className="flex flex-wrap gap-3 text-sm">
+            {trustLinks.map((link) => (
+              <Link key={link.href} className={buttonVariants({ size: 'sm', variant: 'outline' })} href={link.href}>
+                {link.label}
+              </Link>
             ))}
-          </div>
-        </section>
-
-        <section className="border-t bg-background">
-          <div className="container grid gap-6 py-16 lg:grid-cols-[1.05fr_0.95fr]">
-            <Card className="bg-card/90">
-              <CardHeader>
-                <CardTitle>Simple plan choices</CardTitle>
-                <CardDescription>Visitors should understand the offer in under 20 seconds.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 text-sm text-muted-foreground">
-                {planTeasers.map((plan) => (
-                  <div key={plan.name} className="rounded-2xl border bg-background/80 p-4">
-                    <p className="font-medium text-foreground">{plan.name}</p>
-                    <p className="mt-2">{plan.description}</p>
-                  </div>
-                ))}
-                <div className="pt-2">
-                  <Link className={buttonVariants({ variant: 'outline' })} href="/pricing">
-                    Start capturing missed leads
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card/90">
-              <CardHeader>
-                <CardTitle>Compliance stays visible</CardTitle>
-                <CardDescription>Trust language remains present without dominating the pitch.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p>
-                  CallbackCloser keeps pricing, refund, Privacy Policy, Terms &amp; Conditions, contact, and SMS Consent pages visible
-                  before a business ever starts a pilot.
-                </p>
-                <p>
-                  STOP, START, and HELP support remain part of the product flow, and the public consent page still explains message frequency and message/data rates.
-                </p>
-                <div className="flex flex-wrap gap-3 pt-2">
-                  <Link className={buttonVariants({ size: 'sm' })} href="/sms-consent">
-                    Review SMS consent
-                  </Link>
-                  <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/privacy">
-                    Privacy Policy &amp; Terms
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </section>
       </main>

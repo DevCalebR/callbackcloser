@@ -20,7 +20,7 @@ export function PublicSiteFooter() {
         <div className="space-y-1">
           <p className="font-medium text-foreground">CallbackCloser</p>
           <p>Stop missed calls from turning into lost jobs with fast follow-up and clearer owner handoff.</p>
-          <p>White-glove onboarding plus visible pricing, contact, refund, privacy, terms, and SMS consent trust pages.</p>
+          <p>Try the simulator, start a 14-day pilot, and review pricing, contact, refund, privacy, terms, and SMS consent before your workspace goes live.</p>
           <p>
             Contact:{' '}
             <a className="underline underline-offset-4" href="mailto:support@callbackcloser.com">
