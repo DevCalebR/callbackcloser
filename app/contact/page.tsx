@@ -4,7 +4,7 @@ import { PublicSiteFooter } from '@/components/public-site-footer';
 import { PublicSiteNav } from '@/components/public-site-nav';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
+import { PUBLIC_SIGN_IN_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const outreachInputs = [
   'Business name and service type',
@@ -49,10 +49,10 @@ export default function ContactPage() {
               <p>Founder/operator customer pilot setup is separate from public signup and stays inside the admin new-business flow.</p>
               <div className="flex flex-wrap gap-3 pt-2">
                 <Link className={buttonVariants()} href={PUBLIC_START_FREE_PILOT_PATH}>
-                  Start pilot onboarding
+                  Start 14-day pilot
                 </Link>
-                <Link className={buttonVariants({ variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
-                  Create account
+                <Link className={buttonVariants({ variant: 'outline' })} href={PUBLIC_SIGN_IN_PATH}>
+                  Sign in
                 </Link>
                 <Link className={buttonVariants({ variant: 'ghost' })} href="/pricing">
                   View pricing

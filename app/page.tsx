@@ -5,7 +5,7 @@ import { PublicSiteNav } from '@/components/public-site-nav';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
+import { PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const roiPoints = [
   {
@@ -147,13 +147,13 @@ export default function LandingPage() {
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Link className={buttonVariants({ size: 'lg' })} href={PUBLIC_START_FREE_PILOT_PATH}>
-                    Start Free Pilot
+                    Start 14-day pilot
                   </Link>
-                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
-                    Create Account
+                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/simulator">
+                    Try the simulator
                   </Link>
                   <Link className={buttonVariants({ size: 'lg', variant: 'ghost' })} href="/demo">
-                    See Demo
+                    See demo
                   </Link>
                 </div>
                 <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
@@ -164,7 +164,7 @@ export default function LandingPage() {
                 </div>
                 <p className="text-base font-medium text-foreground">Close one extra job and this can pay for itself.</p>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  Start Free Pilot creates a new account or takes an existing user to the right next step automatically.
+                  Start 14-day pilot creates a new account or takes an existing user to the right next step automatically.
                   Founder-operated customer pilot setup stays separate in the admin new-business flow.
                 </p>
               </div>

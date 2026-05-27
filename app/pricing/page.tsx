@@ -5,7 +5,7 @@ import { PublicSiteNav } from '@/components/public-site-nav';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PUBLIC_CREATE_ACCOUNT_PATH, PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
+import { PUBLIC_START_FREE_PILOT_PATH } from '@/lib/public-auth-routing';
 
 const pricingPlans = [
   {
@@ -89,7 +89,7 @@ export default function PricingPage() {
                     </Link>
                   ) : (
                     <Link className={buttonVariants()} href={PUBLIC_START_FREE_PILOT_PATH}>
-                      Start Free Pilot
+                      Start 14-day pilot
                     </Link>
                   )}
                 </div>
@@ -123,10 +123,10 @@ export default function PricingPage() {
               <p>STOP, START, and HELP handling remain part of the live messaging flow, and the consent page stays public.</p>
               <p>Businesses remain responsible for lawful texting practices and consent requirements in their market.</p>
               <div className="flex flex-wrap gap-3 pt-2">
-                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={PUBLIC_CREATE_ACCOUNT_PATH}>
-                  Create account
+                <Link className={buttonVariants({ size: 'sm' })} href={PUBLIC_START_FREE_PILOT_PATH}>
+                  Start 14-day pilot
                 </Link>
-                <Link className={buttonVariants({ size: 'sm' })} href="/sms-consent">
+                <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/sms-consent">
                   Review SMS consent
                 </Link>
                 <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/contact">

@@ -55,12 +55,13 @@ test('clerk auth surfaces use explicit path routing and fallback redirects', () 
   assert.match(signUpPage, /routing="path"/);
   assert.match(signUpPage, /fallbackRedirectUrl=\{DEFAULT_CLERK_AFTER_AUTH_URL\}/);
   assert.match(signUpPage, /<SignUp/);
-  assert.match(signUpPage, /Create your account and start pilot onboarding/);
+  assert.match(signUpPage, /Create your account and start your 14-day pilot/);
   assert.match(signUpPage, /path=\{DEFAULT_CLERK_SIGN_UP_URL\}/);
   assert.match(signUpPage, /signInUrl=\{DEFAULT_CLERK_SIGN_IN_URL\}/);
   assert.match(signUpPage, /hasRequiredValidClerkEnv/);
   assert.match(signUpPage, /Authentication is temporarily unavailable\./);
   assert.match(signUpPage, /resolveSignedInAppDestination/);
+  assert.match(signUpPage, /Start 14-day pilot/);
   assert.match(signUpPage, /Founder-operated customer pilot setup is separate/i);
   assert.match(pilotEntryPage, /resolvePublicPilotDestination/);
 });

@@ -15,15 +15,15 @@ import { resolveSignedInAppDestination } from '@/lib/public-auth-routing';
 function getIntentCopy(intent: string | undefined) {
   if (intent === 'pilot') {
     return {
-      label: 'Start Free Pilot',
-      title: 'Create your account and start pilot onboarding',
+      label: 'Start 14-day pilot',
+      title: 'Create your account and start your 14-day pilot',
       detail:
         'This path is for a business owner creating a new CallbackCloser account. If you are already signed in, CallbackCloser will send you to onboarding, your dashboard, or the admin new-business flow based on your role.',
     };
   }
 
   return {
-    label: 'Create Account',
+    label: 'Create account',
     title: 'Create your CallbackCloser account',
     detail:
       'Create a new owner account here. Founder-operated customer pilot setup is separate and stays inside the admin new-business flow.',
