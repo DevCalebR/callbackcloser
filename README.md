@@ -372,7 +372,7 @@ What it demonstrates:
 
 1. A missed call is detected
 2. CallbackCloser sends the first recovery text
-3. The caller completes the short intake flow
+3. The caller completes the full intake flow: service, urgency, name plus location, callback time
 4. The lead is qualified and summarized
 5. Owner delivery previews are generated
 6. The dashboard-ready lead card is shown
@@ -383,18 +383,20 @@ Simulator safety:
 - No real SMS is sent and no Twilio calls are made
 - Public visitor input stays inside the browser demo and does not create customer-facing records
 - Caller numbers are masked in the UI before the owner-alert preview is shown
+- The public `/simulator` experience runs entirely in the browser and does not require `SIMULATOR_BUSINESS_ID` or a configured demo business
 
 Legacy internal simulator backend:
 
 - The repo still includes isolated simulator-record models and env flags for internal/admin demo tooling
 - Those flags are not required for the current public `/simulator` experience
+- The optional env-backed simulator helpers remain separate from the public route and can still be used for internal preview workflows if needed
 
 Creating a dedicated simulator workspace:
 
 - Open `/admin`
 - Use **Create Demo Business**
 - The action creates or refreshes a dedicated business named `CallbackCloser Demo`
-- The success banner shows the business ID to use for `SIMULATOR_BUSINESS_ID`
+- The success banner shows the business ID to use for legacy internal simulator workflows if you still need an isolated backend-assisted demo run
 - The demo workspace uses a synthetic owner account so it does not replace a real customer workspace tied to a Clerk user
 
 ## Production Setup (Vercel)

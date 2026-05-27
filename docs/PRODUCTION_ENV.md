@@ -68,7 +68,8 @@ The app now validates required server env vars at runtime in production via `lib
 - `NEXT_PUBLIC_APP_URL` is the canonical value and should be set explicitly. If it is missing/invalid, the app can temporarily fall back to Vercel system env vars (`VERCEL_URL` / `VERCEL_PROJECT_PRODUCTION_URL`) to avoid auth-page crashes, but webhook/redirect behavior should still use an explicit `NEXT_PUBLIC_APP_URL`.
 - `/admin` access depends on either `FOUNDER_CLERK_USER_ID` or `ADMIN_EMAIL_ALLOWLIST`; do not leave admin authorization implicit.
 - Owner email alerts are optional, but if you intend to advertise email delivery you must set both `RESEND_API_KEY` and `CALLBACKCLOSER_FROM_EMAIL`.
-- The legacy simulator backend should only point at a dedicated demo workspace via `SIMULATOR_BUSINESS_ID`.
+- The public `/simulator` sales demo is now self-contained and safe to render without Twilio or demo-workspace configuration.
+- The legacy env-backed simulator helpers are optional and should only point at a dedicated demo workspace via `SIMULATOR_BUSINESS_ID`.
 
 ## Vercel: Preview vs Production
 

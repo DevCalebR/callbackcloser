@@ -2,63 +2,58 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  advancePublicSimulatorSession,
   applyPublicSimulatorReply,
+  buildPublicSimulatorLeadSummary,
   buildPublicSimulatorOwnerAlert,
   canReplyToPublicSimulator,
-  getPublicSimulatorQuickReplies,
-  maskPublicSimulatorPhone,
-  startPublicSimulatorSession,
+  createPublicSimulatorSession,
+  getPublicSimulatorReplyOptions,
 } from '@/lib/public-simulator';
 
-test('public simulator starts with a masked private run and auto-advances into the first text', () => {
-  const startedSession = startPublicSimulatorSession('+1 (865) 555-0148');
-  assert.ok(startedSession);
-  assert.equal(startedSession.stage, 'started');
-  assert.equal(startedSession.callerPhoneMasked, '(***) ***-0148');
-  assert.match(startedSession.transcript[0]?.body ?? '', /No real SMS will be sent/);
+test('public simulator masks the caller number and opens on the service prompt', () => {
+  const session = createPublicSimulatorSession('+1 (865) 555-0148');
 
-  const missedCallSession = advancePublicSimulatorSession(startedSession);
-  assert.equal(missedCallSession.stage, 'missed_call_received');
-  assert.match(missedCallSession.transcript[1]?.body ?? '', /missed a call/);
-
-  const firstMessageSession = advancePublicSimulatorSession(missedCallSession);
-  assert.equal(firstMessageSession.stage, 'first_message_shown');
-  assert.match(firstMessageSession.transcript[2]?.body ?? '', /What do you need help with today/);
-  assert.deepEqual(getPublicSimulatorQuickReplies(firstMessageSession.stage), ['Repair', 'Install', 'Maintenance', 'Emergency']);
-  assert.equal(canReplyToPublicSimulator(firstMessageSession.stage), true);
+  assert.equal(session.stage, 'waiting_for_service');
+  assert.equal(session.lead.customerPhone, '(***) ***-0148');
+  assert.match(session.messages[0]?.body ?? '', /Missed call from \(\*\*\*\) \*\*\*-0148/);
+  assert.match(session.messages[1]?.body ?? '', /What can we help you with today/i);
+  assert.equal(canReplyToPublicSimulator(session.stage), true);
 });
 
-test('public simulator captures service and urgency, then prepares the owner alert preview', () => {
-  const startedSession = startPublicSimulatorSession('+1 (865) 555-0199');
-  assert.ok(startedSession);
+test('public simulator keeps moving through urgency, name plus location, and callback time', () => {
+  let session = createPublicSimulatorSession('+1 (865) 555-0199');
+  session = applyPublicSimulatorReply(session, 'AC repair, the unit is not cooling');
 
-  const firstMessageSession = advancePublicSimulatorSession(advancePublicSimulatorSession(startedSession));
-  const serviceCapturedSession = applyPublicSimulatorReply(firstMessageSession, 'AC repair, the unit is not cooling');
-  assert.equal(serviceCapturedSession.stage, 'service_captured');
-  assert.equal(serviceCapturedSession.selectedService, 'Repair');
-  assert.match(serviceCapturedSession.issueSummary ?? '', /AC repair, the unit is not cooling/i);
-  assert.deepEqual(getPublicSimulatorQuickReplies(serviceCapturedSession.stage), ['Today', 'This week', 'Just getting a quote']);
+  assert.equal(session.stage, 'waiting_for_urgency');
+  assert.deepEqual(
+    getPublicSimulatorReplyOptions(session.stage).map((option) => option.value),
+    ['Emergency', 'Today', 'This week', 'Just getting a quote'],
+  );
 
-  const urgencyCapturedSession = applyPublicSimulatorReply(serviceCapturedSession, 'Today');
-  assert.equal(urgencyCapturedSession.stage, 'urgency_captured');
-  assert.equal(urgencyCapturedSession.selectedUrgency, 'Today');
+  session = applyPublicSimulatorReply(session, 'Today');
+  assert.equal(session.stage, 'waiting_for_contact_location');
+  assert.match(session.messages.at(-1)?.body ?? '', /what name should we put on the request/i);
 
-  const ownerAlertReadySession = advancePublicSimulatorSession(urgencyCapturedSession);
-  assert.equal(ownerAlertReadySession.stage, 'owner_alert_ready');
+  session = applyPublicSimulatorReply(session, 'Jamie Carter, Knoxville');
+  assert.equal(session.stage, 'waiting_for_callback_time');
+  assert.equal(session.lead.customerName, 'Jamie Carter');
+  assert.equal(session.lead.location, 'Knoxville');
 
-  const completedSession = advancePublicSimulatorSession(ownerAlertReadySession);
-  assert.equal(completedSession.stage, 'completed');
-  assert.equal(completedSession.completed, true);
+  session = applyPublicSimulatorReply(session, 'Afternoon');
+  assert.equal(session.stage, 'qualified');
+  assert.equal(session.qualified, true);
 
-  const ownerAlert = buildPublicSimulatorOwnerAlert(completedSession);
-  assert.match(ownerAlert.subject, /Northside Home Services: Repair lead ready/);
-  assert.match(ownerAlert.body, /Demo only - no real SMS sent/);
-  assert.match(ownerAlert.body, /\(\*\*\*\) \*\*\*-0199/);
-});
+  const summary = buildPublicSimulatorLeadSummary(session);
+  const ownerAlert = buildPublicSimulatorOwnerAlert(session);
 
-test('public simulator phone masking avoids showing the full caller number', () => {
-  assert.equal(maskPublicSimulatorPhone('+18655550148'), '(***) ***-0148');
-  assert.equal(maskPublicSimulatorPhone('5550148'), '***-0148');
-  assert.equal(maskPublicSimulatorPhone(''), 'Private demo caller');
+  assert.equal(summary.phone, '(***) ***-0199');
+  assert.equal(summary.service, 'Repair');
+  assert.equal(summary.urgency, 'Today');
+  assert.equal(summary.location, 'Knoxville');
+  assert.equal(summary.callbackTime, 'Afternoon');
+  assert.equal(summary.status, 'Ready for callback');
+  assert.match(ownerAlert, /🔥 Hot missed-call lead/);
+  assert.match(ownerAlert, /Name: Jamie Carter/);
+  assert.match(ownerAlert, /Callback: Afternoon/);
+  assert.match(ownerAlert, /\(\*\*\*\) \*\*\*-0199/);
 });
