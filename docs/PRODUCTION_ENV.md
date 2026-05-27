@@ -34,9 +34,9 @@ This project uses `NEXT_PUBLIC_APP_URL` as the single canonical app origin for s
 | `DEBUG_ENV_ENDPOINT_TOKEN` | Server-only | Optional | Vercel | Protects `/api/debug/env` in production. If unset, the endpoint returns `404` in production. |
 | `PORTFOLIO_DEMO_MODE` | Server-only | Optional | Local / Vercel | Enables demo data/auth bypass mode for portfolio/demo screenshots. Keep disabled in production unless intentionally using demo mode. |
 | `ALLOW_PRODUCTION_DEMO_MODE` | Server-only | Optional (break-glass only) | Vercel | Required only when intentionally running demo mode in production. If unset while `PORTFOLIO_DEMO_MODE` is enabled in production, startup is blocked. |
-| `ENABLE_PUBLIC_MISSED_CALL_SIMULATOR` | Server-only | Optional | Vercel | Enables the public `/simulator` route. Keep disabled unless the simulator business is intentionally configured. |
-| `SIMULATOR_BUSINESS_ID` | Server-only | Optional | Vercel | Business record used by the public simulator. Must point to an isolated demo workspace, never a real customer business. |
-| `ENABLE_PUBLIC_SIMULATOR_REAL_SMS` | Server-only | Optional | Vercel | Allows the simulator to send real caller-side SMS from the simulator business number when a non-placeholder texting line exists. Keep off by default. |
+| `ENABLE_PUBLIC_MISSED_CALL_SIMULATOR` | Server-only | Optional | Vercel | Legacy internal simulator toggle. The public `/simulator` page no longer depends on this env var. |
+| `SIMULATOR_BUSINESS_ID` | Server-only | Optional | Vercel | Legacy internal simulator business ID. If used, it must point to an isolated demo workspace, never a real customer business. |
+| `ENABLE_PUBLIC_SIMULATOR_REAL_SMS` | Server-only | Optional | Vercel | Legacy internal simulator flag for real caller-side SMS. Keep off by default. The public `/simulator` page does not require it. |
 | `RATE_LIMIT_WINDOW_MS` | Server-only | Optional | Vercel | Shared rate-limit window in milliseconds. Default `60000`. |
 | `RATE_LIMIT_TWILIO_AUTH_MAX` | Server-only | Optional | Vercel | Max Twilio webhook requests per window for valid/authorized traffic. Default `240`. |
 | `RATE_LIMIT_TWILIO_UNAUTH_MAX` | Server-only | Optional | Vercel | Max Twilio webhook requests per window for unauthorized traffic. Default `40`. |
@@ -68,7 +68,8 @@ The app now validates required server env vars at runtime in production via `lib
 - `NEXT_PUBLIC_APP_URL` is the canonical value and should be set explicitly. If it is missing/invalid, the app can temporarily fall back to Vercel system env vars (`VERCEL_URL` / `VERCEL_PROJECT_PRODUCTION_URL`) to avoid auth-page crashes, but webhook/redirect behavior should still use an explicit `NEXT_PUBLIC_APP_URL`.
 - `/admin` access depends on either `FOUNDER_CLERK_USER_ID` or `ADMIN_EMAIL_ALLOWLIST`; do not leave admin authorization implicit.
 - Owner email alerts are optional, but if you intend to advertise email delivery you must set both `RESEND_API_KEY` and `CALLBACKCLOSER_FROM_EMAIL`.
-- The public simulator is optional and should only point at a dedicated demo workspace via `SIMULATOR_BUSINESS_ID`.
+- The public `/simulator` sales demo is now self-contained and safe to render without Twilio or demo-workspace configuration.
+- The legacy env-backed simulator helpers are optional and should only point at a dedicated demo workspace via `SIMULATOR_BUSINESS_ID`.
 
 ## Vercel: Preview vs Production
 

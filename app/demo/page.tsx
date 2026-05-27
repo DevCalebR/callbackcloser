@@ -57,6 +57,9 @@ export default function DemoPage() {
                   <Link className={buttonVariants({ size: 'lg' })} href="/contact">
                     Want this running on your number?
                   </Link>
+                  <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="/simulator">
+                    Try interactive simulator
+                  </Link>
                   <Link className={buttonVariants({ size: 'lg', variant: 'outline' })} href="#demo-workspace">
                     See it in action
                   </Link>
