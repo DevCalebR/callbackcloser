@@ -44,8 +44,8 @@ test('managed setup handoff is wired through customer and admin surfaces', () =>
   assert.match(auth, /getOrCreateOwnedBusinessForClerkUser/);
   assert.match(appLayout, /CustomerSetupWaitingPage/);
   assert.match(appLayout, /getCustomerWorkspaceNotice/);
-  assert.match(adminHome, /Pending setup/);
-  assert.match(adminHome, /In setup/);
+  assert.match(adminHome, /Create new business/);
+  assert.match(adminHome, /Business triage board/);
   assert.match(adminHome, /New public pilot signups land here waiting for founder setup/i);
   assert.match(adminDetail, /This business is waiting for founder setup/);
   assert.match(adminActions, /await sendCustomerReadyNotification\(business\.id\)/);

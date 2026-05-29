@@ -18,17 +18,17 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   const appLayout = read('app/app/layout.tsx');
 
   assert.match(adminHome, /Operator control panel/);
-  assert.match(adminHome, /Fast onboard/);
+  assert.match(adminHome, /Create new business/);
   assert.match(adminHome, /Create business workspace/);
-  assert.match(adminHome, /Founder reset/);
+  assert.match(adminHome, /Advanced founder tools/);
   assert.match(adminHome, /Delete one test\/demo business/);
   assert.match(adminHome, /Advanced founder reset: delete all current businesses/);
   assert.match(founderDeleteCard, /Delete this business/);
   assert.match(founderDeleteCard, /Type the exact business name/);
   assert.match(adminHome, /FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION/);
   assert.match(adminHome, /Business triage board/);
-  assert.match(adminHome, /Go-live blocker/);
-  assert.match(adminHome, /Test SMS/);
+  assert.match(adminHome, /Current reason/);
+  assert.match(adminHome, /Next action/);
   assert.match(adminHome, /Open customer workspace/);
   assert.match(adminHome, /Delete demo\/test business permanently/);
   assert.match(adminHome, /Type business name to permanently delete/);
@@ -74,7 +74,7 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /View support workspace snapshot/);
   assert.match(adminDetail, /canDeleteTestBusiness\(business\)/);
   assert.match(adminDetail, /getDeleteTestBusinessBlockedReason\(business\)/);
-  assert.match(adminHome, /Open blocker step/);
+  assert.match(adminHome, /Restore business/);
   assert.match(activityTimeline, /Recent activity/);
   assert.match(activityTimeline, /Show more activity/);
   assert.match(activityTimeline, /Collapse activity/);
