@@ -14,6 +14,7 @@ import {
 } from '@prisma/client';
 
 import {
+  buildAdminBusinessCardState,
   buildAdminBusinessPickerLabel,
   buildAdminOnboardingConfidence,
   buildAdminBusinessEvents,
@@ -22,7 +23,9 @@ import {
   getAdminTestSmsConfidenceState,
   getDeleteTestBusinessBlockedReason,
   matchesAdminBoardFilter,
+  matchesAdminBoardFilterState,
 } from '../lib/admin-dashboard.ts';
+import { getManagedTwilioStatusSummary } from '../lib/managed-twilio-status.ts';
 
 function createBusiness(overrides: Record<string, unknown> = {}) {
   return {
@@ -77,6 +80,96 @@ function createNotificationSettings(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function createLastIssue(overrides: Record<string, unknown> = {}) {
+  return {
+    state: 'healthy' as const,
+    tone: 'neutral' as const,
+    summary: 'No open issues recorded',
+    detail: 'Recent business events do not show an unresolved failure or blocker right now.',
+    createdAt: null,
+    categoryLabel: null,
+    statusLabel: null,
+    eventType: null,
+    remediationStepKey: null,
+    ...overrides,
+  };
+}
+
+function createTestSmsTruth(overrides: Record<string, unknown> = {}) {
+  return {
+    state: 'not_run' as const,
+    label: 'Not run',
+    tone: 'neutral' as const,
+    summary: 'No admin test SMS recorded',
+    detail: 'Run a test SMS from this page before treating delivery as proven.',
+    reason: null,
+    lastAttemptAt: null,
+    eventType: null,
+    ...overrides,
+  };
+}
+
+function createMissedCallValidation(overrides: Record<string, unknown> = {}) {
+  return {
+    state: 'not_run' as const,
+    label: 'Not run',
+    tone: 'neutral' as const,
+    summary: 'Missed-call flow not validated yet',
+    detail: 'Run one real missed call from start to finish, or record a manual confirmation note if you validated it outside this console.',
+    verifiedAt: null,
+    sourceLabel: null,
+    evidenceSummary: null,
+    relatedLeadId: null,
+    latestRelatedEventAt: null,
+    countsAsLaunchProof: false,
+    ...overrides,
+  };
+}
+
+function createCardState(params: {
+  business?: Record<string, unknown>;
+  notificationSettings?: Record<string, unknown>;
+  ownerConnected?: boolean;
+  successfulLeadCount?: number;
+  operatorEvents?: Array<{ type: string; status: OperatorEventStatus; createdAt: Date }>;
+  missedCallValidation?: Record<string, unknown>;
+  lastIssue?: Record<string, unknown>;
+}) {
+  const business = createBusiness(params.business);
+  const notificationSettings = createNotificationSettings(params.notificationSettings);
+  const nextStep = buildAdminNextStep({
+    business,
+    notificationSettings,
+    ownerConnected: params.ownerConnected ?? true,
+  });
+  const onboardingConfidence = buildAdminOnboardingConfidence({
+    business,
+    notificationSettings,
+    ownerConnected: params.ownerConnected ?? true,
+    successfulLeadCount: params.successfulLeadCount ?? 0,
+    operatorEvents: params.operatorEvents || [],
+    missedCallValidation: params.missedCallValidation ? createMissedCallValidation(params.missedCallValidation) : undefined,
+  });
+
+  return buildAdminBusinessCardState({
+    business,
+    notificationSettings,
+    ownerConnected: params.ownerConnected ?? true,
+    nextStep,
+    managedSummary: getManagedTwilioStatusSummary(business),
+    onboardingConfidence,
+    lastIssue: createLastIssue(params.lastIssue),
+    testSmsTruth: createTestSmsTruth(
+      params.operatorEvents?.some((event) => event.type === 'admin.test_sms_delivered')
+        ? { state: 'delivered', label: 'Delivered', tone: 'success', summary: 'Test SMS delivered', detail: 'Delivery confirmed.' }
+        : params.operatorEvents?.some((event) => event.type === 'admin.test_sms_failed' || event.type === 'admin.test_sms_delivery_failed')
+          ? { state: 'failed', label: 'Failed', tone: 'attention', summary: 'Test SMS failed', detail: 'Delivery failed.' }
+          : {}
+    ),
+    missedCallValidation: createMissedCallValidation(params.missedCallValidation),
+  });
+}
+
 test('next-step guidance calls out webhook recovery and live health clearly', () => {
   const webhookMissing = buildAdminNextStep({
     business: createBusiness({ twilioWebhookSyncedAt: null, managedTwilioStatus: ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION }),
@@ -97,8 +190,9 @@ test('next-step guidance calls out webhook recovery and live health clearly', ()
     ownerConnected: true,
   });
 
-  assert.equal(healthy.title, 'Business is live and healthy');
+  assert.equal(healthy.title, 'Business is live');
   assert.equal(healthy.tone, 'healthy');
+  assert.equal(healthy.actionLabel, 'No action needed');
 });
 
 test('next-step guidance stays explicit for owner setup and pending A2P review', () => {
@@ -139,7 +233,7 @@ test('next-step guidance stays explicit for owner setup and pending A2P review',
   });
 
   assert.equal(invitedOwner.title, 'Owner invitation is still pending');
-  assert.equal(invitedOwner.actionLabel, 'Review owner setup');
+  assert.equal(invitedOwner.actionLabel, 'Invite or connect owner');
 
   const pendingA2p = buildAdminNextStep({
     business: createBusiness({
@@ -216,6 +310,167 @@ test('board filters and delete guard stay conservative', () => {
     getDeleteTestBusinessBlockedReason(createBusiness({ isTestBusiness: true })),
     'Archive this business instead. Permanent delete only unlocks after archive.'
   );
+});
+
+test('business card state turns missing live proof into live-with-warnings instead of healthy', () => {
+  const state = createCardState({
+    business: {
+      provisioningStatus: BusinessProvisioningStatus.LIVE,
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+    },
+    successfulLeadCount: 0,
+    operatorEvents: [
+      {
+        type: 'admin.test_sms_delivered',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+  });
+
+  assert.equal(state.primaryState, 'live_with_warnings');
+  assert.equal(state.primaryLabel, 'Live with warnings');
+  assert.equal(state.primaryReason, 'Missed-call flow has not been fully validated.');
+  assert.equal(state.nextActionLabel, 'Validate missed-call flow');
+  assert.equal(state.badges.some((badge) => badge.label === 'Missed-call proof missing'), true);
+});
+
+test('business card state keeps a clean live business decisive', () => {
+  const state = createCardState({
+    business: {
+      provisioningStatus: BusinessProvisioningStatus.LIVE,
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+    },
+    successfulLeadCount: 1,
+    operatorEvents: [
+      {
+        type: 'admin.test_sms_delivered',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+    missedCallValidation: {
+      countsAsLaunchProof: true,
+      detail: 'Recent event sequence proves the missed-call flow reached the owner alert path.',
+    },
+  });
+
+  assert.equal(state.primaryState, 'live');
+  assert.equal(state.nextActionLabel, 'No action needed');
+});
+
+test('archived businesses stay out of active needs-attention flow and point to restore', () => {
+  const state = createCardState({
+    business: {
+      archivedAt: new Date('2026-04-16T00:00:00.000Z'),
+      provisioningStatus: BusinessProvisioningStatus.LIVE,
+    },
+    operatorEvents: [
+      {
+        type: 'admin.test_sms_failed',
+        status: OperatorEventStatus.FAILED,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+  });
+
+  assert.equal(state.primaryState, 'archived');
+  assert.equal(state.nextActionLabel, 'Restore business');
+  assert.equal(state.shouldAppearInNeedsAttention, false);
+  assert.equal(matchesAdminBoardFilterState(state, 'needs_attention'), false);
+  assert.equal(matchesAdminBoardFilterState(state, 'archived'), true);
+});
+
+test('business card state uses specific next actions for provisioning and test SMS failures', () => {
+  const provisioningFailed = createCardState({
+    business: {
+      provisioningError: 'Messaging service attach failed.',
+    },
+  });
+  assert.equal(provisioningFailed.primaryState, 'provisioning_failed');
+  assert.equal(provisioningFailed.nextActionLabel, 'Fix provisioning');
+
+  const smsFailed = createCardState({
+    business: {
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+    },
+    operatorEvents: [
+      {
+        type: 'admin.test_sms_failed',
+        status: OperatorEventStatus.FAILED,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+  });
+  assert.equal(smsFailed.nextActionLabel, 'Send test SMS');
+});
+
+test('business card badges stay deduped and capped', () => {
+  const state = createCardState({
+    business: {
+      provisioningStatus: BusinessProvisioningStatus.LIVE,
+      managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+      a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+    },
+    operatorEvents: [
+      {
+        type: 'admin.test_sms_delivered',
+        status: OperatorEventStatus.SUCCESS,
+        createdAt: new Date('2026-04-17T12:00:00.000Z'),
+      },
+    ],
+  });
+
+  const labels = state.badges.map((badge) => badge.label);
+  assert.equal(new Set(labels).size, labels.length);
+  assert.equal(labels.length <= 3, true);
+});
+
+test('state-based filters use the same card model as the board counts', () => {
+  const states = [
+    createCardState({
+      business: {
+        archivedAt: new Date('2026-04-16T00:00:00.000Z'),
+      },
+    }),
+    createCardState({
+      business: {
+        provisioningError: 'Messaging service attach failed.',
+      },
+    }),
+    createCardState({
+      business: {
+        managedTwilioStatus: ManagedTwilioStatus.CAMPAIGN_SUBMITTED,
+      },
+    }),
+    createCardState({
+      business: {
+        provisioningStatus: BusinessProvisioningStatus.LIVE,
+        managedTwilioStatus: ManagedTwilioStatus.COMPLIANT_LIVE,
+        a2pApprovedAt: new Date('2026-04-17T00:00:00.000Z'),
+      },
+      successfulLeadCount: 1,
+      operatorEvents: [
+        {
+          type: 'admin.test_sms_delivered',
+          status: OperatorEventStatus.SUCCESS,
+          createdAt: new Date('2026-04-17T12:00:00.000Z'),
+        },
+      ],
+      missedCallValidation: {
+        countsAsLaunchProof: true,
+        detail: 'Recent event sequence proves the missed-call flow reached the owner alert path.',
+      },
+    }),
+  ];
+
+  assert.equal(states.filter((state) => matchesAdminBoardFilterState(state, 'needs_attention')).length, 1);
+  assert.equal(states.filter((state) => matchesAdminBoardFilterState(state, 'pending_a2p')).length, 1);
+  assert.equal(states.filter((state) => matchesAdminBoardFilterState(state, 'archived')).length, 1);
+  assert.equal(states.filter((state) => matchesAdminBoardFilterState(state, 'live')).length, 1);
 });
 
 test('business picker labels keep the name primary and add a fast secondary identifier', () => {

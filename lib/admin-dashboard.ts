@@ -15,9 +15,11 @@ import {
 import type { TwilioWebhookSnapshot } from '@/lib/admin-provisioning-presenters';
 import { DEMO_OWNER_CLERK_ID, isTestDemoBusiness } from '@/lib/admin-test-data-reset';
 import type { AdminMissedCallValidationTruth } from '@/lib/admin-operator-proof';
+import type { AdminBusinessIssue, AdminTestSmsTruth } from '@/lib/admin-operator-visibility';
 import { getBusinessPhoneSetupGate, getPublicBusinessPhone } from '@/lib/business-phone-setup';
-import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio-status';
+import { getManagedTextingNumber, getManagedTwilioStatusSummary, type ManagedTwilioSummary } from '@/lib/managed-twilio-status';
 import { formatMessageStatus, isMessageDeliveryIssueStatus } from '@/lib/lead-presenters';
+import type { TwilioSetupStepKey } from '@/lib/twilio-setup';
 
 type DashboardBusiness = Pick<
   Business,
@@ -159,6 +161,46 @@ export type AdminOnboardingConfidence = {
   hasRecentFailures: boolean;
 };
 
+export type AdminBusinessPrimaryState =
+  | 'archived'
+  | 'paused'
+  | 'provisioning_failed'
+  | 'owner_blocked'
+  | 'compliance_pending'
+  | 'needs_attention'
+  | 'ready_for_test'
+  | 'ready_for_live'
+  | 'live_with_warnings'
+  | 'live'
+  | 'draft'
+  | 'in_setup';
+
+export type AdminBusinessCardBadge = {
+  key: string;
+  label: string;
+  variant: 'success' | 'secondary' | 'outline' | 'destructive';
+};
+
+export type AdminBusinessCardState = {
+  primaryState: AdminBusinessPrimaryState;
+  primaryLabel: string;
+  primaryVariant: 'success' | 'secondary' | 'outline' | 'destructive';
+  primaryReason: string;
+  nextActionLabel: string;
+  nextActionStepKey: TwilioSetupStepKey | null;
+  badges: AdminBusinessCardBadge[];
+  shouldAppearInNeedsAttention: boolean;
+  shouldAppearInPendingCompliance: boolean;
+  isArchived: boolean;
+  isLive: boolean;
+  isLiveWithWarnings: boolean;
+  isReadyForTest: boolean;
+  isReadyForLive: boolean;
+  isDraft: boolean;
+  isInSetup: boolean;
+  isPaused: boolean;
+};
+
 export type AdminTestSmsConfidenceState = 'not_started' | 'pending_delivery' | 'delivered' | 'failed';
 
 export const adminBoardFilterOptions: AdminBoardFilterOption[] = [
@@ -272,7 +314,7 @@ export function buildAdminNextStep(params: {
       title: 'Provisioning needs attention',
       detail: business.provisioningError,
       tone: 'attention',
-      actionLabel: hasTextingNumber ? 'Re-run provisioning' : 'Finish provisioning',
+      actionLabel: 'Fix provisioning',
     };
   }
 
@@ -294,7 +336,7 @@ export function buildAdminNextStep(params: {
           : 'The business is saved, but the owner account still needs a deliberate admin action. Use Invite owner by email or Connect existing owner.'
         : 'Add the owner email first, then choose Invite owner by email or Connect existing owner.',
       tone: 'attention',
-      actionLabel: 'Review owner setup',
+      actionLabel: 'Invite or connect owner',
     };
   }
 
@@ -306,7 +348,7 @@ export function buildAdminNextStep(params: {
           ? 'This business is set to use the main Twilio account directly. Confirm the parent-account mapping before continuing.'
           : 'Managed provisioning cannot finish until the business has a Twilio subaccount attached.',
       tone: 'attention',
-      actionLabel: 'Re-run provisioning',
+      actionLabel: 'Fix provisioning',
     };
   }
 
@@ -315,7 +357,7 @@ export function buildAdminNextStep(params: {
       title: 'No texting number is assigned',
       detail: 'Provision a new number or attach the approved existing number so missed-call SMS can start.',
       tone: 'attention',
-      actionLabel: 'Provision number',
+      actionLabel: 'Fix provisioning',
     };
   }
 
@@ -324,7 +366,7 @@ export function buildAdminNextStep(params: {
       title: 'Messaging service is missing',
       detail: 'The business has a number, but Twilio messaging still needs a Messaging Service for compliant delivery.',
       tone: 'attention',
-      actionLabel: 'Re-run provisioning',
+      actionLabel: 'Fix provisioning',
     };
   }
 
@@ -351,7 +393,7 @@ export function buildAdminNextStep(params: {
       title: 'Toll-free verification still needs recording',
       detail: 'Messaging is wired up, but toll-free verification still needs to be recorded before compliant live texting can launch.',
       tone: 'pending',
-      actionLabel: 'Review toll-free verification',
+      actionLabel: 'Open toll-free verification',
     };
   }
 
@@ -360,7 +402,7 @@ export function buildAdminNextStep(params: {
       title: 'Business verification still needed',
       detail: 'Messaging is wired up, but the A2P business details still need to be completed before compliant live texting can launch.',
       tone: 'pending',
-      actionLabel: 'Review A2P readiness',
+      actionLabel: 'Open A2P readiness',
     };
   }
 
@@ -396,7 +438,7 @@ export function buildAdminNextStep(params: {
       title: 'Compliance review needs attention',
       detail: business.a2pFailureReason || business.tollFreeVerificationNote || managedSummary.nextStep,
       tone: 'attention',
-      actionLabel: 'Review compliance notes',
+      actionLabel: managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION ? 'Open toll-free verification' : 'Fix compliance',
     };
   }
 
@@ -405,16 +447,16 @@ export function buildAdminNextStep(params: {
       title: 'Ready to go live',
       detail: 'Infrastructure and compliance look ready. Mark the business live when you want automation active.',
       tone: 'pending',
-      actionLabel: 'Mark live',
+      actionLabel: 'Mark business live',
     };
   }
 
   if (managedSummary.messagingReady && business.provisioningStatus === BusinessProvisioningStatus.LIVE) {
     return {
-      title: 'Business is live and healthy',
-      detail: 'Twilio, webhooks, alerts, and rollout status all look ready for normal operator monitoring.',
+      title: 'Business is live',
+      detail: 'Core Twilio, webhook, alert, and rollout setup is active. Use the proof and issue signals to decide whether any follow-up is still needed.',
       tone: 'healthy',
-      actionLabel: 'Open support workspace',
+      actionLabel: 'No action needed',
     };
   }
 
@@ -693,7 +735,7 @@ export function buildAdminOnboardingConfidence(params: {
       stateVariant: 'outline',
       readinessLabel: 'Not ready',
       readinessVariant: 'outline',
-      nextAction: nextStep.title,
+      nextAction: nextStep.actionLabel,
       summary: 'Core onboarding details are still missing. Start with owner connection and Twilio setup.',
     },
     in_setup: {
@@ -701,7 +743,7 @@ export function buildAdminOnboardingConfidence(params: {
       stateVariant: 'secondary',
       readinessLabel: 'Not ready',
       readinessVariant: 'outline',
-      nextAction: nextStep.title,
+      nextAction: nextStep.actionLabel,
       summary: 'Onboarding is in progress, but at least one blocking setup step still needs attention.',
     },
     needs_attention: {
@@ -709,7 +751,7 @@ export function buildAdminOnboardingConfidence(params: {
       stateVariant: 'destructive',
       readinessLabel: 'Not ready',
       readinessVariant: 'destructive',
-      nextAction: nextStep.title,
+      nextAction: nextStep.actionLabel,
       summary: 'Something is broken or incomplete enough that the founder should stop and repair it before testing.',
     },
     waiting_on_a2p: {
@@ -731,7 +773,7 @@ export function buildAdminOnboardingConfidence(params: {
       nextAction: hasTestSmsSuccess
         ? 'Run a real missed-call test'
         : hasPendingTestSmsDelivery
-          ? 'Confirm test SMS delivery'
+          ? 'Send test SMS'
           : 'Send a test SMS',
       summary: 'The business looks ready for operator-led validation. Run the checks before you mark it live.',
     },
@@ -740,7 +782,7 @@ export function buildAdminOnboardingConfidence(params: {
       stateVariant: 'success',
       readinessLabel: 'Ready for live',
       readinessVariant: 'success',
-      nextAction: 'Mark this business live',
+      nextAction: 'Mark business live',
       summary: 'Setup, compliance, and operator validation checks are in place for a clean launch decision.',
     },
     live: {
@@ -748,7 +790,7 @@ export function buildAdminOnboardingConfidence(params: {
       stateVariant: 'success',
       readinessLabel: 'Ready for live',
       readinessVariant: 'success',
-      nextAction: 'Monitor normal activity',
+      nextAction: 'No action needed',
       summary: 'This business is live and the operator confidence checks are green.',
     },
     live_with_warnings: {
@@ -756,7 +798,7 @@ export function buildAdminOnboardingConfidence(params: {
       stateVariant: 'destructive',
       readinessLabel: 'Live with warnings',
       readinessVariant: 'destructive',
-      nextAction: nextStep.title,
+      nextAction: nextStep.actionLabel,
       summary: 'The business is live, but recent failures or missing validations mean the founder should review it closely.',
     },
     archived: {
@@ -781,47 +823,457 @@ export function buildAdminOnboardingConfidence(params: {
   } satisfies AdminOnboardingConfidence;
 }
 
+function buildSecondaryBadge(
+  key: string,
+  label: string,
+  variant: AdminBusinessCardBadge['variant']
+) {
+  return { key, label, variant } satisfies AdminBusinessCardBadge;
+}
+
+function dedupeAdminBusinessCardBadges(badges: AdminBusinessCardBadge[], limit = 3) {
+  const seen = new Set<string>();
+  const deduped: AdminBusinessCardBadge[] = [];
+
+  for (const badge of badges) {
+    const signature = `${badge.key}:${badge.label}`;
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    deduped.push(badge);
+    if (deduped.length >= limit) break;
+  }
+
+  return deduped;
+}
+
+function getTestSmsBadge(testSmsTruth: AdminTestSmsTruth) {
+  if (testSmsTruth.state === 'delivered') {
+    return buildSecondaryBadge('test_sms', 'Test SMS Delivered', 'success');
+  }
+
+  if (testSmsTruth.state === 'failed') {
+    return buildSecondaryBadge('test_sms', 'Test SMS Failed', 'destructive');
+  }
+
+  if (testSmsTruth.state === 'pending') {
+    return buildSecondaryBadge('test_sms', 'Test SMS Pending', 'outline');
+  }
+
+  return buildSecondaryBadge('test_sms', 'Test SMS Not Run', 'outline');
+}
+
+function getComplianceBadge(params: {
+  managedSummary: ManagedTwilioSummary;
+  business: Pick<DashboardBusiness, 'managedTwilioStatus'>;
+}) {
+  if (params.managedSummary.complianceTypeUnknown) {
+    return buildSecondaryBadge('compliance', 'Compliance Not Selected', 'outline');
+  }
+
+  if (params.managedSummary.attentionRequired) {
+    return buildSecondaryBadge('compliance', 'Compliance Needs Attention', 'destructive');
+  }
+
+  if (
+    params.managedSummary.compliancePendingReview ||
+    (params.managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION && !params.managedSummary.complianceStarted) ||
+    (params.managedSummary.complianceType === MessagingComplianceType.LOCAL_A2P &&
+      params.business.managedTwilioStatus === ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION)
+  ) {
+    return buildSecondaryBadge('compliance', 'Compliance Pending', 'outline');
+  }
+
+  return null;
+}
+
+function getProvisioningRepairStepKey(
+  business: DashboardBusiness,
+  managedSummary: ManagedTwilioSummary
+): TwilioSetupStepKey {
+  if (!managedSummary.accountReady) return 'account_ready';
+  if (!getManagedTextingNumber(business) || !(business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid)) return 'number_assigned';
+  if (!business.twilioMessagingServiceSid) return 'messaging_service_ready';
+  if (!business.twilioWebhookSyncedAt) return 'voice_webhook_synced';
+  return 'account_ready';
+}
+
+function getAttentionReasonAndStep(params: {
+  business: DashboardBusiness;
+  managedSummary: ManagedTwilioSummary;
+  nextStep: AdminNextStep;
+  onboardingConfidence: AdminOnboardingConfidence;
+  lastIssue: AdminBusinessIssue;
+  testSmsTruth: AdminTestSmsTruth;
+  missedCallValidation: AdminMissedCallValidationTruth;
+}) {
+  const { business, managedSummary, nextStep, onboardingConfidence, lastIssue, testSmsTruth, missedCallValidation } = params;
+  const hasAssignedNumber = Boolean(getManagedTextingNumber(business) && (business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid));
+
+  if (lastIssue.eventType === 'webhooks.sync_failed' || (hasAssignedNumber && !business.twilioWebhookSyncedAt)) {
+    return {
+      primaryState: 'needs_attention' as const,
+      primaryLabel: 'Needs attention',
+      primaryVariant: 'destructive' as const,
+      primaryReason: 'Twilio webhooks are not synced to the current CallbackCloser URLs.',
+      nextActionLabel: 'Re-sync webhooks',
+      nextActionStepKey: 'voice_webhook_synced' as const,
+    };
+  }
+
+  if (testSmsTruth.state === 'failed') {
+    return {
+      primaryState: 'needs_attention' as const,
+      primaryLabel: 'Needs attention',
+      primaryVariant: 'destructive' as const,
+      primaryReason: 'The latest test SMS did not complete cleanly.',
+      nextActionLabel: 'Send test SMS',
+      nextActionStepKey: 'test_sms_delivered' as const,
+    };
+  }
+
+  if (onboardingConfidence.readyForTest && testSmsTruth.state !== 'delivered') {
+    return {
+      primaryState: 'ready_for_test' as const,
+      primaryLabel: 'Ready for test',
+      primaryVariant: 'secondary' as const,
+      primaryReason:
+        testSmsTruth.state === 'pending'
+          ? 'The latest test SMS is still waiting on delivery confirmation.'
+          : 'A delivered test SMS is still missing.',
+      nextActionLabel: 'Send test SMS',
+      nextActionStepKey: 'test_sms_delivered' as const,
+    };
+  }
+
+  if (onboardingConfidence.readyForTest && !missedCallValidation.countsAsLaunchProof) {
+    return {
+      primaryState: 'ready_for_test' as const,
+      primaryLabel: 'Ready for test',
+      primaryVariant: 'secondary' as const,
+      primaryReason: 'The missed-call flow has not been fully validated yet.',
+      nextActionLabel: 'Validate missed-call flow',
+      nextActionStepKey: 'missed_call_validated' as const,
+    };
+  }
+
+  return {
+    primaryState: nextStep.tone === 'attention' ? ('needs_attention' as const) : ('in_setup' as const),
+    primaryLabel: nextStep.tone === 'attention' ? 'Needs attention' : 'In setup',
+    primaryVariant: nextStep.tone === 'attention' ? ('destructive' as const) : ('secondary' as const),
+    primaryReason: nextStep.detail,
+    nextActionLabel: nextStep.actionLabel || 'Open blocker step',
+    nextActionStepKey: lastIssue.remediationStepKey,
+  };
+}
+
+export function buildAdminBusinessCardState(params: {
+  business: DashboardBusiness;
+  notificationSettings: DashboardNotificationSettings | null;
+  ownerConnected: boolean;
+  nextStep: AdminNextStep;
+  managedSummary: ManagedTwilioSummary;
+  onboardingConfidence: AdminOnboardingConfidence;
+  lastIssue: AdminBusinessIssue;
+  testSmsTruth: AdminTestSmsTruth;
+  missedCallValidation: AdminMissedCallValidationTruth;
+}) {
+  const { business, notificationSettings, ownerConnected, nextStep, managedSummary, onboardingConfidence, lastIssue, testSmsTruth, missedCallValidation } =
+    params;
+  const archived = isBusinessArchived(business);
+  const paused = !archived && business.provisioningStatus === BusinessProvisioningStatus.PAUSED;
+  const ownerEmail = notificationSettings?.ownerEmail?.trim() || null;
+  const ownerPhone = notificationSettings?.ownerPhone?.trim() || business.notifyPhone || null;
+  const missingOwnerContact = !ownerEmail && !ownerPhone;
+  const needsOwnerConnection = !ownerConnected;
+  const complianceNeedsOperatorAction =
+    managedSummary.attentionRequired ||
+    managedSummary.complianceTypeUnknown ||
+    (managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION && !managedSummary.complianceStarted) ||
+    (managedSummary.complianceType === MessagingComplianceType.LOCAL_A2P &&
+      business.managedTwilioStatus === ManagedTwilioStatus.AWAITING_BUSINESS_VERIFICATION);
+  const compliancePendingReview = managedSummary.compliancePendingReview;
+
+  let state: Pick<
+    AdminBusinessCardState,
+    'primaryState' | 'primaryLabel' | 'primaryVariant' | 'primaryReason' | 'nextActionLabel' | 'nextActionStepKey'
+  >;
+
+  if (archived) {
+    state = {
+      primaryState: 'archived',
+      primaryLabel: 'Archived',
+      primaryVariant: 'outline',
+      primaryReason: 'Automation is paused because this business is archived.',
+      nextActionLabel: 'Restore business',
+      nextActionStepKey: null,
+    };
+  } else if (paused) {
+    state = {
+      primaryState: 'paused',
+      primaryLabel: 'Paused',
+      primaryVariant: 'outline',
+      primaryReason: 'Automation is paused until you intentionally resume this business.',
+      nextActionLabel: 'Resume automation',
+      nextActionStepKey: 'safe_to_mark_live',
+    };
+  } else if (business.provisioningError || business.provisioningStatus === BusinessProvisioningStatus.NEEDS_ATTENTION) {
+    state = {
+      primaryState: 'provisioning_failed',
+      primaryLabel: 'Provisioning failed',
+      primaryVariant: 'destructive',
+      primaryReason: business.provisioningError || 'The latest provisioning run needs operator repair before this business can move forward.',
+      nextActionLabel: 'Fix provisioning',
+      nextActionStepKey: getProvisioningRepairStepKey(business, managedSummary),
+    };
+  } else if (missingOwnerContact) {
+    state = {
+      primaryState: 'owner_blocked',
+      primaryLabel: 'Owner blocked',
+      primaryVariant: 'destructive',
+      primaryReason: 'Owner contact information is missing, so invites and alerts cannot be trusted yet.',
+      nextActionLabel: 'Save owner contact info',
+      nextActionStepKey: 'owner_connected',
+    };
+  } else if (needsOwnerConnection) {
+    state = {
+      primaryState: 'owner_blocked',
+      primaryLabel: 'Owner blocked',
+      primaryVariant: 'destructive',
+      primaryReason: business.ownerInviteSentAt
+        ? 'The owner account is still not connected even though an invite was already sent.'
+        : 'The owner account still needs to be connected before this business can be trusted.',
+      nextActionLabel: 'Invite or connect owner',
+      nextActionStepKey: 'owner_connected',
+    };
+  } else if (business.provisioningStatus === BusinessProvisioningStatus.LIVE && onboardingConfidence.blockers.length > 0) {
+    state = testSmsTruth.state !== 'delivered'
+      ? {
+          primaryState: 'live_with_warnings',
+          primaryLabel: 'Live with warnings',
+          primaryVariant: 'destructive',
+          primaryReason:
+            testSmsTruth.state === 'pending'
+              ? 'The latest test SMS is still waiting on delivery confirmation.'
+              : 'The latest test SMS is not fully proven.',
+          nextActionLabel: 'Send test SMS',
+          nextActionStepKey: 'test_sms_delivered',
+        }
+      : !missedCallValidation.countsAsLaunchProof
+        ? {
+            primaryState: 'live_with_warnings',
+            primaryLabel: 'Live with warnings',
+            primaryVariant: 'destructive',
+            primaryReason: 'Missed-call flow has not been fully validated.',
+            nextActionLabel: 'Validate missed-call flow',
+            nextActionStepKey: 'missed_call_validated',
+          }
+        : {
+            primaryState: 'live_with_warnings',
+            primaryLabel: 'Live with warnings',
+            primaryVariant: 'destructive',
+            primaryReason: onboardingConfidence.blockers[0]?.message || 'This live business still has unresolved operator warnings.',
+            nextActionLabel: nextStep.actionLabel || 'Open blocker step',
+            nextActionStepKey: lastIssue.remediationStepKey,
+          };
+  } else if (business.provisioningStatus === BusinessProvisioningStatus.LIVE) {
+    state = {
+      primaryState: 'live',
+      primaryLabel: 'Live',
+      primaryVariant: 'success',
+      primaryReason: 'No active warnings are recorded for this live business.',
+      nextActionLabel: 'No action needed',
+      nextActionStepKey: null,
+    };
+  } else if (complianceNeedsOperatorAction || compliancePendingReview) {
+    state = {
+      primaryState: 'compliance_pending',
+      primaryLabel: managedSummary.attentionRequired ? 'Compliance blocked' : 'Pending compliance',
+      primaryVariant: managedSummary.attentionRequired ? 'destructive' : 'outline',
+      primaryReason: managedSummary.attentionRequired
+        ? business.a2pFailureReason || business.tollFreeVerificationNote || managedSummary.nextStep
+        : managedSummary.complianceTypeUnknown
+          ? 'Messaging compliance type has not been selected yet.'
+          : managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION && !managedSummary.complianceStarted
+            ? 'Toll-free verification has not been recorded yet.'
+            : managedSummary.nextStep,
+      nextActionLabel: managedSummary.complianceTypeUnknown
+        ? 'Choose number type'
+        : managedSummary.complianceType === MessagingComplianceType.TOLL_FREE_VERIFICATION
+          ? 'Open toll-free verification'
+          : managedSummary.attentionRequired
+            ? 'Fix compliance'
+            : 'Wait for approval',
+      nextActionStepKey: 'a2p_status_recorded',
+    };
+  } else if (onboardingConfidence.readyForLive) {
+    state = {
+      primaryState: 'ready_for_live',
+      primaryLabel: 'Ready for live',
+      primaryVariant: 'success',
+      primaryReason: 'Launch proof is in place and automation can go live safely.',
+      nextActionLabel: 'Mark business live',
+      nextActionStepKey: 'safe_to_mark_live',
+    };
+  } else if (onboardingConfidence.readyForTest) {
+    state = getAttentionReasonAndStep({
+      business,
+      managedSummary,
+      nextStep,
+      onboardingConfidence,
+      lastIssue,
+      testSmsTruth,
+      missedCallValidation,
+    });
+  } else if (onboardingConfidence.state === 'draft') {
+    state = {
+      primaryState: 'draft',
+      primaryLabel: 'Draft',
+      primaryVariant: 'outline',
+      primaryReason: onboardingConfidence.summary,
+      nextActionLabel: nextStep.actionLabel,
+      nextActionStepKey: lastIssue.remediationStepKey,
+    };
+  } else {
+    state = getAttentionReasonAndStep({
+      business,
+      managedSummary,
+      nextStep,
+      onboardingConfidence,
+      lastIssue,
+      testSmsTruth,
+      missedCallValidation,
+    });
+  }
+
+  const badges: AdminBusinessCardBadge[] = [];
+  badges.push(buildSecondaryBadge('customer_type', business.isTestBusiness ? 'Test' : 'Real customer', 'outline'));
+
+  if (!archived) {
+    if (
+      state.primaryState === 'ready_for_test' ||
+      state.primaryState === 'ready_for_live' ||
+      state.primaryState === 'live_with_warnings' ||
+      state.primaryState === 'live' ||
+      state.primaryState === 'needs_attention'
+    ) {
+      badges.push(getTestSmsBadge(testSmsTruth));
+    }
+
+    const complianceBadge = getComplianceBadge({ managedSummary, business });
+    if (complianceBadge) {
+      badges.push(complianceBadge);
+    }
+
+    if (
+      !missedCallValidation.countsAsLaunchProof &&
+      (state.primaryState === 'ready_for_test' ||
+        state.primaryState === 'ready_for_live' ||
+        state.primaryState === 'live_with_warnings' ||
+        state.primaryState === 'live')
+    ) {
+      badges.push(buildSecondaryBadge('missed_call_proof', 'Missed-call proof missing', 'outline'));
+    }
+  }
+
+  return {
+    ...state,
+    badges: dedupeAdminBusinessCardBadges(badges),
+    shouldAppearInNeedsAttention:
+      !archived &&
+      (state.primaryState === 'provisioning_failed' ||
+        state.primaryState === 'owner_blocked' ||
+        state.primaryState === 'needs_attention' ||
+        state.primaryState === 'live_with_warnings'),
+    shouldAppearInPendingCompliance: !archived && state.primaryState === 'compliance_pending',
+    isArchived: archived,
+    isLive: state.primaryState === 'live',
+    isLiveWithWarnings: state.primaryState === 'live_with_warnings',
+    isReadyForTest: state.primaryState === 'ready_for_test',
+    isReadyForLive: state.primaryState === 'ready_for_live',
+    isDraft: state.primaryState === 'draft',
+    isInSetup:
+      state.primaryState === 'draft' ||
+      state.primaryState === 'in_setup' ||
+      state.primaryState === 'ready_for_test' ||
+      state.primaryState === 'ready_for_live',
+    isPaused: state.primaryState === 'paused',
+  } satisfies AdminBusinessCardState;
+}
+
+export function matchesAdminBoardFilterState(state: AdminBusinessCardState, filter: AdminBoardFilter) {
+  if (filter === 'all') return true;
+  if (filter === 'archived') return state.isArchived;
+  if (state.isArchived) return false;
+
+  if (filter === 'paused') return state.isPaused;
+  if (filter === 'live') return state.isLive;
+  if (filter === 'pending_a2p') return state.shouldAppearInPendingCompliance;
+  if (filter === 'pending_setup') return state.isDraft;
+  if (filter === 'in_setup') return state.isInSetup;
+  if (filter === 'needs_attention') return state.shouldAppearInNeedsAttention;
+
+  return true;
+}
+
 export function matchesAdminBoardFilter(
   business: DashboardBusiness,
   notificationSettings: DashboardNotificationSettings | null,
   ownerConnected: boolean,
   filter: AdminBoardFilter
 ) {
-  if (filter === 'all') return true;
-
   const managedSummary = getManagedTwilioStatusSummary(business);
   const nextStep = buildAdminNextStep({ business, notificationSettings, ownerConnected });
-  const archived = isBusinessArchived(business);
-  const paused = isBusinessAutomationPaused(business) && !archived;
+  const onboardingConfidence = buildAdminOnboardingConfidence({
+    business,
+    notificationSettings,
+    ownerConnected,
+    successfulLeadCount: 0,
+    operatorEvents: [],
+  });
+  const state = buildAdminBusinessCardState({
+    business,
+    notificationSettings,
+    ownerConnected,
+    nextStep,
+    managedSummary,
+    onboardingConfidence,
+    lastIssue: {
+      state: 'healthy',
+      tone: 'neutral',
+      summary: 'No open issues recorded',
+      detail: 'Recent business events do not show an unresolved failure or blocker right now.',
+      createdAt: null,
+      categoryLabel: null,
+      statusLabel: null,
+      eventType: null,
+      remediationStepKey: null,
+    },
+    testSmsTruth: {
+      state: 'not_run',
+      label: 'Not run',
+      tone: 'neutral',
+      summary: 'No admin test SMS recorded',
+      detail: 'Run a test SMS from this page before treating delivery as proven.',
+      reason: null,
+      lastAttemptAt: null,
+      eventType: null,
+    },
+    missedCallValidation: {
+      state: 'not_run',
+      label: 'Not run',
+      tone: 'neutral',
+      summary: 'Missed-call flow not validated yet',
+      detail: 'Run one real missed call from start to finish, or record a manual confirmation note if you validated it outside this console.',
+      verifiedAt: null,
+      sourceLabel: null,
+      evidenceSummary: null,
+      relatedLeadId: null,
+      latestRelatedEventAt: null,
+      countsAsLaunchProof: false,
+    },
+  });
 
-  if (filter === 'archived') return archived;
-  if (archived) return false;
-
-  if (filter === 'paused') {
-    return paused || business.managedTwilioStatus === ManagedTwilioStatus.PAUSED_NONCOMPLIANT;
-  }
-
-  if (filter === 'live') {
-    return business.provisioningStatus === BusinessProvisioningStatus.LIVE && managedSummary.messagingReady;
-  }
-
-  if (filter === 'pending_a2p') {
-    return managedSummary.compliancePendingReview;
-  }
-
-  if (filter === 'pending_setup') {
-    return business.provisioningStatus === BusinessProvisioningStatus.DRAFT;
-  }
-
-  if (filter === 'in_setup') {
-    return business.provisioningStatus === BusinessProvisioningStatus.ONBOARDING || (!managedSummary.onboardingReady && ownerConnected);
-  }
-
-  if (filter === 'needs_attention') {
-    return nextStep.tone === 'attention';
-  }
-
-  return true;
+  return matchesAdminBoardFilterState(state, filter);
 }
 
 function compactBody(value: string, maxLength = 120) {
