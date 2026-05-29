@@ -1,7 +1,7 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
-import { db } from '@/lib/db';
+import { getOwnedBusinessForClerkUser } from '@/lib/owner-linking';
 
 type PlanParam = 'starter' | 'pro';
 
@@ -32,7 +32,7 @@ export default async function BuyPage({ searchParams }: { searchParams?: Record<
     redirect(`/sign-up?redirect_url=${encodeURIComponent(buyPath)}`);
   }
 
-  const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
+  const business = await getOwnedBusinessForClerkUser(await currentUser());
   if (!business) {
     redirect('/app');
   }

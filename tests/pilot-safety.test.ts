@@ -38,7 +38,7 @@ test('managed setup handoff replaces the old self-serve onboarding route', () =>
   const buyPage = read('app/buy/page.tsx');
 
   assert.match(onboardingPage, /redirect\('\/app'\)/);
-  assert.match(auth, /ensurePendingBusinessForOwner/);
+  assert.match(auth, /getOrCreateOwnedBusinessForClerkUser/);
   assert.match(appLayout, /CustomerSetupWaitingPage/);
   assert.match(waitingPage, /Your missed-call recovery system is being set up/);
   assert.match(waitingPage, /You do not need to configure anything right now/i);

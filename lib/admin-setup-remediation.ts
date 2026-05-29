@@ -143,7 +143,7 @@ export function buildAdminSetupPanels(params: {
         'Confirm the owner email you want attached to this business.',
         'If the owner already has a CallbackCloser login, use Connect existing owner.',
         'If not, send an invite from this panel.',
-        'Come back to this step after the owner appears as connected.',
+        'After the owner accepts and signs in, CallbackCloser should connect the account automatically or show Connect existing owner here as the fallback.',
       ],
       verification: [
         'The step should show Owner connected.',

@@ -3,8 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { getAdminCustomerActingContext } from '@/lib/admin-customer-context';
 import { getAdminSession } from '@/lib/admin';
-import { getBusinessForOwnerClerkId } from '@/lib/business-access';
-import { ensurePendingBusinessForOwner } from '@/lib/customer-setup-handoff';
+import { getOwnedBusinessForClerkUser, getOrCreateOwnedBusinessForClerkUser } from '@/lib/owner-linking';
 import { getPortfolioDemoAuth, getPortfolioDemoBusiness, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 
 export async function requireAuth() {
@@ -32,7 +31,10 @@ export async function getCurrentBusiness() {
   const { userId } = await auth();
   if (!userId) return null;
 
-  return getBusinessForOwnerClerkId(userId);
+  const user = await currentUser();
+  if (!user) return null;
+
+  return getOwnedBusinessForClerkUser(user);
 }
 
 export async function requireBusiness() {
@@ -45,25 +47,17 @@ export async function requireBusiness() {
     return adminCustomerContext.business;
   }
 
-  const { userId } = await requireAuth();
+  await requireAuth();
   const adminSession = await getAdminSession();
   if (adminSession?.isAdmin) {
     redirect('/admin?intent=new-business-pilot');
   }
 
-  let business = await getBusinessForOwnerClerkId(userId);
-  if (!business) {
-    const user = await currentUser();
-    const ownerEmail =
-      (user?.primaryEmailAddressId
-        ? user.emailAddresses.find((email) => email.id === user.primaryEmailAddressId)?.emailAddress
-        : user?.emailAddresses[0]?.emailAddress) || null;
-
-    business = await ensurePendingBusinessForOwner(userId, {
-      businessName: typeof user?.publicMetadata?.businessName === 'string' ? user.publicMetadata.businessName : null,
-      ownerEmail,
-      ownerName: user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || null,
-    });
+  const user = await currentUser();
+  if (!user) {
+    redirect('/sign-in');
   }
+
+  const business = await getOrCreateOwnedBusinessForClerkUser(user);
   return business;
 }

@@ -1,8 +1,8 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
 import { getAdminSession } from '@/lib/admin';
-import { getBusinessForOwnerClerkId } from '@/lib/business-access';
+import { getOwnedBusinessForClerkUser } from '@/lib/owner-linking';
 import { resolvePublicPilotDestination } from '@/lib/public-auth-routing';
 
 export default async function StartFreePilotPage() {
@@ -14,7 +14,7 @@ export default async function StartFreePilotPage() {
 
   const [adminSession, business] = await Promise.all([
     getAdminSession(),
-    getBusinessForOwnerClerkId(userId),
+    getOwnedBusinessForClerkUser(await currentUser()),
   ]);
 
   redirect(

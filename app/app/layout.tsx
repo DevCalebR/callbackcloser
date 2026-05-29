@@ -8,9 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { getAdminSession } from '@/lib/admin';
 import { getAdminCustomerActingContext } from '@/lib/admin-customer-context';
 import { buildAdminCustomerExitHref } from '@/lib/admin-customer-paths';
-import { ensurePendingBusinessForOwner } from '@/lib/customer-setup-handoff';
 import { getCustomerWorkspaceNotice, shouldShowCustomerSetupWaitingPage } from '@/lib/customer-setup';
 import { db } from '@/lib/db';
+import { getOwnedBusinessForClerkUser, getOrCreateOwnedBusinessForClerkUser } from '@/lib/owner-linking';
 import { getPortfolioDemoBusiness, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getCustomerSystemStatus } from '@/lib/system-status';
 
@@ -55,10 +55,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   const adminSession = await getAdminSession();
+  const signedInUser = adminCustomerContext ? null : await currentUser();
+  if (!adminCustomerContext && !signedInUser) {
+    redirect('/sign-in');
+  }
 
   const existingBusiness = adminCustomerContext
     ? adminCustomerContext.business
-    : await db.business.findUnique({ where: { ownerClerkId: userId } });
+    : await getOwnedBusinessForClerkUser(signedInUser);
   if (!adminCustomerContext && adminSession?.isAdmin && !existingBusiness) {
     redirect('/admin?intent=new-business-pilot');
   }
@@ -66,19 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     existingBusiness ||
     (adminCustomerContext
       ? null
-      : await (async () => {
-          const user = await currentUser();
-          const ownerEmail =
-            (user?.primaryEmailAddressId
-              ? user.emailAddresses.find((email) => email.id === user.primaryEmailAddressId)?.emailAddress
-              : user?.emailAddresses[0]?.emailAddress) || null;
-
-          return ensurePendingBusinessForOwner(userId, {
-            businessName: typeof user?.publicMetadata?.businessName === 'string' ? user.publicMetadata.businessName : null,
-            ownerEmail,
-            ownerName: user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || null,
-          });
-        })());
+      : await getOrCreateOwnedBusinessForClerkUser(signedInUser));
   const successfulLeadCount = business
     ? await db.lead.count({ where: { businessId: business.id, OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }] } })
     : 0;

@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 
 import { deriveTwilioNumberSetupModeFromPhoneSetupPath } from '@/lib/business-phone-setup';
 import { upsertBusinessForOwner } from '@/lib/business';
+import { getOwnedBusinessForClerkUser } from '@/lib/owner-linking';
 import { onboardingSchema } from '@/lib/validators';
 
 const DEFAULT_POST_ONBOARDING_REDIRECT = '/app/settings';
@@ -38,6 +39,7 @@ export async function saveOnboardingAction(formData: FormData) {
   }
 
   const user = await currentUser();
+  await getOwnedBusinessForClerkUser(user);
   const ownerEmail =
     (user?.primaryEmailAddressId
       ? user.emailAddresses.find((email) => email.id === user.primaryEmailAddressId)?.emailAddress

@@ -1,15 +1,15 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { SignIn } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 
 import { getAdminSession } from '@/lib/admin';
-import { getBusinessForOwnerClerkId } from '@/lib/business-access';
 import {
   DEFAULT_CLERK_AFTER_AUTH_URL,
   DEFAULT_CLERK_SIGN_IN_URL,
   DEFAULT_CLERK_SIGN_UP_URL,
   hasRequiredValidClerkEnv,
 } from '@/lib/clerk-config';
+import { getOwnedBusinessForClerkUser } from '@/lib/owner-linking';
 import { resolveSignedInAppDestination } from '@/lib/public-auth-routing';
 
 export default async function SignInPage() {
@@ -39,7 +39,7 @@ export default async function SignInPage() {
   if (userId) {
     const [adminSession, business] = await Promise.all([
       getAdminSession(),
-      getBusinessForOwnerClerkId(userId),
+      getOwnedBusinessForClerkUser(await currentUser()),
     ]);
 
     redirect(

@@ -290,7 +290,7 @@ export function buildAdminNextStep(params: {
       title: business.ownerInviteSentAt ? 'Owner invitation is still pending' : 'Owner account still needs setup',
       detail: ownerEmail
         ? business.ownerInviteSentAt
-          ? 'The invite has been sent, but the owner account is not attached yet. Wait for acceptance or use Connect existing owner after they create the account.'
+          ? 'The invite has been sent, but the owner account is not attached yet. CallbackCloser should auto-connect the owner after acceptance, or this panel will expose Connect existing owner as the fallback.'
           : 'The business is saved, but the owner account still needs a deliberate admin action. Use Invite owner by email or Connect existing owner.'
         : 'Add the owner email first, then choose Invite owner by email or Connect existing owner.',
       tone: 'attention',
@@ -590,7 +590,7 @@ export function buildAdminOnboardingConfidence(params: {
         ? 'A CallbackCloser owner account is linked to this business.'
         : ownerEmail
           ? business.ownerInviteSentAt
-            ? 'The owner invite is still pending or the accepted account still needs linking.'
+            ? 'The owner invite is still pending, or CallbackCloser still needs a safe owner-link confirmation.'
             : 'Choose Invite owner by email or Connect existing owner.'
           : 'Add the owner email and then choose the correct owner setup action.',
     },

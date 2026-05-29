@@ -19,7 +19,8 @@ test('protected app surfaces use shared tenant-scoped access helpers', () => {
   const billingPage = read('app/app/billing/page.tsx');
   const recordingRoute = read('app/api/leads/[leadId]/recording/route.ts');
 
-  assert.match(auth, /getBusinessForOwnerClerkId/);
+  assert.match(auth, /getOwnedBusinessForClerkUser/);
+  assert.match(auth, /getOrCreateOwnedBusinessForClerkUser/);
   assert.match(appHomePage, /requireBusiness/);
   assert.match(appHomePage, /listAllDashboardLeadsForBusiness/);
   assert.match(leadsPage, /listAllDashboardLeadsForBusiness/);
