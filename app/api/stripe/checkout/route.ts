@@ -1,10 +1,11 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
 import { logAuditEvent } from '@/lib/audit-log';
 import { db } from '@/lib/db';
 import { getConfiguredAppBaseUrl } from '@/lib/env.server';
 import { getCorrelationIdFromRequest, reportApplicationError, withCorrelationIdHeader } from '@/lib/observability';
+import { getOwnedBusinessForClerkUser } from '@/lib/owner-linking';
 import { isAllowedRequestOrigin } from '@/lib/request-origin';
 import { getStripe } from '@/lib/stripe';
 import { absoluteUrl } from '@/lib/url';
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     return withCorrelation(NextResponse.redirect(absoluteUrl('/sign-in'), { status: 303 }));
   }
 
-  const business = await db.business.findUnique({ where: { ownerClerkId: userId } });
+  const business = await getOwnedBusinessForClerkUser(await currentUser());
   if (!business) {
     return withCorrelation(NextResponse.redirect(absoluteUrl('/app'), { status: 303 }));
   }

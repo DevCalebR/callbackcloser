@@ -1,9 +1,9 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
-import { db } from '@/lib/db';
 import { getConfiguredAppBaseUrl } from '@/lib/env.server';
 import { getCorrelationIdFromRequest, withCorrelationIdHeader } from '@/lib/observability';
+import { getOwnedBusinessForClerkUser } from '@/lib/owner-linking';
 import { isAllowedRequestOrigin } from '@/lib/request-origin';
 import { logTwilioError, logTwilioWarn } from '@/lib/twilio-logging';
 import { getTwilioProvisioningBlockReason, provisionPhoneNumber } from '@/lib/twilio-provision';
@@ -46,16 +46,7 @@ export async function POST(request: Request) {
     return withCorrelation(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }));
   }
 
-  const business = await db.business.findUnique({
-    where: { ownerClerkId: userId },
-    select: {
-      id: true,
-      name: true,
-      twilioSubaccountSid: true,
-      twilioPhoneNumber: true,
-      twilioPhoneNumberSid: true,
-    },
-  });
+  const business = await getOwnedBusinessForClerkUser(await currentUser());
 
   if (!business) {
     return withCorrelation(NextResponse.json({ error: 'Business not found' }, { status: 404 }));

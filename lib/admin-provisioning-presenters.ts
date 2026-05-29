@@ -177,7 +177,7 @@ export function deriveAdminOwnerState(input: {
     return {
       status: 'accepted_needs_connection',
       statusLabel: 'Owner account ready to connect',
-      detail: 'The owner now appears to have a CallbackCloser account. Finish by using Connect existing owner.',
+      detail: 'The owner now appears to have a verified CallbackCloser account. Use Connect existing owner only if CallbackCloser could not safely auto-link it.',
       badgeVariant: 'secondary',
       connected: false,
       pending: true,
@@ -270,7 +270,7 @@ export function deriveAdminOwnerState(input: {
 
   return {
     status: 'missing',
-    statusLabel: 'No owner connected',
+    statusLabel: 'No owner invited',
     detail: 'Add the owner email, then either invite them or connect their existing CallbackCloser account.',
     badgeVariant: 'destructive',
     connected: false,
@@ -332,7 +332,7 @@ export function buildAdminProvisioningChecklist({
       detail: ownerConnected
         ? 'A Clerk user is linked to this business.'
         : ownerEmail
-          ? 'Owner setup is still incomplete. Send the invite or connect the existing CallbackCloser account.'
+          ? 'Owner setup is still incomplete. Send the invite or connect the existing CallbackCloser account, and CallbackCloser will auto-link verified invite acceptances when it is safe.'
           : 'Add an owner email, then choose Invite owner by email or Connect existing owner.',
     },
     {

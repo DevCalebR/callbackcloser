@@ -41,7 +41,7 @@ test('managed setup handoff is wired through customer and admin surfaces', () =>
   assert.match(setupHandoff, /summary: 'New customer signup is waiting for founder setup'/);
   assert.match(setupHandoff, /subject: 'New CallbackCloser signup needs setup'/);
   assert.match(setupHandoff, /subject: 'Your CallbackCloser account is ready'/);
-  assert.match(auth, /ensurePendingBusinessForOwner/);
+  assert.match(auth, /getOrCreateOwnedBusinessForClerkUser/);
   assert.match(appLayout, /CustomerSetupWaitingPage/);
   assert.match(appLayout, /getCustomerWorkspaceNotice/);
   assert.match(adminHome, /Pending setup/);

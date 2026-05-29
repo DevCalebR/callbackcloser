@@ -393,12 +393,12 @@ export default async function AdminBusinessDetailPage({
       : ownerAction === 'invited'
         ? {
             variant: 'success' as const,
-            message: `Owner invitation sent to ${ownerEmail}. The owner step stays pending until they accept, then use Connect existing owner to finish linking.`,
+            message: `Owner invitation sent to ${ownerEmail}. CallbackCloser will auto-connect the owner after they accept and sign in, or show a one-click connect action here if review is still needed.`,
           }
         : ownerAction === 'resent'
           ? {
               variant: 'success' as const,
-              message: `Owner invitation resent to ${ownerEmail}. The owner step stays pending until they accept, then use Connect existing owner to finish linking.`,
+              message: `Owner invitation resent to ${ownerEmail}. CallbackCloser will auto-connect the owner after they accept and sign in, or show a one-click connect action here if review is still needed.`,
             }
           : provisioned
             ? {
@@ -1122,9 +1122,9 @@ export default async function AdminBusinessDetailPage({
           {ownerAction === 'connected'
             ? `Existing owner connected for ${ownerEmail}.`
             : ownerAction === 'invited'
-              ? `Owner invitation sent to ${ownerEmail}.`
+              ? `Owner invitation sent to ${ownerEmail}. CallbackCloser will auto-connect after acceptance when it is safe to do so.`
               : ownerAction === 'resent'
-                ? `Owner invitation resent to ${ownerEmail}.`
+                ? `Owner invitation resent to ${ownerEmail}. CallbackCloser will auto-connect after acceptance when it is safe to do so.`
                 : 'Owner state updated.'}
         </div>
       ) : null}

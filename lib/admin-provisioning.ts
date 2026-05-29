@@ -12,6 +12,7 @@ import {
 import { ensureBusinessNotificationSettings } from '@/lib/business-notification-settings';
 import { db } from '@/lib/db';
 import { getConfiguredAppBaseUrl } from '@/lib/env.server';
+import { findVerifiedClerkUserByEmail } from '@/lib/owner-linking';
 import {
   attachNumberToMessagingService,
   createMessagingServiceForBusiness,
@@ -37,16 +38,7 @@ export {
 export type { AdminProvisioningChecklistItem } from '@/lib/admin-provisioning-presenters';
 
 export async function findClerkUserByEmail(email: string) {
-  const normalized = email.trim().toLowerCase();
-  if (!normalized) return null;
-
-  const client = await clerkClient();
-  const result = await client.users.getUserList({
-    emailAddress: [normalized],
-    limit: 1,
-  });
-
-  return result.data[0] ?? null;
+  return findVerifiedClerkUserByEmail(email);
 }
 
 function invitationBelongsToBusiness(invitation: { publicMetadata: Record<string, unknown> | null }, businessId: string) {

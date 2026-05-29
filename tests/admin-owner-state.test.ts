@@ -15,7 +15,7 @@ test('owner state is invite-ready when contact info exists but no account is lin
   assert.equal(state.statusLabel, 'Invite ready to send');
 });
 
-test('owner state shows accepted invite waiting for manual link when a user now exists', () => {
+test('owner state shows accepted invite ready for fallback connection when a verified user now exists', () => {
   const state = deriveAdminOwnerState({
     ownerClerkId: 'pending_owner_fixture',
     ownerName: 'Casey Owner',
@@ -31,7 +31,7 @@ test('owner state shows accepted invite waiting for manual link when a user now 
 
   assert.equal(state.status, 'accepted_needs_connection');
   assert.equal(state.matchedUserId, 'user_123');
-  assert.match(state.detail, /Connect existing owner/i);
+  assert.match(state.detail, /could not safely auto-link/i);
 });
 
 test('owner state shows pending invitation truthfully before acceptance', () => {
@@ -74,4 +74,16 @@ test('owner state distinguishes connected owners from broken stored links', () =
 
   assert.equal(broken.status, 'connection_broken');
   assert.equal(broken.badgeVariant, 'destructive');
+});
+
+test('owner state uses the no-owner-invited label when no email is saved yet', () => {
+  const state = deriveAdminOwnerState({
+    ownerClerkId: null,
+    ownerName: null,
+    ownerEmail: null,
+    ownerInviteSentAt: null,
+  });
+
+  assert.equal(state.status, 'missing');
+  assert.equal(state.statusLabel, 'No owner invited');
 });
