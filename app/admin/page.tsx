@@ -4,12 +4,13 @@ import {
   archiveBusinessAction,
   createAdminBusinessAction,
   createDemoBusinessAction,
-  deleteTestBusinessAction,
+  deleteBusinessPermanentlyAction,
   founderDeleteAllBusinessesAction,
   resyncBusinessWebhooksAction,
   restoreBusinessAction,
   sendBusinessTestSmsAction,
 } from '@/app/admin/actions';
+import { AdminPermanentDeleteBusinessCard } from '@/components/admin-permanent-delete-business-card';
 import { FounderDeleteBusinessCard } from '@/components/founder-delete-business-card';
 import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
 import { FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION } from '@/lib/admin-business-lifecycle';
@@ -19,8 +20,6 @@ import {
   buildAdminOnboardingConfidence,
   buildAdminBusinessPickerLabel,
   buildAdminNextStep,
-  canDeleteTestBusiness,
-  getDeleteTestBusinessBlockedReason,
   isBusinessArchived,
   matchesAdminBoardFilterState,
   type AdminBoardFilter,
@@ -423,9 +422,6 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
     }),
   }));
   const selectedBusinessRow = selectedBusinessId ? businessRows.find((item) => item.business.id === selectedBusinessId) || null : null;
-  const selectedBusinessDeleteBlockedReason = selectedBusinessRow
-    ? getDeleteTestBusinessBlockedReason(selectedBusinessRow.business)
-    : null;
   const boardReturnTo = buildAdminBoardReturnPath({
     view,
     selectedBusinessId,
@@ -448,10 +444,10 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
     ownerEmail: business.notificationSettings?.ownerEmail || null,
     isTestDemo: isTestDemoBusiness(business),
     isArchived: isBusinessArchived(business),
-    deleteEligible: canDeleteTestBusiness(business),
-    deleteBlockedReason: getDeleteTestBusinessBlockedReason(business),
+    ownerClerkId: business.ownerClerkId,
   }));
   const deletedBusinessName = getQueryValue(searchParams, 'deletedBusinessName');
+  const deletedExternalReview = getQueryValue(searchParams, 'deletedExternalReview') === '1';
 
   return (
     <div className="container space-y-6 py-8">
@@ -481,11 +477,16 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
-      {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived. Permanent delete stays locked until the workspace is clearly demo/test.</div> : null}
+      {archived ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business archived. Automation is paused until you restore it or permanently delete it as founder.</div> : null}
       {restored ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business restored to active triage.</div> : null}
       {deleted ? (
         <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
-          {deletedBusinessName ? `Deleted ${deletedBusinessName} permanently.` : 'Demo/test business deleted permanently.'}
+          <p>{deletedBusinessName ? `Deleted ${deletedBusinessName} permanently.` : 'Business deleted permanently.'}</p>
+          {deletedExternalReview ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Local business record deleted. External Twilio/Stripe/Clerk records may still need manual review.
+            </p>
+          ) : null}
         </div>
       ) : null}
       {founderResetResult === 'deleted' && Number.isFinite(founderResetDeleted) ? (
@@ -665,22 +666,22 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                 <summary className="cursor-pointer list-none space-y-1">
                   <CardTitle>Advanced founder tools</CardTitle>
                   <CardDescription>
-                    Founder-only cleanup. Archive real customers. Hard delete test/demo businesses only, and only when the business is already archived.
+                    Founder-only cleanup. Archive remains the normal lifecycle control. Permanent delete is available for any business only after the required confirmations.
                   </CardDescription>
                 </summary>
                 <div className="mt-4 space-y-4">
                   <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
-                    Delete one test/demo business is the primary founder cleanup tool. Real customer workspaces should be archived or disabled, not hard deleted.
+                    Archive first whenever you are handling normal churn, cancellation, or pauses. Permanent delete is reserved for founder cleanup when the business truly needs to be removed.
                   </div>
 
                   <div>
                     <div className="mb-3 space-y-1">
-                      <p className="text-base font-semibold text-foreground">Delete one test/demo business</p>
+                      <p className="text-base font-semibold text-foreground">Delete one business permanently</p>
                       <p className="text-sm text-muted-foreground">
-                        Select a workspace, review whether it is test/demo or real, then type the exact business name before permanent deletion is allowed.
+                        Select a workspace, review its owner and status, then complete the required confirmations before permanent deletion is allowed.
                       </p>
                     </div>
-                    <FounderDeleteBusinessCard candidates={founderDeleteCandidates} deleteAction={deleteTestBusinessAction} />
+                    <FounderDeleteBusinessCard candidates={founderDeleteCandidates} deleteAction={deleteBusinessPermanentlyAction} />
                   </div>
 
                   <details className="rounded-xl border border-destructive/30 bg-background/80 p-4 text-sm">
@@ -796,8 +797,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
             <CardHeader className="gap-2">
               <CardTitle className="text-xl">Selected business actions</CardTitle>
               <CardDescription>
-                Focused from the business picker. Archive stays the normal lifecycle action. Permanent delete only unlocks for archived demo/test
-                  workspaces.
+                Focused from the business picker. Archive stays the normal lifecycle action. Founder-only permanent delete stays inside this managed area.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
@@ -861,7 +861,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       className={buttonVariants({ variant: 'ghost', size: 'sm' })}
                       href={`/admin/${selectedBusinessRow.business.id}#advanced`}
                     >
-                      Open full advanced controls
+                      Manage business
                     </Link>
                     <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${selectedBusinessRow.business.id}/workspace`}>
                       View support workspace snapshot
@@ -897,25 +897,22 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                     </form>
                   )}
 
-                  {canDeleteTestBusiness(selectedBusinessRow.business) ? (
-                    <form action={deleteTestBusinessAction} className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
-                      <input type="hidden" name="businessId" value={selectedBusinessRow.business.id} />
-                      <input type="hidden" name="returnTo" value={boardReturnTo} />
-                      <div className="space-y-2">
-                        <Label htmlFor="deleteBusinessName">Type business name to permanently delete</Label>
-                        <Input id="deleteBusinessName" name="confirmationName" placeholder={selectedBusinessRow.business.name} />
-                      </div>
-                      <p className="mt-2 text-xs text-destructive">
-                        Permanent delete removes the business plus its leads, calls, messages, notification settings, owner notifications, operator
-                        events, simulator runs, and SMS consent records.
-                      </p>
-                      <Button className="mt-3" type="submit" variant="destructive">
-                        Delete demo/test business permanently
-                      </Button>
-                    </form>
+                  {admin.isFounder ? (
+                    <AdminPermanentDeleteBusinessCard
+                      action={deleteBusinessPermanentlyAction}
+                      business={{
+                        id: selectedBusinessRow.business.id,
+                        name: selectedBusinessRow.business.name,
+                        isTestBusiness: selectedBusinessRow.business.isTestBusiness,
+                        archivedAt: selectedBusinessRow.business.archivedAt,
+                        ownerClerkId: selectedBusinessRow.business.ownerClerkId,
+                        ownerEmail: selectedBusinessRow.business.notificationSettings?.ownerEmail || null,
+                      }}
+                      returnTo={boardReturnTo}
+                    />
                   ) : (
                     <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-                      {selectedBusinessDeleteBlockedReason || 'Delete stays unavailable for this business.'}
+                      Permanent delete is founder-only and stays inside managed business controls.
                     </div>
                   )}
                 </div>
@@ -1030,6 +1027,9 @@ export default async function AdminPage({ searchParams }: { searchParams?: Recor
                       </Link>
                       <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${business.id}/workspace`}>
                         View support workspace snapshot
+                      </Link>
+                      <Link className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/admin/${business.id}#advanced`}>
+                        Manage business
                       </Link>
                       {assignedNumber && !cardState.isArchived ? (
                         <form action={resyncBusinessWebhooksAction}>

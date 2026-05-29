@@ -1,7 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import {
+  getPermanentDeleteButtonLabel,
+  getPermanentDeleteWarningText,
+  PERMANENT_DELETE_EXTERNAL_REVIEW_NOTE,
+  REAL_CUSTOMER_DELETE_CONFIRMATION,
+} from '@/lib/admin-business-delete';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,8 +20,7 @@ type FounderDeleteCandidate = {
   ownerEmail: string | null;
   isTestDemo: boolean;
   isArchived: boolean;
-  deleteEligible: boolean;
-  deleteBlockedReason: string | null;
+  ownerClerkId: string;
 };
 
 export function FounderDeleteBusinessCard({
@@ -27,15 +32,16 @@ export function FounderDeleteBusinessCard({
 }) {
   const [selectedBusinessId, setSelectedBusinessId] = useState(candidates[0]?.id || '');
   const [confirmationName, setConfirmationName] = useState('');
+  const [realCustomerConfirmation, setRealCustomerConfirmation] = useState('');
 
-  const selectedBusiness = useMemo(
-    () => candidates.find((candidate) => candidate.id === selectedBusinessId) || null,
-    [candidates, selectedBusinessId]
-  );
+  const selectedBusiness = candidates.find((candidate) => candidate.id === selectedBusinessId) || null;
+  const requiresPhrase = selectedBusiness ? !selectedBusiness.isTestDemo : false;
   const exactNameMatch = Boolean(selectedBusiness && confirmationName === selectedBusiness.name);
+  const phraseMatch = !requiresPhrase || realCustomerConfirmation.trim() === REAL_CUSTOMER_DELETE_CONFIRMATION;
 
   useEffect(() => {
     setConfirmationName('');
+    setRealCustomerConfirmation('');
   }, [selectedBusinessId]);
 
   return (
@@ -77,17 +83,16 @@ export function FounderDeleteBusinessCard({
               <div>
                 <p className="font-medium text-foreground">Delete policy</p>
                 <p className="mt-1 text-muted-foreground">
-                  {selectedBusiness.deleteEligible
-                    ? 'Hard delete test/demo businesses only.'
-                    : selectedBusiness.isTestDemo
-                      ? 'Archive this workspace first.'
-                      : 'Archive real customers instead.'}
+                  {selectedBusiness.isTestDemo
+                    ? 'Archive first when possible, then permanently delete if you need a full cleanup.'
+                    : 'Archive is safer for churn or cancellation. Permanent delete stays available only with the real-customer phrase.'}
                 </p>
               </div>
             </div>
 
             <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-muted-foreground">
-              Deletion is permanent. This removes the business and its business-owned records through the existing schema cascades.
+              <p>{getPermanentDeleteWarningText({ ...selectedBusiness, isTestBusiness: selectedBusiness.isTestDemo })}</p>
+              <p className="mt-2">{PERMANENT_DELETE_EXTERNAL_REVIEW_NOTE}</p>
             </div>
           </div>
         ) : (
@@ -112,23 +117,32 @@ export function FounderDeleteBusinessCard({
           />
         </div>
 
-        <p className="mt-3 text-xs text-muted-foreground">
-          The delete button unlocks only when the typed name matches exactly. Archive real customers. Hard delete test/demo businesses only.
-        </p>
-
-        {selectedBusiness && !selectedBusiness.deleteEligible ? (
-          <p className="mt-3 text-xs text-destructive">
-            {selectedBusiness.deleteBlockedReason || 'Hard delete stays locked for this business.'}
-          </p>
+        {requiresPhrase ? (
+          <div className="mt-4 space-y-2">
+            <Label htmlFor="founderDeleteBusinessPhrase">Type {REAL_CUSTOMER_DELETE_CONFIRMATION}</Label>
+            <Input
+              autoComplete="off"
+              disabled={!selectedBusiness}
+              id="founderDeleteBusinessPhrase"
+              name="realCustomerConfirmation"
+              onChange={(event) => setRealCustomerConfirmation(event.currentTarget.value)}
+              placeholder={REAL_CUSTOMER_DELETE_CONFIRMATION}
+              value={realCustomerConfirmation}
+            />
+          </div>
         ) : null}
+
+        <p className="mt-3 text-xs text-muted-foreground">
+          The delete button unlocks only when the typed name matches exactly. Real customers also require the explicit founder phrase.
+        </p>
 
         <Button
           className="mt-4"
-          disabled={!selectedBusiness || !selectedBusiness.deleteEligible || !exactNameMatch}
+          disabled={!selectedBusiness || !exactNameMatch || !phraseMatch}
           type="submit"
           variant="destructive"
         >
-          Delete this business
+          {selectedBusiness ? getPermanentDeleteButtonLabel({ ...selectedBusiness, isTestBusiness: selectedBusiness.isTestDemo }) : 'Delete permanently'}
         </Button>
       </form>
     </div>

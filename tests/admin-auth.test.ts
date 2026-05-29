@@ -29,8 +29,10 @@ test('admin pages and customer-mode routes require real admin authorization', ()
   const adminContext = read('lib/admin-customer-context.ts');
 
   assert.match(adminPage, /const admin = await requireAdmin\(\)/);
-  assert.match(adminBusinessPage, /await requireAdmin\(\)/);
+  assert.match(adminBusinessPage, /const admin = await requireAdmin\(\)/);
   assert.match(adminActions, /const admin = await requireAdmin\(\)/);
+  assert.match(adminActions, /const founder = await requireFounderAdmin\(\)/);
+  assert.match(adminActions, /export async function deleteBusinessPermanentlyAction/);
   assert.match(openCustomerRoute, /const adminSession = await getAdminSession\(\)/);
   assert.match(openCustomerRoute, /if \(!adminSession\.isAdmin\)/);
   assert.match(exitCustomerModeRoute, /const adminSession = await getAdminSession\(\)/);
