@@ -100,8 +100,11 @@ test('customer home dashboard keeps setup state compact and demo actions fronten
 
   assert.match(appHomePage, /buildRecoveryMetrics\(allLeads, business\.averageJobValueCents\)/);
   assert.match(appHomePage, /showSetupChecklist=\{systemStatus\.key !== 'live'\}/);
+  assert.match(appHomePage, /setupHref="\/app\/settings"/);
   assert.match(appHomePage, /label: 'Phone line connected'/);
+  assert.match(appHomePage, /label: 'Text replies being prepared'/);
   assert.match(homeDashboard, /Finish setup/);
+  assert.match(homeDashboard, /Review setup/);
   assert.match(homeDashboard, /Test recovery flow/);
   assert.match(homeDashboard, /lg:grid-cols-\[minmax\(0,1fr\)_360px\]/);
   assert.match(homeDashboard, /lg:sticky lg:top-6 lg:self-start/);
@@ -111,6 +114,8 @@ test('customer home dashboard keeps setup state compact and demo actions fronten
   assert.doesNotMatch(homeDashboard, /Run test missed call/);
   assert.doesNotMatch(homeDashboard, /Run demo lead/);
   assert.doesNotMatch(homeDashboard, /Test demo flow/);
+  assert.doesNotMatch(homeDashboard, /Finish activation/);
+  assert.doesNotMatch(appHomePage, /twilio-setup-flow|Texting activation/);
 });
 
 test('business settings UI and action wire average job value persistence into the dashboard', () => {

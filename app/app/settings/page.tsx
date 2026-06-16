@@ -1,143 +1,63 @@
 import Link from 'next/link';
 
-import { MessagingComplianceFields } from '@/components/messaging-compliance-fields';
-import { setBusinessProvisioningStatusAction } from '@/app/admin/actions';
-import { TwilioSetupChecklist } from '@/components/twilio-setup-checklist';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getAdminSession } from '@/lib/admin';
-import { getAdminTestSmsConfidenceState } from '@/lib/admin-dashboard';
-import { getTwilioWebhookSnapshot } from '@/lib/admin-provisioning';
 import { requireBusiness } from '@/lib/auth';
+import { averageJobValueCentsToDollars } from '@/lib/business-settings';
 import { getBusinessNotificationSettingsForBusiness } from '@/lib/business-access';
-import {
-  TwilioSetupTone,
-  buildTwilioSetupFlow,
-  businessPhonePathOptions,
-  forwardedCallAnswerOptions,
-  messagingSetupOptions,
-  twilioAccountModeOptions,
-} from '@/lib/twilio-setup';
+import { getBusinessRoutingNumber, getPublicBusinessPhone } from '@/lib/business-phone-setup';
 import { db } from '@/lib/db';
-import {
-  getManagedTextingNumber,
-  managedTwilioStatusLabels,
-  messagingComplianceTypeLabels,
-  tollFreeVerificationStatusLabels,
-} from '@/lib/managed-twilio-status';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
-import { averageJobValueCentsToDollars } from '@/lib/business-settings';
+import { getCustomerSystemStatus } from '@/lib/system-status';
 
-import {
-  buyTwilioNumberAction,
-  resyncTwilioWebhooksAction,
-  saveBusinessSettingsAction,
-  saveBusinessTwilioAdminOverridesAction,
-  saveBusinessTwilioSetupChoiceAction,
-  sendBusinessTwilioTestSmsAction,
-} from './actions';
+import { saveBusinessSettingsAction } from './actions';
 
-const adminChangedFieldLabels: Record<string, string> = {
-  ownerPhone: 'owner alert phone',
-  twilioAccountMode: 'Twilio account mode',
-  phoneSetupPath: 'business number path',
-  forwardedCallAnswerMode: 'forwarded call answer mode',
-  messagingSetupMode: 'messaging setup mode',
-  twilioNumberSetupMode: 'routing number mode',
-  twilioSubaccountSid: 'Twilio subaccount SID',
-  twilioPhoneNumber: 'Twilio number',
-  twilioPhoneNumberSid: 'Twilio number SID',
-  twilioMessagingServiceSid: 'messaging service SID',
-  forwardingVerificationStatus: 'forwarding verification status',
-  forwardingVerificationNote: 'forwarding verification note',
-  portingStatus: 'porting status',
-  portingNotes: 'porting notes',
-  messagingComplianceType: 'number type',
-  a2pCustomerProfileSid: 'A2P customer profile SID',
-  a2pBrandSid: 'A2P brand SID',
-  a2pCampaignSid: 'A2P campaign SID',
-  a2pFailureReason: 'A2P blocker note',
-  tollFreeVerificationStatus: 'toll-free verification status',
-  tollFreeVerificationSid: 'toll-free verification SID',
-  tollFreeVerificationNote: 'toll-free blocker note',
-  managedTwilioStatus: 'A2P status',
-};
+type StatusTone = 'success' | 'secondary' | 'outline';
 
-type BusinessTwilioDefaults = {
-  twilioAccountMode: string;
-  phoneSetupPath: string;
-  forwardedCallAnswerMode: string;
-  messagingSetupMode: string;
-  twilioNumberSetupMode: string;
-  twilioSubaccountSid: string;
-  twilioPhoneNumber: string;
-  twilioPhoneNumberSid: string;
-  twilioMessagingServiceSid: string;
-  forwardingVerificationStatus: string;
-  forwardingVerificationNote: string;
-  portingStatus: string;
-  portingNotes: string;
-  messagingComplianceType: string;
-  a2pCustomerProfileSid: string;
-  a2pBrandSid: string;
-  a2pCampaignSid: string;
-  a2pFailureReason: string;
-  tollFreeVerificationStatus: string;
-  tollFreeVerificationSid: string;
-  tollFreeVerificationNote: string;
-  managedTwilioStatus: string;
-  ownerPhone: string;
-};
-
-function HiddenBusinessTwilioFields({
-  defaults,
-  exclude = [],
-}: {
-  defaults: BusinessTwilioDefaults;
-  exclude?: Array<keyof BusinessTwilioDefaults>;
-}) {
-  return (
-    <>
-      {Object.entries(defaults).map(([name, value]) => {
-        if (exclude.includes(name as keyof BusinessTwilioDefaults)) return null;
-        return <input key={name} name={name} type="hidden" value={value} />;
-      })}
-    </>
-  );
+function getStatusBadge(complete: boolean, pendingLabel = 'Needs attention') {
+  return {
+    label: complete ? 'Ready' : pendingLabel,
+    variant: complete ? ('success' as const) : ('outline' as const),
+  };
 }
 
-function getBadgeVariant(tone: TwilioSetupTone) {
-  if (tone === 'success') return 'success' as const;
-  if (tone === 'attention') return 'destructive' as const;
-  if (tone === 'pending') return 'outline' as const;
-  return 'secondary' as const;
+function getTextingStatus(systemStatus: ReturnType<typeof getCustomerSystemStatus>) {
+  if (systemStatus.key === 'live') {
+    return {
+      label: 'Text replies active',
+      detail: 'Missed callers can receive the follow-up text automatically.',
+      variant: 'success' as StatusTone,
+    };
+  }
+
+  if (systemStatus.key === 'activating') {
+    return {
+      label: 'Text replies being finished',
+      detail: 'CallbackCloser is still finishing the behind-the-scenes setup before automatic texting is fully live.',
+      variant: 'secondary' as StatusTone,
+    };
+  }
+
+  return {
+    label: 'Text replies not live yet',
+    detail: 'CallbackCloser will notify you when missed-call texting is ready to test.',
+    variant: 'outline' as StatusTone,
+  };
 }
 
 export default async function SettingsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const business = await requireBusiness();
-  const averageJobValue = averageJobValueCentsToDollars(business.averageJobValueCents);
   const demoMode = isPortfolioDemoMode();
-  const adminSession = demoMode ? null : await getAdminSession();
+  const averageJobValue = averageJobValueCentsToDollars(business.averageJobValueCents);
   const error = typeof searchParams?.error === 'string' ? searchParams.error : undefined;
   const saved = searchParams?.saved === '1';
-  const numberBought = searchParams?.numberBought === '1';
-  const twilioSynced = searchParams?.twilioSynced === '1';
-  const adminTwilioSaved = searchParams?.adminTwilioSaved === '1';
-  const twilioTestSms = searchParams?.twilioTestSms === '1';
-  const existingNumberIntent = searchParams?.existingNumberIntent === '1';
-  const adminChangedRaw = typeof searchParams?.adminChanged === 'string' ? searchParams.adminChanged : '';
-  const adminChanged = adminChangedRaw
-    .split(',')
-    .map((field) => field.trim())
-    .filter(Boolean)
-    .map((field) => adminChangedFieldLabels[field] || field);
 
-  const [notificationSettings, successfulLeadCount, testSmsEvents, webhookSnapshot] = demoMode
-    ? [null, 1, [], null]
+  const [notificationSettings, successfulLeadCount] = demoMode
+    ? [null, 1]
     : await Promise.all([
         getBusinessNotificationSettingsForBusiness(business.id),
         db.lead.count({
@@ -146,519 +66,66 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
           },
         }),
-        db.businessOperatorEvent.findMany({
-          where: {
-            businessId: business.id,
-            type: {
-              startsWith: 'admin.test_sms_',
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-          select: {
-            type: true,
-            status: true,
-            createdAt: true,
-          },
-        }),
-        getTwilioWebhookSnapshot(business),
       ]);
 
-  const testSmsState = getAdminTestSmsConfidenceState(testSmsEvents);
-  const managedTextingNumber = getManagedTextingNumber(business);
-  const setupFlow = buildTwilioSetupFlow({
-    business,
-    notificationSettings,
-    ownerConnected: true,
-    successfulLeadCount,
-    testSmsState,
-    webhookSnapshot,
-  });
-  const twilioDefaults: BusinessTwilioDefaults = {
-    twilioAccountMode: business.twilioAccountMode,
-    phoneSetupPath: business.phoneSetupPath,
-    forwardedCallAnswerMode: business.forwardedCallAnswerMode,
-    messagingSetupMode: business.messagingSetupMode,
-    twilioNumberSetupMode: business.twilioNumberSetupMode,
-    twilioSubaccountSid: business.twilioSubaccountSid || '',
-    twilioPhoneNumber: business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber || '',
-    twilioPhoneNumberSid: business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || '',
-    twilioMessagingServiceSid: business.twilioMessagingServiceSid || '',
-    forwardingVerificationStatus: business.forwardingVerificationStatus,
-    forwardingVerificationNote: business.forwardingVerificationNote || '',
-    portingStatus: business.portingStatus,
-    portingNotes: business.portingNotes || '',
-    messagingComplianceType: business.messagingComplianceType,
-    a2pCustomerProfileSid: business.a2pCustomerProfileSid || '',
-    a2pBrandSid: business.a2pBrandSid || '',
-    a2pCampaignSid: business.a2pCampaignSid || '',
-    a2pFailureReason: business.a2pFailureReason || '',
-    tollFreeVerificationStatus: business.tollFreeVerificationStatus,
-    tollFreeVerificationSid: business.tollFreeVerificationSid || '',
-    tollFreeVerificationNote: business.tollFreeVerificationNote || '',
-    managedTwilioStatus: business.managedTwilioStatus,
-    ownerPhone: notificationSettings?.ownerPhone || business.notifyPhone || '',
-  };
+  const publicBusinessPhone = getPublicBusinessPhone(business);
+  const connectedNumber = getBusinessRoutingNumber(business);
+  const ownerAlertPhone = notificationSettings?.ownerPhone || business.notifyPhone || null;
+  const ownerAlertEmail = notificationSettings?.ownerEmail || null;
+  const systemStatus = getCustomerSystemStatus(business, successfulLeadCount);
+  const textingStatus = getTextingStatus(systemStatus);
+  const businessNumberStatus = getStatusBadge(Boolean(publicBusinessPhone || connectedNumber), 'Not connected yet');
+  const ownerAlertStatus = getStatusBadge(Boolean(ownerAlertPhone || ownerAlertEmail), 'Add destination');
 
-  const bannerAction =
-    setupFlow.banner.stepKey === 'voice_webhook_synced' ||
-    setupFlow.banner.stepKey === 'sms_webhook_synced' ||
-    setupFlow.banner.stepKey === 'status_callback_synced' ? (
-      <form action={resyncTwilioWebhooksAction}>
-        <Button size="sm" type="submit">
-          Sync webhooks
-        </Button>
-      </form>
-    ) : setupFlow.banner.stepKey === 'safe_to_mark_live' && adminSession?.isAdmin && setupFlow.safeToMarkLive && business.provisioningStatus !== 'LIVE' ? (
-      <form action={setBusinessProvisioningStatusAction}>
-        <input type="hidden" name="businessId" value={business.id} />
-        <input type="hidden" name="status" value="LIVE" />
-        <Button size="sm" type="submit">
-          Mark live
-        </Button>
-      </form>
-    ) : (
-      <Link
-        className={buttonVariants({ size: 'sm', variant: 'outline' })}
-        href={
-          setupFlow.banner.stepKey === 'account_mode'
-            ? '#account-mode-step'
-            : setupFlow.banner.stepKey === 'number_path'
-              ? '#number-path-step'
-              : setupFlow.banner.stepKey === 'test_sms_delivered'
-                ? '#test-sms-step'
-                : setupFlow.banner.stepKey === 'missed_call_validated'
-                  ? '/app/call-flow'
-                  : '#twilio-setup-flow'
-        }
-      >
-        {setupFlow.banner.stepKey === 'missed_call_validated' ? 'Open call flow' : 'Review step'}
-      </Link>
-    );
-
-  const setupSteps = setupFlow.steps.map((step) => {
-    if (step.key === 'owner_connected') {
-      return {
-        ...step,
-        body: (
-          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <Badge variant="success">Connected</Badge>
-            <span>Your signed-in business account is already attached to this workspace.</span>
-          </div>
-        ),
-      };
-    }
-
-    if (step.key === 'account_mode') {
-      return {
-        ...step,
-        body: (
-          <form action={saveBusinessTwilioSetupChoiceAction} className="space-y-4" id="account-mode-step">
-            <input type="hidden" name="phoneSetupPath" value={setupFlow.phoneSetupPath} />
-            <input type="hidden" name="forwardedCallAnswerMode" value={setupFlow.forwardedCallAnswerMode} />
-            <input type="hidden" name="messagingSetupMode" value={setupFlow.messagingSetupMode} />
-            <div className="grid gap-3 md:grid-cols-2">
-              {twilioAccountModeOptions.map((option) => (
-                <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
-                  <div className="flex items-start gap-3">
-                    <input defaultChecked={setupFlow.accountMode === option.value} name="twilioAccountMode" type="radio" value={option.value} />
-                    <div className="space-y-1">
-                      <p className="font-medium">{option.label}</p>
-                      <p className="text-muted-foreground">{option.description}</p>
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <Button size="sm" type="submit">
-              Save account mode
-            </Button>
-          </form>
-        ),
-      };
-    }
-
-    if (step.key === 'number_path') {
-      return {
-        ...step,
-        body: (
-          <form action={saveBusinessTwilioSetupChoiceAction} className="space-y-4" id="number-path-step">
-            <input type="hidden" name="twilioAccountMode" value={setupFlow.accountMode} />
-            <div className="grid gap-3">
-              {businessPhonePathOptions.map((option) => (
-                <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
-                  <div className="flex items-start gap-3">
-                    <input defaultChecked={setupFlow.phoneSetupPath === option.value} name="phoneSetupPath" type="radio" value={option.value} />
-                    <div className="space-y-1">
-                      <p className="font-medium">{option.label}</p>
-                      <p className="text-muted-foreground">{option.description}</p>
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <div className="grid gap-3">
-              <p className="text-sm font-medium">Forwarded call answer confirmation</p>
-              {forwardedCallAnswerOptions.map((option) => (
-                <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
-                  <div className="flex items-start gap-3">
-                    <input
-                      defaultChecked={setupFlow.forwardedCallAnswerMode === option.value}
-                      name="forwardedCallAnswerMode"
-                      type="radio"
-                      value={option.value}
-                    />
-                    <div className="space-y-1">
-                      <p className="font-medium">{option.label}</p>
-                      <p className="text-muted-foreground">{option.description}</p>
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <div className="grid gap-3">
-              <p className="text-sm font-medium">Messaging setup mode</p>
-              {messagingSetupOptions.map((option) => (
-                <label key={option.value} className="rounded-xl border bg-background/80 p-4 text-sm">
-                  <div className="flex items-start gap-3">
-                    <input
-                      defaultChecked={setupFlow.messagingSetupMode === option.value}
-                      name="messagingSetupMode"
-                      type="radio"
-                      value={option.value}
-                    />
-                    <div className="space-y-1">
-                      <p className="font-medium">{option.label}</p>
-                      <p className="text-muted-foreground">{option.description}</p>
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-            {setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER' ? (
-              <p className="text-sm text-muted-foreground">{setupFlow.existingNumberMessage}</p>
-            ) : null}
-            <Button size="sm" type="submit" variant="outline">
-              Save call and messaging path
-            </Button>
-          </form>
-        ),
-      };
-    }
-
-    if (step.key === 'account_ready') {
-      return {
-        ...step,
-        body: adminSession?.isAdmin ? (
-          <form action={saveBusinessTwilioAdminOverridesAction} className="space-y-4">
-            <HiddenBusinessTwilioFields defaults={twilioDefaults} exclude={['twilioSubaccountSid']} />
-            {setupFlow.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE' ? (
-              <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
-                Pilot setup uses the approved CallbackCloser sender, so a dedicated subaccount is optional during founder-operated onboarding.
-              </div>
-            ) : setupFlow.accountMode === 'BUSINESS_SUBACCOUNT' ? (
-              <div className="space-y-2">
-                <Label htmlFor="businessTwilioSubaccountSid">Business subaccount SID</Label>
-                <Input
-                  id="businessTwilioSubaccountSid"
-                  name="twilioSubaccountSid"
-                  defaultValue={business.twilioSubaccountSid || ''}
-                  placeholder="AC..."
-                />
-                <p className="text-xs text-muted-foreground">Paste a known subaccount SID to reuse it, or leave this blank and let provisioning create one.</p>
-              </div>
-            ) : (
-              <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
-                Main account mode is active. CallbackCloser will use the parent Twilio account directly for this business.
-              </div>
-            )}
-            <Button size="sm" type="submit" variant="outline">
-              Save account target
-            </Button>
-          </form>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {setupFlow.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE'
-              ? 'Pilot setup is founder-operated, so a dedicated business subaccount is optional while SMS uses the approved CallbackCloser sender.'
-              : setupFlow.accountMode === 'BUSINESS_SUBACCOUNT'
-              ? 'CallbackCloser will create or reuse a dedicated Twilio subaccount for this business during setup.'
-              : 'CallbackCloser will keep this business on the parent Twilio account.'}
-          </p>
-        ),
-      };
-    }
-
-    if (step.key === 'messaging_service_ready') {
-      return {
-        ...step,
-        body: adminSession?.isAdmin ? (
-          <form action={saveBusinessTwilioAdminOverridesAction} className="space-y-4">
-            <HiddenBusinessTwilioFields defaults={twilioDefaults} exclude={['twilioMessagingServiceSid']} />
-            {setupFlow.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE' ? (
-              <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
-                Pilot setup: current number forwards to CallbackCloser; SMS sends from the approved CallbackCloser messaging number.
-              </div>
-            ) : null}
-            <div className="space-y-2">
-              <Label htmlFor="businessMessagingServiceSid">Messaging Service SID</Label>
-              <Input
-                id="businessMessagingServiceSid"
-                name="twilioMessagingServiceSid"
-                defaultValue={business.twilioMessagingServiceSid || ''}
-                placeholder="MG..."
-              />
-            </div>
-            <Button size="sm" type="submit" variant="outline">
-              Save Messaging Service
-            </Button>
-          </form>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {setupFlow.messagingSetupMode === 'SHARED_PILOT_MESSAGING_SERVICE'
-              ? `Pilot sender: ${business.twilioMessagingServiceSid || 'Approved CallbackCloser Messaging Service not recorded yet.'}`
-              : `Current value: ${business.twilioMessagingServiceSid || 'Not recorded yet.'}`}
-          </p>
-        ),
-      };
-    }
-
-    if (step.key === 'number_assigned') {
-      return {
-        ...step,
-        body: (
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                <p className="font-medium">Current number</p>
-                <p className="mt-2 text-muted-foreground">
-                  {managedTextingNumber ? formatPhoneForDisplay(managedTextingNumber) : 'No business number recorded yet'}
-                </p>
-              </div>
-              <div className="rounded-xl border bg-background/80 p-4 text-sm">
-                <p className="font-medium">Number path</p>
-                <p className="mt-2 text-muted-foreground">{setupFlow.phoneSetupPathLabel}</p>
-              </div>
-            </div>
-
-            {setupFlow.phoneSetupPath !== 'PORT_EXISTING_NUMBER' ? (
-              <form action={buyTwilioNumberAction} className="flex flex-col gap-3 md:flex-row md:items-end">
-                <div className="w-full md:max-w-xs">
-                  <Label htmlFor="setupAreaCode">Preferred area code</Label>
-                  <Input id="setupAreaCode" name="areaCode" inputMode="numeric" maxLength={3} placeholder="512" />
-                </div>
-                <Button size="sm" type="submit" disabled={Boolean(managedTextingNumber)}>
-                  {managedTextingNumber ? 'Routing number already assigned' : 'Provision routing number'}
-                </Button>
-              </form>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">{setupFlow.existingNumberMessage}</p>
-                <p className="text-sm text-muted-foreground">
-                  CallbackCloser does not automate porting in this step. Once the number is live in Twilio, an operator can save the routing number mapping.
-                </p>
-              </div>
-            )}
-
-            {adminSession?.isAdmin ? (
-              <form action={saveBusinessTwilioAdminOverridesAction} className="grid gap-4 md:grid-cols-2">
-                <HiddenBusinessTwilioFields defaults={twilioDefaults} exclude={['twilioPhoneNumber', 'twilioPhoneNumberSid']} />
-                <div className="space-y-2">
-                  <Label htmlFor="businessTwilioPhoneNumber">Twilio number</Label>
-                  <Input id="businessTwilioPhoneNumber" name="twilioPhoneNumber" defaultValue={managedTextingNumber || ''} placeholder="+15551234567" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="businessTwilioPhoneNumberSid">Twilio number SID</Label>
-                  <Input
-                    id="businessTwilioPhoneNumberSid"
-                    name="twilioPhoneNumberSid"
-                    defaultValue={business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid || ''}
-                    placeholder="PN..."
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Button size="sm" type="submit" variant="outline">
-                    Save number mapping
-                  </Button>
-                </div>
-              </form>
-            ) : null}
-          </div>
-        ),
-      };
-    }
-
-    if (step.key === 'forwarding_verified') {
-      return {
-        ...step,
-        body: (
-          <div className="space-y-3 text-sm text-muted-foreground">
-            {setupFlow.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING' ? (
-              <>
-                <p>
-                  Forward your current public business number into the CallbackCloser routing number shown above. CallbackCloser marks this step complete after a fresh inbound test call reaches the routing number or an operator confirms it manually.
-                </p>
-                <p>
-                  Public business number: {business.publicBusinessPhone ? formatPhoneForDisplay(business.publicBusinessPhone) : 'Not saved yet'}
-                </p>
-              </>
-            ) : setupFlow.phoneSetupPath === 'PORT_EXISTING_NUMBER' ? (
-              <p>Porting stays admin-assisted for now. Keep the porting status updated, then save the Twilio routing number after the port completes.</p>
-            ) : (
-              <p>The new CallbackCloser number becomes your connected business line once it is assigned and working.</p>
-            )}
-          </div>
-        ),
-      };
-    }
-
-    if (step.key === 'voice_webhook_synced') {
-      return {
-        ...step,
-        body: (
-          <form action={resyncTwilioWebhooksAction} className="flex flex-wrap gap-3">
-            <Button size="sm" type="submit" disabled={!(business.twilioPrimaryNumberSid || business.twilioPhoneNumberSid)}>
-              Sync all webhooks
-            </Button>
-            <span className="text-sm text-muted-foreground">Voice, SMS, and status callback sync all happen together from this page.</span>
-          </form>
-        ),
-      };
-    }
-
-    if (step.key === 'a2p_status_recorded') {
-      return {
-        ...step,
-        body: adminSession?.isAdmin ? (
-          <form action={saveBusinessTwilioAdminOverridesAction}>
-            <HiddenBusinessTwilioFields
-              defaults={twilioDefaults}
-              exclude={[
-                'messagingComplianceType',
-                'managedTwilioStatus',
-                'a2pCustomerProfileSid',
-                'a2pBrandSid',
-                'a2pCampaignSid',
-                'a2pFailureReason',
-                'tollFreeVerificationStatus',
-                'tollFreeVerificationSid',
-                'tollFreeVerificationNote',
-              ]}
-            />
-            <MessagingComplianceFields
-              idPrefix="business"
-              initialMessagingComplianceType={business.messagingComplianceType}
-              initialManagedTwilioStatus={business.managedTwilioStatus}
-              initialA2pCustomerProfileSid={business.a2pCustomerProfileSid || ''}
-              initialA2pBrandSid={business.a2pBrandSid || ''}
-              initialA2pCampaignSid={business.a2pCampaignSid || ''}
-              initialA2pFailureReason={business.a2pFailureReason || ''}
-              initialTollFreeVerificationStatus={business.tollFreeVerificationStatus}
-              initialTollFreeVerificationSid={business.tollFreeVerificationSid || ''}
-              initialTollFreeVerificationNote={business.tollFreeVerificationNote || ''}
-              complianceTypeOptions={Object.entries(messagingComplianceTypeLabels).map(([value, label]) => ({ value, label }))}
-              managedTwilioStatusOptions={Object.entries(managedTwilioStatusLabels).map(([value, label]) => ({ value, label }))}
-              tollFreeVerificationStatusOptions={Object.entries(tollFreeVerificationStatusLabels).map(([value, label]) => ({
-                value,
-                label,
-              }))}
-              showSubmitButton
-              submitButtonVariant="outline"
-            />
-          </form>
-        ) : (
-          <div className="flex flex-wrap gap-2 text-sm">
-            <Badge variant={getBadgeVariant(step.tone)}>{step.stateLabel}</Badge>
-            <span className="text-muted-foreground">CallbackCloser keeps this launch status truthful even while review is pending.</span>
-          </div>
-        ),
-      };
-    }
-
-    if (step.key === 'test_sms_delivered') {
-      return {
-        ...step,
-        body: (
-          <form action={sendBusinessTwilioTestSmsAction} className="space-y-3" id="test-sms-step">
-            <div className="space-y-2">
-              <Label htmlFor="businessTwilioTestSmsPhone">Test SMS destination</Label>
-              <Input
-                id="businessTwilioTestSmsPhone"
-                name="destinationPhone"
-                defaultValue={notificationSettings?.ownerPhone || business.notifyPhone || ''}
-                placeholder="+15551234567"
-              />
-              <p className="text-xs text-muted-foreground">Send a real test text from the current business line before you treat this setup as launch-ready.</p>
-            </div>
-            <Button size="sm" type="submit">
-              Send test SMS
-            </Button>
-          </form>
-        ),
-      };
-    }
-
-    if (step.key === 'missed_call_validated') {
-      return {
-        ...step,
-        body: (
-          <div className="flex flex-wrap gap-3">
-            <Link className={buttonVariants({ size: 'sm' })} href="/app/call-flow">
-              Open call flow
-            </Link>
-            <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href="/app/leads">
-              Open recovered leads
-            </Link>
-          </div>
-        ),
-      };
-    }
-
-    if (step.key === 'safe_to_mark_live') {
-      return {
-        ...step,
-        body: adminSession?.isAdmin ? (
-          <div className="flex flex-wrap gap-3">
-            <form action={setBusinessProvisioningStatusAction}>
-              <input type="hidden" name="businessId" value={business.id} />
-              <input type="hidden" name="status" value="LIVE" />
-              <Button size="sm" type="submit" disabled={!setupFlow.safeToMarkLive || business.provisioningStatus === 'LIVE'}>
-                {business.provisioningStatus === 'LIVE' ? 'Already live' : 'Mark live'}
-              </Button>
-            </form>
-            <form action={setBusinessProvisioningStatusAction}>
-              <input type="hidden" name="businessId" value={business.id} />
-              <input type="hidden" name="status" value="PAUSED" />
-              <Button size="sm" type="submit" variant="outline">
-                Pause automation
-              </Button>
-            </form>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Launch state is managed after the setup checklist, test SMS, and missed-call validation all clear.</p>
-        ),
-      };
-    }
-
-    return step;
-  });
+  const statusCards = [
+    {
+      key: 'business-number',
+      title: 'Business number',
+      badge: businessNumberStatus,
+      detail: publicBusinessPhone
+        ? `Customers can keep calling ${formatPhoneForDisplay(publicBusinessPhone)}.`
+        : connectedNumber
+          ? `Use ${formatPhoneForDisplay(connectedNumber)} for missed-call coverage.`
+          : 'CallbackCloser is still finishing the number setup for this account.',
+    },
+    {
+      key: 'text-replies',
+      title: 'Text replies',
+      badge: {
+        label: textingStatus.variant === 'success' ? 'Ready' : textingStatus.variant === 'secondary' ? 'In progress' : 'Not live yet',
+        variant: textingStatus.variant,
+      },
+      detail: textingStatus.detail,
+    },
+    {
+      key: 'owner-alerts',
+      title: 'Owner alerts',
+      badge: ownerAlertStatus,
+      detail: ownerAlertPhone
+        ? `Lead summaries go to ${formatPhoneForDisplay(ownerAlertPhone)}.`
+        : ownerAlertEmail
+          ? `Lead summaries go to ${ownerAlertEmail}.`
+          : 'Add the phone or email that should receive lead summaries.',
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="space-y-2">
-        <Badge variant="outline">Twilio Setup</Badge>
+        <Badge variant="outline">Settings</Badge>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">Connect your business number</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Business settings</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              One guided place to choose the Twilio account mode, connect the right business-number path, and keep launch status honest without digging through admin screens.
+              Keep the business details and owner alert destinations current. CallbackCloser handles the phone and messaging setup in the background.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link className={buttonVariants({ variant: 'outline' })} href="/app/call-flow">
-              Open call flow
+              How missed calls work
             </Link>
             <Link className={buttonVariants({ variant: 'outline' })} href="/app/leads">
-              Open recovered leads
+              Open leads
             </Link>
           </div>
         </div>
@@ -666,34 +133,27 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business settings saved.</div> : null}
-      {numberBought ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">A new business number was provisioned for the selected Twilio account mode.</div> : null}
-      {existingNumberIntent ? (
-        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
-          Porting path saved. CallbackCloser will keep this business on the admin-assisted porting workflow until the number is active and mapped into Twilio.
-        </div>
-      ) : null}
-      {twilioSynced ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Webhook sync completed for the current business number.</div> : null}
-      {twilioTestSms ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Test SMS requested. Wait for delivery before you treat the setup as launch-ready.</div> : null}
-      {adminTwilioSaved ? (
-        <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">
-          Internal setup state saved{adminChanged.length > 0 ? `: ${adminChanged.join(', ')}.` : '.'}
-        </div>
-      ) : null}
 
-      <div id="twilio-setup-flow">
-        <TwilioSetupChecklist
-          title="CallbackCloser Twilio launch flow"
-          description="The same step-by-step provisioning flow powers new-business setup and ongoing business control."
-          banner={setupFlow.banner}
-          bannerAction={bannerAction}
-          steps={setupSteps}
-        />
-      </div>
+      <section className="grid gap-4 md:grid-cols-3">
+        {statusCards.map((item) => (
+          <Card key={item.key} className="bg-card/90">
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-3">
+                <CardTitle className="text-base">{item.title}</CardTitle>
+                <Badge variant={item.badge.variant}>{item.badge.label}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">{item.detail}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
 
       <Card className="bg-card/90">
         <CardHeader>
-          <CardTitle>Business basics</CardTitle>
-          <CardDescription>Keep the public business number, live call path, and owner routing current while setup moves forward.</CardDescription>
+          <CardTitle>Business details</CardTitle>
+          <CardDescription>These details shape lead summaries, revenue estimates, and owner notifications.</CardDescription>
         </CardHeader>
         <CardContent>
           <form action={saveBusinessSettingsAction} className="grid gap-4 md:grid-cols-2">
@@ -709,23 +169,23 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               <Input id="settingsPublicBusinessPhone" name="publicBusinessPhone" defaultValue={business.publicBusinessPhone || ''} />
             </div>
             <div>
-              <Label htmlFor="settingsForwardingNumber">Owner forwarding / answer number</Label>
+              <Label htmlFor="settingsForwardingNumber">Number your team answers</Label>
               <Input id="settingsForwardingNumber" name="forwardingNumber" defaultValue={business.forwardingNumber} required />
             </div>
             <div>
               <Label htmlFor="settingsNotifyPhone">Owner alert phone</Label>
-              <Input id="settingsNotifyPhone" name="notifyPhone" defaultValue={notificationSettings?.ownerPhone || business.notifyPhone || ''} />
+              <Input id="settingsNotifyPhone" name="notifyPhone" defaultValue={ownerAlertPhone || ''} />
             </div>
             <div>
-              <Label htmlFor="settingsOwnerEmail">Owner email</Label>
-              <Input id="settingsOwnerEmail" name="ownerEmail" defaultValue={notificationSettings?.ownerEmail || ''} placeholder="owner@business.com" />
+              <Label htmlFor="settingsOwnerEmail">Owner alert email</Label>
+              <Input id="settingsOwnerEmail" name="ownerEmail" defaultValue={ownerAlertEmail || ''} placeholder="owner@business.com" />
             </div>
             <div>
               <Label htmlFor="settingsTimezone">Timezone</Label>
               <Input id="settingsTimezone" name="timezone" defaultValue={business.timezone} required />
             </div>
             <div>
-              <Label htmlFor="settingsMissedCallSeconds">Missed-call timeout (seconds)</Label>
+              <Label htmlFor="settingsMissedCallSeconds">Missed-call wait time (seconds)</Label>
               <Input id="settingsMissedCallSeconds" name="missedCallSeconds" type="number" min={5} max={90} defaultValue={business.missedCallSeconds} required />
             </div>
             <div>
@@ -757,7 +217,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <label className="rounded-xl border bg-background/80 p-4 text-sm">
               <div className="flex items-start gap-3">
                 <input defaultChecked={notificationSettings?.notifySms ?? true} name="notifySms" type="checkbox" value="true" />
-                <span>Send owner SMS alerts</span>
+                <span>Send owner text alerts</span>
               </div>
             </label>
             <label className="rounded-xl border bg-background/80 p-4 text-sm">
@@ -769,17 +229,17 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
             <label className="rounded-xl border bg-background/80 p-4 text-sm">
               <div className="flex items-start gap-3">
                 <input defaultChecked={notificationSettings?.notifyInApp ?? true} name="notifyInApp" type="checkbox" value="true" />
-                <span>Show in-app notifications</span>
+                <span>Show alerts in the dashboard</span>
               </div>
             </label>
             <label className="rounded-xl border bg-background/80 p-4 text-sm">
               <div className="flex items-start gap-3">
                 <input defaultChecked={notificationSettings?.urgentOnly ?? false} name="urgentOnly" type="checkbox" value="true" />
-                <span>Urgent leads only</span>
+                <span>Only alert me for urgent leads</span>
               </div>
             </label>
             <div className="md:col-span-2">
-              <Button type="submit">Save business basics</Button>
+              <Button type="submit">Save settings</Button>
             </div>
           </form>
         </CardContent>
@@ -787,23 +247,19 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
       <Card className="bg-card/90">
         <CardHeader>
-          <CardTitle>Advanced</CardTitle>
-          <CardDescription>Rare setup notes and trust links that should stay visible without crowding the main flow.</CardDescription>
+          <CardTitle>Need setup help?</CardTitle>
+          <CardDescription>Phone changes and messaging approvals are handled by CallbackCloser support.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
-            Existing-number support stays honest here. CallbackCloser does not automatically discover arbitrary Twilio subaccounts or numbers outside the selected account context.
-          </div>
-          <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground">
-            Public trust pages stay linked from setup: <Link className="underline underline-offset-4" href="/privacy">Privacy</Link>,{' '}
-            <Link className="underline underline-offset-4" href="/terms">Terms</Link>, and{' '}
-            <Link className="underline underline-offset-4" href="/sms-consent">SMS consent</Link>.
-          </div>
-          {adminSession?.isAdmin ? (
-            <div className="rounded-xl border bg-background/80 p-4 text-sm text-muted-foreground md:col-span-2">
-              Admin mode is active on this page, so the internal Twilio mapping fields above are editable without leaving the business workspace.
-            </div>
-          ) : null}
+        <CardContent className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+          <p className="w-full max-w-3xl">
+            If your business number, forwarding destination, or owner alert destination changes, update the fields above. CallbackCloser will handle any background setup needed to keep missed-call recovery working.
+          </p>
+          <Link className={buttonVariants({ variant: 'outline' })} href="/contact">
+            Contact support
+          </Link>
+          <Link className={buttonVariants({ variant: 'ghost' })} href="/sms-consent">
+            SMS consent
+          </Link>
         </CardContent>
       </Card>
     </div>

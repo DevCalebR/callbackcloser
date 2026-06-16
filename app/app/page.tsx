@@ -204,11 +204,11 @@ export default async function AppHomePage({
       state: ownerAlertsReady ? ('complete' as const) : ('pending' as const),
     },
     {
-      key: 'texting-activation',
-      label: 'Texting activation in progress',
+      key: 'text-replies',
+      label: 'Text replies being prepared',
       detail:
         systemStatus.key === 'live'
-          ? 'Texting is live.'
+          ? 'Text replies are live.'
           : systemStatus.description,
       state:
         systemStatus.key === 'live'
@@ -228,7 +228,7 @@ export default async function AppHomePage({
     <HomeDashboard
       attentionLeads={attentionLeads}
       feedback={feedback}
-      finishActivationHref="/app/settings#twilio-setup-flow"
+      setupHref="/app/settings"
       hasRealLeadData={allLeads.length > 0}
       isDemoMode={demoMode}
       metrics={metrics}

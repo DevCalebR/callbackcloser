@@ -257,7 +257,7 @@ export function HomeDashboard({
   hasRealLeadData,
   showSetupChecklist,
   setupChecklistItems,
-  finishActivationHref,
+  setupHref,
   simulatorHref,
 }: {
   attentionLeads: DashboardLeadCard[];
@@ -268,7 +268,7 @@ export function HomeDashboard({
   hasRealLeadData: boolean;
   showSetupChecklist: boolean;
   setupChecklistItems: SetupChecklistItem[];
-  finishActivationHref: string;
+  setupHref: string;
   simulatorHref: string;
 }) {
   const [showSampleLeads, setShowSampleLeads] = useState(!hasRealLeadData && isDemoMode);
@@ -415,8 +415,8 @@ export function HomeDashboard({
                     </div>
                   );
                 })}
-                <Link className={cn(buttonVariants({ size: 'sm' }), 'w-full')} href={finishActivationHref}>
-                  Finish activation
+                <Link className={cn(buttonVariants({ size: 'sm' }), 'w-full')} href={setupHref}>
+                  Review setup
                 </Link>
               </CardContent>
             </Card>

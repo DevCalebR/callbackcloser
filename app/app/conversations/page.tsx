@@ -42,7 +42,7 @@ export default async function ConversationsPage({ searchParams }: { searchParams
           </div>
         </div>
         <Link className={buttonVariants({ variant: 'outline' })} href="/app/leads">
-          Open Recovered Leads
+          Open leads
         </Link>
       </div>
 

@@ -1,243 +1,135 @@
 import Link from 'next/link';
 
-import {
-  getBusinessPhoneSetupGate,
-  getBusinessPhoneSetupPathLabel,
-  getBusinessRoutingNumber,
-  getPublicBusinessPhone,
-} from '@/lib/business-phone-setup';
 import { SetupChecklist } from '@/components/setup-checklist';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireBusiness } from '@/lib/auth';
+import { getBusinessNotificationSettingsForBusiness } from '@/lib/business-access';
+import { getBusinessRoutingNumber, getPublicBusinessPhone } from '@/lib/business-phone-setup';
 import { db } from '@/lib/db';
-import { getManagedTextingNumber, getManagedTwilioStatusSummary } from '@/lib/managed-twilio';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
-import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getCustomerSystemStatus } from '@/lib/system-status';
-import { isSmsRecipientOptedOut } from '@/lib/twilio-sms-compliance';
+
+function formatMaybePhone(value: string | null | undefined, fallback: string) {
+  return value ? formatPhoneForDisplay(value) : fallback;
+}
 
 export default async function CallFlowPage() {
   const business = await requireBusiness();
   const demoMode = isPortfolioDemoMode();
-  const billingAccess = getBusinessBillingAccessState(business);
-  const ownerNotifyPhoneOptedOut =
-    demoMode || !business.notifyPhone
-      ? false
-      : await isSmsRecipientOptedOut({ businessId: business.id, phone: business.notifyPhone });
-  const successfulLeadCount = demoMode
-    ? 1
-    : await db.lead.count({
-        where: {
-          businessId: business.id,
-          OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
-        },
-      });
-  const managedTextingNumber = getManagedTextingNumber(business);
-  const managedTwilioSummary = getManagedTwilioStatusSummary(business);
-  const phoneSetupGate = getBusinessPhoneSetupGate(business);
-  const publicBusinessPhone = getPublicBusinessPhone(business);
-  const routingNumber = getBusinessRoutingNumber(business);
-  const readiness = {
-    ready:
-      Boolean(business.forwardingNumber) &&
-      phoneSetupGate.complete &&
-      managedTwilioSummary.messagingReady &&
-      Boolean(business.notifyPhone) &&
-      !ownerNotifyPhoneOptedOut &&
-      billingAccess.billingActive,
-    blockers: [
-      !managedTextingNumber ? { key: 'texting_line', label: 'Texting line', detail: 'CallbackCloser still needs to provision your business texting line.' } : null,
-      !business.forwardingNumber ? { key: 'routing', label: 'Owner answer number', detail: 'Add the owner or staff number that should receive live forwarded calls.' } : null,
-      !phoneSetupGate.complete ? { key: 'phone_path', label: getBusinessPhoneSetupPathLabel(business.phoneSetupPath), detail: phoneSetupGate.detail } : null,
-      !managedTwilioSummary.onboardingReady
-        ? { key: 'messaging', label: 'Messaging infrastructure', detail: managedTwilioSummary.nextStep }
-        : null,
-      !managedTwilioSummary.complianceReady
-        ? {
-            key: 'compliance',
-            label:
-              managedTwilioSummary.usesSharedPilotMessaging
-                ? 'Pilot sender setup'
-                : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
-                ? 'Toll-free verification'
-                : managedTwilioSummary.complianceTypeUnknown
-                  ? 'Number type'
-                  : 'A2P approval',
-            detail: managedTwilioSummary.description,
-          }
-        : null,
-      !business.notifyPhone || ownerNotifyPhoneOptedOut
-        ? {
-            key: 'owner_alerts',
-            label: 'Owner alerts',
-            detail: !business.notifyPhone
-              ? 'Add the owner mobile number so lead summaries reach the right phone.'
-              : 'The owner alert number is opted out and needs to reply START before go-live.'
-          }
-        : null,
-      !billingAccess.billingActive
-        ? { key: 'billing', label: 'Billing', detail: 'Activate billing so auto-texting can stay live on missed calls.' }
-        : null,
-    ].filter(Boolean) as Array<{ key: string; label: string; detail: string }>,
-  };
+  const [notificationSettings, successfulLeadCount] = demoMode
+    ? [null, 1]
+    : await Promise.all([
+        getBusinessNotificationSettingsForBusiness(business.id),
+        db.lead.count({
+          where: {
+            businessId: business.id,
+            OR: [{ ownerNotifiedAt: { not: null } }, { notifiedAt: { not: null } }],
+          },
+        }),
+      ]);
+
+  const customerFacingNumber = getPublicBusinessPhone(business) || getBusinessRoutingNumber(business);
+  const forwardingNumber = business.forwardingNumber;
+  const ownerAlertDestination = notificationSettings?.ownerPhone || business.notifyPhone || notificationSettings?.ownerEmail || null;
+  const systemStatus = getCustomerSystemStatus(business, successfulLeadCount);
+  const textRepliesReady = systemStatus.key === 'live';
 
   const setupItems = [
     {
-      key: 'routing',
-      label: 'Owner answer number ready',
-      detail: business.forwardingNumber
-        ? `Live calls ring ${formatPhoneForDisplay(business.forwardingNumber)}`
+      key: 'customer-number',
+      label: 'Customer calling number',
+      detail: customerFacingNumber
+        ? `Customers can call ${formatPhoneForDisplay(customerFacingNumber)}.`
+        : 'CallbackCloser is finishing the number customers should call.',
+      complete: Boolean(customerFacingNumber),
+    },
+    {
+      key: 'answer-number',
+      label: 'Team answer number',
+      detail: forwardingNumber
+        ? `Live calls ring ${formatPhoneForDisplay(forwardingNumber)}.`
         : 'Add the owner or staff number your team answers.',
-      complete: Boolean(business.forwardingNumber),
+      complete: Boolean(forwardingNumber),
     },
     {
-      key: 'phone_path',
-      label: getBusinessPhoneSetupPathLabel(business.phoneSetupPath),
-      detail: phoneSetupGate.detail,
-      complete: phoneSetupGate.complete,
+      key: 'text-replies',
+      label: 'Missed-call text replies',
+      detail: textRepliesReady
+        ? 'Missed callers can receive the follow-up text automatically.'
+        : 'CallbackCloser is finishing this before automatic text replies go fully live.',
+      complete: textRepliesReady,
     },
     {
-      key: 'twilio',
-      label: 'CallbackCloser routing number assigned',
-      detail: managedTextingNumber
-        ? `Your CallbackCloser routing number is ${formatPhoneForDisplay(managedTextingNumber)}.`
-        : 'CallbackCloser still needs to provision or map your routing number.',
-      complete: Boolean(managedTextingNumber),
-    },
-    {
-      key: 'messaging',
-      label: 'Messaging infrastructure ready',
-      detail: managedTwilioSummary.onboardingReady
-        ? 'Managed messaging, number assignment, and webhook sync are ready.'
-        : managedTwilioSummary.nextStep,
-      complete: managedTwilioSummary.onboardingReady,
-    },
-    {
-      key: 'compliance',
-      label: managedTwilioSummary.complianceReady
-        ? managedTwilioSummary.usesSharedPilotMessaging
-          ? 'Pilot sender ready'
-          : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
-          ? 'Toll-free verification complete'
-          : 'A2P approved'
-        : managedTwilioSummary.usesSharedPilotMessaging
-          ? 'Pilot sender still needed'
-          : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
-          ? 'Toll-free verification in progress'
-          : managedTwilioSummary.complianceTypeUnknown
-            ? 'Number type still needed'
-            : 'A2P approval in progress',
-      detail: managedTwilioSummary.description,
-      complete: managedTwilioSummary.complianceReady,
-    },
-    {
-      key: 'owner-alert',
-      label: 'Owner notifications ready',
-      detail: business.notifyPhone ? 'Owner notify phone is present for handoff texts.' : 'Add the owner mobile number for lead alerts.',
-      complete: Boolean(business.notifyPhone) && !ownerNotifyPhoneOptedOut,
-    },
-    {
-      key: 'billing',
-      label: 'Billing active',
-      detail: billingAccess.billingActive ? 'Automation can text back on live missed calls.' : 'Activate billing before live SMS follow-up resumes.',
-      complete: billingAccess.billingActive,
-    },
-    {
-      key: 'test',
-      label: 'Successful test lead',
-      detail: successfulLeadCount > 0 ? `${successfulLeadCount} lead${successfulLeadCount === 1 ? '' : 's'} reached owner-alert stage.` : 'Run a missed-call test and verify the owner alert.',
-      complete: successfulLeadCount > 0,
+      key: 'owner-alerts',
+      label: 'Owner alerts',
+      detail: ownerAlertDestination
+        ? `Lead summaries go to ${ownerAlertDestination.startsWith('+') ? formatPhoneForDisplay(ownerAlertDestination) : ownerAlertDestination}.`
+        : 'Add the phone or email that should receive lead summaries.',
+      complete: Boolean(ownerAlertDestination),
     },
   ];
-  const allChecklistComplete = setupItems.every((item) => item.complete);
-  const systemStatus = getCustomerSystemStatus(business, successfulLeadCount);
 
   const flowSteps = [
-      {
-        title: 'A caller reaches your connected business number',
-        detail:
-          business.phoneSetupPath === 'CURRENT_NUMBER_FORWARDING'
-            ? publicBusinessPhone && routingNumber
-              ? `Customers call ${formatPhoneForDisplay(publicBusinessPhone)}, which forwards into ${formatPhoneForDisplay(routingNumber)} so CallbackCloser can catch the missed-call moment.`
-              : phoneSetupGate.detail
-            : managedTextingNumber
-              ? `Calls hit ${formatPhoneForDisplay(managedTextingNumber)} so CallbackCloser can catch the missed-call moment.`
-              : 'CallbackCloser still needs to provision or map the routing number that will cover missed calls.',
+    {
+      title: 'A customer calls',
+      detail: customerFacingNumber
+        ? `They call ${formatPhoneForDisplay(customerFacingNumber)}, the number connected to missed-call recovery.`
+        : 'CallbackCloser will show the connected customer number here once setup is finished.',
     },
     {
-      title: 'CallbackCloser sees the missed call',
-      detail:
-        business.forwardedCallAnswerMode === 'PRESS_1_REQUIRED'
-          ? `Current missed-call timeout is ${business.missedCallSeconds} seconds. Forwarded calls only count as answered after your team presses 1, so voicemail pickups still fall back into recovery.`
-          : `Current missed-call timeout is ${business.missedCallSeconds} seconds before the recovery flow starts.`,
+      title: 'Your team gets the live call',
+      detail: forwardingNumber
+        ? `The call rings ${formatPhoneForDisplay(forwardingNumber)} so your team can answer normally.`
+        : 'Add the phone your team answers so live calls reach the right person.',
     },
-      {
-        title: 'The caller gets a text right away',
-        detail: managedTwilioSummary.complianceReady
-          ? managedTwilioSummary.usesSharedPilotMessaging
-            ? 'Pilot setup sends the conversation from the approved CallbackCloser messaging number while the business keeps its public number live.'
-            : 'The conversation collects the service type, urgency, ZIP, callback timing, and optional name without extra admin work.'
-          : managedTwilioSummary.complianceType === 'TOLL_FREE_VERIFICATION'
-            ? 'The automated SMS handoff stays pending until the managed Twilio setup and toll-free verification are complete.'
-            : managedTwilioSummary.complianceTypeUnknown
-              ? 'The automated SMS handoff stays pending until the number type is selected and messaging compliance is recorded.'
-              : 'The automated SMS handoff stays pending until the managed Twilio setup and A2P approval are complete.',
-      },
     {
-      title: 'You get the handoff ready to call',
-      detail: business.notifyPhone
-        ? `Qualified lead summaries are routed to ${formatPhoneForDisplay(business.notifyPhone)}.`
-        : 'Add an owner mobile number so the summary can be delivered.',
+      title: 'Missed callers get a quick text',
+      detail: 'If the call is missed, CallbackCloser asks what they need, how urgent it is, where they are, and when you should call back.',
+    },
+    {
+      title: 'You get a lead summary',
+      detail: ownerAlertDestination
+        ? `CallbackCloser sends the summary to ${ownerAlertDestination.startsWith('+') ? formatPhoneForDisplay(ownerAlertDestination) : ownerAlertDestination}.`
+        : 'Add an owner alert destination so qualified lead summaries reach you.',
     },
   ];
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Badge variant="outline">Call Flow</Badge>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Call flow and activation</h1>
-          <p className="text-sm text-muted-foreground">
-            This is exactly what happens when a missed call occurs, what is already live, and what still needs attention before a confident first test.
-          </p>
+        <Badge variant="outline">How it works</Badge>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">How missed calls are handled</h1>
+            <p className="max-w-3xl text-sm text-muted-foreground">
+              A simple view of what callers experience, where live calls ring, and where lead summaries are sent.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link className={buttonVariants({ variant: 'outline' })} href="/app/settings">
+              Edit settings
+            </Link>
+            <Link className={buttonVariants({ variant: 'outline' })} href="/app/leads">
+              Open leads
+            </Link>
+          </div>
         </div>
       </div>
 
-      {allChecklistComplete ? (
-        <Card className="border-accent/40 bg-accent/20">
-          <CardHeader>
-            <CardTitle>🎉 Your system is live — run a test call now</CardTitle>
-            <CardDescription>
-              Messaging, compliance, and test-lead handoff are all complete. One more test call is the fastest way to confirm everything still feels right.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            {managedTextingNumber ? (
-              <Link className={buttonVariants()} href={`tel:${managedTextingNumber}`}>
-                Run test call
-              </Link>
-            ) : null}
-            <Link className={buttonVariants({ variant: 'outline' })} href="/app/leads">
-              Open Recovered Leads
-            </Link>
-          </CardContent>
-        </Card>
-      ) : null}
-
       <SetupChecklist
-        title="Activation checklist"
-        description="The fastest path to value is still: get the texting line live, confirm routing, verify owner alerts, then run the missed-call test."
+        title="Missed-call setup"
+        description="The essentials owners need to know: what number callers use, where calls ring, whether texts are active, and where lead summaries go."
         items={setupItems}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <Card className="bg-card/90">
           <CardHeader>
-            <CardTitle>Current call flow</CardTitle>
-            <CardDescription>Business-facing steps from missed call to owner handoff.</CardDescription>
+            <CardTitle>Caller experience</CardTitle>
+            <CardDescription>From incoming call to ready-to-call lead summary.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {flowSteps.map((step, index) => (
@@ -258,38 +150,39 @@ export default async function CallFlowPage() {
 
         <Card className="bg-card/90">
           <CardHeader>
-            <CardTitle>Next activation move</CardTitle>
-            <CardDescription>{systemStatus.description}</CardDescription>
+            <CardTitle>Current numbers</CardTitle>
+            <CardDescription>Use these to confirm the owner-facing call path.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            {readiness.ready ? (
-              <div className="rounded-xl border border-accent/40 bg-accent/20 p-4">
-                Routing, notifications, billing, managed setup, and messaging compliance look ready. Run the missed-call test and confirm the owner alert lands.
-              </div>
-            ) : (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-destructive">
-                <p className="font-medium">Action needed before go-live</p>
-                <p className="mt-1 text-sm text-destructive/80">
-                  {readiness.blockers.length} blocker{readiness.blockers.length === 1 ? '' : 's'} still need attention before the system is operationally ready for live customer messaging.
-                </p>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {readiness.blockers.map((blocker) => (
-                    <li key={blocker.key}>
-                      {blocker.label}: {blocker.detail}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          <CardContent className="space-y-4 text-sm">
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Number customers call</p>
+              <p className="mt-2 text-muted-foreground">{formatMaybePhone(customerFacingNumber, 'Setup in progress')}</p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Number your team answers</p>
+              <p className="mt-2 text-muted-foreground">{formatMaybePhone(forwardingNumber, 'Not saved yet')}</p>
+            </div>
+            <div className="rounded-xl border bg-background/80 p-4">
+              <p className="font-medium">Lead summary destination</p>
+              <p className="mt-2 text-muted-foreground">
+                {ownerAlertDestination
+                  ? ownerAlertDestination.startsWith('+')
+                    ? formatPhoneForDisplay(ownerAlertDestination)
+                    : ownerAlertDestination
+                  : 'Not saved yet'}
+              </p>
+            </div>
             <div className="grid gap-3">
-              <Link className={buttonVariants()} href="/app/settings">
-                Open Business Settings
-              </Link>
-              <Link className={buttonVariants({ variant: 'outline' })} href="/app/leads">
-                Open Recovered Leads
+              {customerFacingNumber ? (
+                <Link className={buttonVariants()} href={`tel:${customerFacingNumber}`}>
+                  Place a test call
+                </Link>
+              ) : null}
+              <Link className={buttonVariants({ variant: 'outline' })} href="/app/settings">
+                Update business settings
               </Link>
               <Link className={buttonVariants({ variant: 'outline' })} href="/app/billing">
-                Open Billing
+                Open billing
               </Link>
             </div>
           </CardContent>
