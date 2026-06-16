@@ -10,8 +10,11 @@ test('founder bulk delete action keeps redirect outside the try/catch and return
   const actions = read('app/admin/actions.ts');
   const adminPage = read('app/admin/page.tsx');
   const deleteActionStart = actions.indexOf('export async function deleteTestBusinessAction');
-  const deleteActionEnd = actions.indexOf('export async function founderDeleteAllBusinessesAction');
+  const deleteActionEnd = actions.indexOf('export async function deleteBusinessPermanentlyAction');
   const deleteActionSection = actions.slice(deleteActionStart, deleteActionEnd);
+  const permanentDeleteActionStart = actions.indexOf('export async function deleteBusinessPermanentlyAction');
+  const permanentDeleteActionEnd = actions.indexOf('export async function founderDeleteAllBusinessesAction');
+  const permanentDeleteActionSection = actions.slice(permanentDeleteActionStart, permanentDeleteActionEnd);
 
   const actionStart = actions.indexOf('export async function founderDeleteAllBusinessesAction');
   const nextActionStart = actions.indexOf('export async function bulkDeleteTestBusinessesAction');
@@ -36,14 +39,28 @@ test('founder bulk delete action keeps redirect outside the try/catch and return
   assert.doesNotMatch(deleteActionSection, /catch \(error\)/);
   assert.match(deleteActionSection, /deletedBusinessName: business\.name/);
 
+  const permanentCatchStart = permanentDeleteActionSection.indexOf('} catch (error) {');
+  const permanentFinalRedirectStart = permanentDeleteActionSection.lastIndexOf('\n\n  redirect(redirectPath);');
+  const permanentCatchSection = permanentDeleteActionSection.slice(permanentCatchStart, permanentFinalRedirectStart);
+  assert.match(actions, /export async function deleteBusinessPermanentlyAction/);
+  assert.match(permanentDeleteActionSection, /const founder = await requireFounderAdmin\(\)/);
+  assert.match(permanentDeleteActionSection, /validatePermanentDeleteConfirmation/);
+  assert.match(permanentDeleteActionSection, /recordBusinessOperatorEvent/);
+  assert.match(permanentDeleteActionSection, /deleteBusinessPermanently/);
+  assert.match(permanentDeleteActionSection, /deletedExternalReview: 1/);
+  assert.notEqual(permanentCatchStart, -1);
+  assert.notEqual(permanentFinalRedirectStart, -1);
+  assert.doesNotMatch(permanentCatchSection, /redirect\(/);
+
   assert.match(adminPage, /admin\.isFounder \?/);
-  assert.match(adminPage, /Delete one test\/demo business/);
-  assert.match(adminPage, /Select a workspace, review whether it is test\/demo or real, then type the exact business name/);
-  assert.match(adminPage, /Archive real customers\. Hard delete test\/demo businesses only/);
+  assert.match(adminPage, /Delete one business permanently/);
+  assert.match(adminPage, /review its owner and status, then complete the required confirmations/);
+  assert.match(adminPage, /Founder-only cleanup\. Archive remains the normal lifecycle control\./);
   assert.match(adminPage, /Advanced founder reset: delete all current businesses/);
   assert.match(adminPage, /founderResetResult === 'deleted'/);
   assert.match(adminPage, /Deleted \{founderResetDeleted\} current/);
   assert.match(adminPage, /founderResetResult === 'noop'/);
   assert.match(adminPage, /No businesses were available for founder reset/);
   assert.match(adminPage, /deletedBusinessName \? `Deleted \$\{deletedBusinessName\} permanently\.`/);
+  assert.match(adminPage, /deletedExternalReview \? \(/);
 });

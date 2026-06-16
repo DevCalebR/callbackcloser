@@ -31,9 +31,15 @@ import {
 } from '@/lib/admin-provisioning';
 import {
   deleteAllBusinessesForFounderReset,
+  deleteBusinessPermanently,
   deleteDeletableTestBusiness,
   FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION,
 } from '@/lib/admin-business-lifecycle';
+import {
+  PERMANENT_DELETE_EXTERNAL_REVIEW_NOTE,
+  requiresRealCustomerDeleteConfirmation,
+  validatePermanentDeleteConfirmation,
+} from '@/lib/admin-business-delete';
 import { buildAdminOnboardingConfidence, canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
 import { buildAdminMissedCallValidationTruth } from '@/lib/admin-operator-proof';
 import { requireAdmin, requireFounderAdmin } from '@/lib/admin';
@@ -2256,6 +2262,86 @@ export async function deleteTestBusinessAction(formData: FormData) {
       `/admin?deleted=1&deletedBusinessName=${encodeURIComponent(business.name)}`
     )
   );
+}
+
+export async function deleteBusinessPermanentlyAction(formData: FormData) {
+  const founder = await requireFounderAdmin();
+
+  const parsed = adminDeleteBusinessSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid permanent delete request.')}`);
+  }
+
+  let redirectPath = '/admin';
+
+  try {
+    const business = await loadBusinessForLifecycleAction(parsed.data.businessId);
+    if (!business) {
+      throw new Error('Business not found.');
+    }
+
+    validatePermanentDeleteConfirmation({
+      business,
+      confirmationName: parsed.data.confirmationName,
+      realCustomerConfirmation: parsed.data.realCustomerConfirmation,
+    });
+
+    await recordBusinessOperatorEvent({
+      businessId: business.id,
+      type: 'admin.business_permanently_deleted',
+      category: 'ADMIN_ACTIONS',
+      status: 'WARNING',
+      summary: 'Business permanently deleted',
+      details: {
+        businessName: business.name,
+        isTestBusiness: business.isTestBusiness,
+        ownerEmail: business.notificationSettings?.ownerEmail || null,
+        archivedAt: business.archivedAt?.toISOString() || null,
+        externalReviewNote: PERMANENT_DELETE_EXTERNAL_REVIEW_NOTE,
+      },
+    });
+
+    const result = await deleteBusinessPermanently({
+      businessId: business.id,
+      confirmationName: parsed.data.confirmationName,
+      realCustomerConfirmation: parsed.data.realCustomerConfirmation,
+    });
+
+    logAuditEvent({
+      event: 'admin_business_permanently_deleted',
+      actorType: 'user',
+      actorId: founder.userId,
+      businessId: business.id,
+      targetType: 'business',
+      targetId: business.id,
+      metadata: {
+        actorEmail: founder.email,
+        businessName: business.name,
+        isTestBusiness: business.isTestBusiness,
+        requiredRealCustomerConfirmation: requiresRealCustomerDeleteConfirmation(business),
+        externalReviewNote: result.externalReviewNote,
+      },
+    });
+
+    revalidatePath('/admin');
+    revalidatePath(`/admin/${business.id}`);
+    revalidatePath(`/admin/${business.id}/workspace`);
+
+    redirectPath = clearBusinessSelectionFromReturnPath(
+      parsed.data.returnTo,
+      {
+        deleted: 1,
+        deletedBusinessName: result.business.name,
+        deletedExternalReview: 1,
+      },
+      `/admin?deleted=1&deletedBusinessName=${encodeURIComponent(result.business.name)}&deletedExternalReview=1`
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to permanently delete this business.';
+    redirectPath = appendParamsToAdminPath(parsed.data.returnTo, { error: message }, `/admin?error=${encodeURIComponent(message)}`);
+  }
+
+  redirect(redirectPath);
 }
 
 export async function founderDeleteAllBusinessesAction(formData: FormData) {

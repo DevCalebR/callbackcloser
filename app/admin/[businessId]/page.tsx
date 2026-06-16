@@ -8,7 +8,7 @@ import {
   connectExistingBusinessOwnerAction,
   createBusinessMessagingServiceAction,
   createBusinessTwilioSubaccountAction,
-  deleteTestBusinessAction,
+  deleteBusinessPermanentlyAction,
   inviteBusinessOwnerAction,
   markBusinessLiveAction,
   provisionBusinessAction,
@@ -20,6 +20,7 @@ import {
   setBusinessProvisioningStatusAction,
 } from '@/app/admin/actions';
 import { AdminBusinessActivityTimeline } from '@/components/admin-business-activity-timeline';
+import { AdminPermanentDeleteBusinessCard } from '@/components/admin-permanent-delete-business-card';
 import { AdminBusinessSetupStepCard } from '@/components/admin-business-setup-step-card';
 import { MessagingComplianceFields } from '@/components/messaging-compliance-fields';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +31,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { buildAdminCustomerOpenHref } from '@/lib/admin-customer-paths';
-import { buildAdminOnboardingConfidence, canDeleteTestBusiness, getDeleteTestBusinessBlockedReason, isBusinessArchived } from '@/lib/admin-dashboard';
+import { buildAdminOnboardingConfidence, isBusinessArchived } from '@/lib/admin-dashboard';
 import { customerSetupStatusLabels, shouldShowCustomerSetupWaitingPage } from '@/lib/customer-setup';
 import { buildAdminMissedCallValidationTruth, buildAdminOperationalProofs } from '@/lib/admin-operator-proof';
 import { buildAdminNextStepGuide, buildAdminSetupPanels } from '@/lib/admin-setup-remediation';
@@ -211,7 +212,7 @@ export default async function AdminBusinessDetailPage({
   params: { businessId: string };
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const [businessRecord, successfulLeadCount, operatorEvents] = await Promise.all([
     db.business.findUnique({
@@ -1346,35 +1347,50 @@ export default async function AdminBusinessDetailPage({
           <CardTitle>Advanced</CardTitle>
           <CardDescription>Destructive or lifecycle controls stay separate from the guided setup flow.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          {isBusinessArchived(business) ? (
-            <form action={restoreBusinessAction}>
-              <input name="businessId" type="hidden" value={business.id} />
-              <input name="confirmationName" type="hidden" value={business.name} />
-              <Button size="sm" type="submit">
-                Restore business
-              </Button>
-            </form>
+        <CardContent className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+          <div className="space-y-3 rounded-xl border bg-background/80 p-4 text-sm">
+            <p className="font-medium text-foreground">Lifecycle controls</p>
+            <p className="text-muted-foreground">
+              Archive remains the normal lifecycle control. Restore re-enables a paused business. Permanent delete is founder-only and requires explicit confirmation.
+            </p>
+
+            {isBusinessArchived(business) ? (
+              <form action={restoreBusinessAction}>
+                <input name="businessId" type="hidden" value={business.id} />
+                <input name="confirmationName" type="hidden" value={business.name} />
+                <Button size="sm" type="submit">
+                  Restore business
+                </Button>
+              </form>
+            ) : (
+              <form action={archiveBusinessAction}>
+                <input name="businessId" type="hidden" value={business.id} />
+                <input name="confirmationName" type="hidden" value={business.name} />
+                <Button size="sm" type="submit" variant="outline">
+                  Archive business
+                </Button>
+              </form>
+            )}
+          </div>
+
+          {admin.isFounder ? (
+            <AdminPermanentDeleteBusinessCard
+              action={deleteBusinessPermanentlyAction}
+              business={{
+                id: business.id,
+                name: business.name,
+                isTestBusiness: business.isTestBusiness,
+                archivedAt: business.archivedAt,
+                ownerClerkId: business.ownerClerkId,
+                ownerEmail: business.notificationSettings?.ownerEmail || null,
+              }}
+              returnTo="/admin"
+            />
           ) : (
-            <form action={archiveBusinessAction}>
-              <input name="businessId" type="hidden" value={business.id} />
-              <input name="confirmationName" type="hidden" value={business.name} />
-              <Button size="sm" type="submit" variant="outline">
-                Archive business
-              </Button>
-            </form>
+            <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+              Permanent delete is founder-only and is intentionally separated from the standard admin setup flow.
+            </div>
           )}
-          {canDeleteTestBusiness(business) ? (
-            <form action={deleteTestBusinessAction}>
-              <input name="businessId" type="hidden" value={business.id} />
-              <input name="confirmationName" type="hidden" value={business.name} />
-              <Button size="sm" type="submit" variant="destructive">
-                Delete test business
-              </Button>
-            </form>
-          ) : business.isTestBusiness ? (
-            <p className="text-sm text-muted-foreground">{getDeleteTestBusinessBlockedReason(business)}</p>
-          ) : null}
         </CardContent>
       </Card>
 

@@ -282,6 +282,7 @@ export const adminArchiveBusinessSchema = z.object({
 export const adminDeleteBusinessSchema = z.object({
   businessId: z.string().min(1),
   confirmationName: z.string().trim().min(1),
+  realCustomerConfirmation: z.string().trim().optional().or(z.literal('')),
   returnTo: z.string().trim().optional().or(z.literal('')),
 });
 

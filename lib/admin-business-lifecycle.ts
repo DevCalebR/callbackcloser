@@ -1,14 +1,32 @@
 import type { Business } from '@prisma/client';
 
+import {
+  PERMANENT_DELETE_EXTERNAL_REVIEW_NOTE,
+  requiresRealCustomerDeleteConfirmation,
+  type PermanentDeleteBusinessCandidate,
+  validatePermanentDeleteConfirmation,
+} from '@/lib/admin-business-delete';
 import { canDeleteTestBusiness, getDeleteTestBusinessBlockedReason } from '@/lib/admin-dashboard';
 import { db } from '@/lib/db';
 
 export const FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION = 'DELETE ALL BUSINESSES';
 
 export type FounderBusinessResetCandidate = Pick<Business, 'id' | 'name' | 'isTestBusiness' | 'archivedAt'>;
-
 function normalizeConfirmation(value: string | null | undefined) {
   return value?.trim().toUpperCase() || '';
+}
+
+function deleteBusinessRecord(businessId: string) {
+  return db.business.delete({
+    where: { id: businessId },
+    select: {
+      id: true,
+      name: true,
+      isTestBusiness: true,
+      archivedAt: true,
+      ownerClerkId: true,
+    },
+  });
 }
 
 export async function listBusinessesForFounderReset(candidateIds?: string[]) {
@@ -96,12 +114,40 @@ export async function deleteDeletableTestBusiness(businessId: string) {
     throw new Error(blockedReason || 'Only archived demo/test businesses can be deleted.');
   }
 
-  return db.business.delete({
-    where: { id: business.id },
+  return deleteBusinessRecord(business.id);
+}
+
+export async function deleteBusinessPermanently(params: {
+  businessId: string;
+  confirmationName: string;
+  realCustomerConfirmation?: string | null;
+}) {
+  const business = await db.business.findUnique({
+    where: { id: params.businessId },
     select: {
       id: true,
       name: true,
       isTestBusiness: true,
+      archivedAt: true,
+      ownerClerkId: true,
     },
   });
+
+  if (!business) {
+    throw new Error('Business not found.');
+  }
+
+  validatePermanentDeleteConfirmation({
+    business,
+    confirmationName: params.confirmationName,
+    realCustomerConfirmation: params.realCustomerConfirmation,
+  });
+
+  const deleted = await deleteBusinessRecord(business.id);
+
+  return {
+    business: deleted,
+    externalReviewNote: PERMANENT_DELETE_EXTERNAL_REVIEW_NOTE,
+    requiredRealCustomerConfirmation: requiresRealCustomerDeleteConfirmation(business),
+  };
 }

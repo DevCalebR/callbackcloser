@@ -15,25 +15,29 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   const adminActions = read('app/admin/actions.ts');
   const businessPicker = read('components/admin-business-picker.tsx');
   const founderDeleteCard = read('components/founder-delete-business-card.tsx');
+  const permanentDeleteCard = read('components/admin-permanent-delete-business-card.tsx');
   const appLayout = read('app/app/layout.tsx');
 
   assert.match(adminHome, /Operator control panel/);
   assert.match(adminHome, /Create new business/);
   assert.match(adminHome, /Create business workspace/);
   assert.match(adminHome, /Advanced founder tools/);
-  assert.match(adminHome, /Delete one test\/demo business/);
+  assert.match(adminHome, /Delete one business permanently/);
   assert.match(adminHome, /Advanced founder reset: delete all current businesses/);
-  assert.match(founderDeleteCard, /Delete this business/);
+  assert.match(founderDeleteCard, /getPermanentDeleteButtonLabel/);
   assert.match(founderDeleteCard, /Type the exact business name/);
+  assert.match(permanentDeleteCard, /getPermanentDeleteButtonLabel/);
+  assert.match(permanentDeleteCard, /REAL_CUSTOMER_DELETE_CONFIRMATION/);
   assert.match(adminHome, /FOUNDER_DELETE_ALL_BUSINESSES_CONFIRMATION/);
   assert.match(adminHome, /Business triage board/);
   assert.match(adminHome, /Current reason/);
   assert.match(adminHome, /Next action/);
   assert.match(adminHome, /Open customer workspace/);
-  assert.match(adminHome, /Delete demo\/test business permanently/);
-  assert.match(adminHome, /Type business name to permanently delete/);
+  assert.match(permanentDeleteCard, /getPermanentDeleteButtonLabel/);
+  assert.match(adminHome, /Manage business/);
   assert.match(adminHome, /Open customer leads/);
   assert.match(adminActions, /export async function founderDeleteAllBusinessesAction/);
+  assert.match(adminActions, /export async function deleteBusinessPermanentlyAction/);
   assert.match(adminActions, /export async function saveAdminTwilioSetupAction/);
   assert.match(adminActions, /export async function saveAdminSetupBasicsAction/);
   assert.match(adminActions, /export async function createBusinessTwilioSubaccountAction/);
@@ -43,6 +47,7 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminActions, /getOptionalTwilioSidError/);
   assert.match(adminActions, /getMessagingComplianceSidValidationError/);
   assert.match(adminActions, /const admin = await requireAdmin\(\)/);
+  assert.match(adminActions, /const founder = await requireFounderAdmin\(\)/);
   assert.match(adminHome, /View support workspace snapshot/);
   assert.match(businessPicker, /Jump to business/);
   assert.match(businessPicker, /Clear selection/);
@@ -58,6 +63,7 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /Mark missed-call flow validated/);
   assert.match(adminDetail, /Mark live with warnings/);
   assert.match(adminDetail, /Advanced/);
+  assert.match(adminDetail, /Permanent delete is founder-only/);
   assert.match(adminDetail, /Invite owner by email/);
   assert.match(adminDetail, /Connect existing owner/);
   assert.match(adminDetail, /Send test SMS/);
@@ -72,8 +78,6 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(adminDetail, /Open customer settings/);
   assert.match(adminDetail, /Open customer call flow/);
   assert.match(adminDetail, /View support workspace snapshot/);
-  assert.match(adminDetail, /canDeleteTestBusiness\(business\)/);
-  assert.match(adminDetail, /getDeleteTestBusinessBlockedReason\(business\)/);
   assert.match(adminHome, /Restore business/);
   assert.match(activityTimeline, /Recent activity/);
   assert.match(activityTimeline, /Show more activity/);
@@ -89,4 +93,5 @@ test('admin routes expose support workspace and safe lifecycle controls', () => 
   assert.match(supportWorkspace, /Customer call flow snapshot/);
   assert.match(appLayout, /Admin customer mode/);
   assert.match(appLayout, /Exit customer mode/);
+  assert.doesNotMatch(adminHome, /Delete demo\/test business permanently[\s\S]*Delete demo\/test business permanently/);
 });
