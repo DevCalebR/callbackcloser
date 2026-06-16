@@ -72,6 +72,8 @@ export function CustomerLeadRow({
   const isOpen = isLeadOpenStatus(lead.status);
   const nextStep = getLeadNextStepLabel(lead.status);
   const activityAt = lead.lastInteractionAt || lead.createdAt;
+  const createdLabel = formatRelativeTime(lead.createdAt);
+  const activityLabel = formatRelativeTime(activityAt);
 
   return (
     <Link
@@ -94,7 +96,8 @@ export function CustomerLeadRow({
             <span>{getServiceLabel(lead)}</span>
             <span>{getUrgencyLabel(lead)}</span>
             <span>{getLocationLabel(lead)}</span>
-            <span>{formatRelativeTime(activityAt)}</span>
+            <span>Created {createdLabel}</span>
+            <span>Last activity {activityLabel}</span>
           </div>
         </div>
 
@@ -108,6 +111,9 @@ export function CustomerLeadRow({
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           <Badge variant={getLeadStatusBadgeVariant(lead.status)}>{leadStatusLabels[lead.status]}</Badge>
           <Badge variant={getReadinessVariant(lead.readiness)}>{leadReadinessLabels[lead.readiness]}</Badge>
+          <span className="rounded-full border px-3 py-1 text-sm font-medium text-foreground transition-colors group-hover:bg-background">
+            Open lead
+          </span>
         </div>
       </div>
     </Link>

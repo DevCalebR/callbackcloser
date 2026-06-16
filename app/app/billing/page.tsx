@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { requireBusiness } from '@/lib/auth';
 import { getBillingUsageSnapshotForBusiness } from '@/lib/business-access';
 import { db } from '@/lib/db';
-import { getManagedTextingNumber } from '@/lib/managed-twilio';
 import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getBillingDisplayLabel } from '@/lib/system-status';
@@ -165,12 +164,13 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const currentPlanLabel = mapPlanLabel(stripeSnapshot?.stripePlanLabel, business.stripePriceId, process.env);
   const billingStatusLabel = getBillingDisplayLabel(business.subscriptionStatus, billingAccess.billingActive);
   const billingNeedsAttention = business.subscriptionStatus === 'PAST_DUE' || business.subscriptionStatus === 'CANCELED' || !subscriptionActive;
+  const hasBusinessTextingNumber = Boolean(business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber);
 
   const summaryItems = [
     { label: 'Current plan', value: currentPlanLabel },
     { label: 'Next charge date', value: stripeSnapshot ? formatDate(stripeSnapshot.nextChargeDate) : 'Shown in Stripe Billing Portal' },
     { label: 'Included usage', value: usage ? `${usage.limit} SMS-qualified conversations / month` : `Unavailable in ${demoModeLabel}` },
-    { label: 'Included number', value: getManagedTextingNumber(business) ? 'One business texting number is included' : 'Included once setup is finished' },
+    { label: 'Included number', value: hasBusinessTextingNumber ? 'One business texting number is included' : 'Included once setup is finished' },
     { label: 'Overage policy', value: 'One business texting number and standard setup are included. Automatic follow-up pauses at the limit until you upgrade.' },
     { label: 'Payment method', value: stripeSnapshot?.paymentMethodLabel || 'Add or update card in Stripe Billing Portal' },
     { label: 'Billing portal', value: business.stripeCustomerId ? 'Available below' : 'Available after your account is ready' },

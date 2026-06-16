@@ -94,27 +94,32 @@ test('business settings schema accepts a blank average job value and rejects inv
   assert.equal(invalid.success, false);
 });
 
-test('customer home dashboard keeps setup state compact and demo actions frontend-only', () => {
+test('customer home dashboard focuses on owner lead follow-up', () => {
   const appHomePage = read('app/app/page.tsx');
   const homeDashboard = read('components/home-dashboard.tsx');
 
-  assert.match(appHomePage, /buildRecoveryMetrics\(allLeads, business\.averageJobValueCents\)/);
-  assert.match(appHomePage, /showSetupChecklist=\{systemStatus\.key !== 'live'\}/);
-  assert.match(appHomePage, /setupHref="\/app\/settings"/);
-  assert.match(appHomePage, /label: 'Phone line connected'/);
-  assert.match(appHomePage, /label: 'Text replies being prepared'/);
-  assert.match(homeDashboard, /Finish setup/);
-  assert.match(homeDashboard, /Review setup/);
+  assert.match(appHomePage, /listAllDashboardLeadsForBusiness\(business\.id\)/);
+  assert.match(appHomePage, /label: 'New leads'/);
+  assert.match(appHomePage, /label: 'Needs follow-up'/);
+  assert.match(appHomePage, /label: 'Booked leads'/);
+  assert.match(appHomePage, /label: 'Missed calls today'/);
+  assert.match(appHomePage, /statusItems=\{getStatusItems\(\{ ownerAlertsReady, systemStatus \}\)\}/);
+  assert.match(homeDashboard, /Missed-call leads/);
+  assert.match(homeDashboard, /Leads needing attention/);
+  assert.match(homeDashboard, /Recent leads/);
+  assert.match(homeDashboard, /System status/);
+  assert.match(homeDashboard, /Call now/);
+  assert.match(homeDashboard, /Mark contacted/);
+  assert.match(homeDashboard, /Mark booked/);
   assert.match(homeDashboard, /Test recovery flow/);
-  assert.match(homeDashboard, /lg:grid-cols-\[minmax\(0,1fr\)_360px\]/);
-  assert.match(homeDashboard, /lg:sticky lg:top-6 lg:self-start/);
+  assert.match(homeDashboard, /xl:grid-cols-\[minmax\(0,1fr\)_340px\]/);
+  assert.match(homeDashboard, /xl:sticky xl:top-6 xl:self-start/);
   assert.match(homeDashboard, /variant="outline"/);
-  assert.match(homeDashboard, /frontend-only demo action/);
-  assert.match(homeDashboard, /do not affect production data/);
   assert.doesNotMatch(homeDashboard, /Run test missed call/);
   assert.doesNotMatch(homeDashboard, /Run demo lead/);
   assert.doesNotMatch(homeDashboard, /Test demo flow/);
   assert.doesNotMatch(homeDashboard, /Finish activation/);
+  assert.doesNotMatch(homeDashboard, /Recovery numbers|AI Summary|command center|Estimated revenue saved/);
   assert.doesNotMatch(appHomePage, /twilio-setup-flow|Texting activation/);
 });
 

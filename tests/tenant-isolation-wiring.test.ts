@@ -26,9 +26,11 @@ test('protected app surfaces use shared tenant-scoped access helpers', () => {
   assert.match(leadsPage, /buildLeadDetailHref/);
   assert.doesNotMatch(leadsPage, /selectedLeadId/);
   assert.match(leadDetailPage, /getLeadDetailForBusiness/);
+  assert.match(leadDetailPage, /notFound\(\)/);
   assert.match(conversationsPage, /listConversationsForBusiness/);
-  assert.match(conversationsPage, /getConversationDetailForBusiness/);
+  assert.doesNotMatch(conversationsPage, /getConversationDetailForBusiness/);
   assert.match(leadActions, /updateLeadStatusForBusiness/);
+  assert.match(leadActions, /requireBusiness/);
   assert.match(settingsPage, /getBusinessNotificationSettingsForBusiness/);
   assert.match(settingsActions, /requireBusiness/);
   assert.match(billingPage, /getBillingUsageSnapshotForBusiness/);

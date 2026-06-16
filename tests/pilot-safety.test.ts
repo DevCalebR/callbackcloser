@@ -13,8 +13,12 @@ test('customer setup pages keep operator setup details out of owner view', () =>
   const settingsPage = read('app/app/settings/page.tsx');
   const callFlowPage = read('app/app/call-flow/page.tsx');
   const homeDashboard = read('components/home-dashboard.tsx');
+  const leadsPage = read('app/app/leads/page.tsx');
+  const leadDetailPage = read('app/app/leads/[leadId]/page.tsx');
+  const conversationsPage = read('app/app/conversations/page.tsx');
+  const billingPage = read('app/app/billing/page.tsx');
   const forbiddenOwnerTerms =
-    /\bTwilio\b|\bA2P\b|toll-free|webhook|subaccount|\bSID\b|Provision routing number|Sync all webhooks|Test SMS|Messaging Service|account mode|admin-assisted|pilot sender|Finish activation|twilio-setup-flow/i;
+    /\bTwilio\b|\bA2P\b|toll-free|webhook|subaccount|\bSID\b|Provision routing number|Sync all webhooks|Test SMS|Messaging Service|account mode|admin-assisted|pilot sender|Finish activation|twilio-setup-flow|operator event|status callback|activation/i;
 
   assert.match(settingsPage, /Business settings/);
   assert.match(settingsPage, /Text replies/);
@@ -23,10 +27,14 @@ test('customer setup pages keep operator setup details out of owner view', () =>
   assert.match(callFlowPage, /How missed calls are handled/);
   assert.match(callFlowPage, /A customer calls/);
   assert.match(callFlowPage, /You get a lead summary/);
-  assert.match(homeDashboard, /Review setup/);
+  assert.match(homeDashboard, /Review settings/);
   assert.doesNotMatch(settingsPage, forbiddenOwnerTerms);
   assert.doesNotMatch(callFlowPage, forbiddenOwnerTerms);
   assert.doesNotMatch(homeDashboard, forbiddenOwnerTerms);
+  assert.doesNotMatch(leadsPage, forbiddenOwnerTerms);
+  assert.doesNotMatch(leadDetailPage, forbiddenOwnerTerms);
+  assert.doesNotMatch(conversationsPage, forbiddenOwnerTerms);
+  assert.doesNotMatch(billingPage, forbiddenOwnerTerms);
 });
 
 test('managed setup handoff replaces the old self-serve onboarding route', () => {
