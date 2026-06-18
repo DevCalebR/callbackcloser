@@ -21,7 +21,7 @@ import {
   smsStateLabels,
 } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { getPortfolioDemoLeadDetail, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getPortfolioDemoLeadDetail, isPortfolioDemoMode, PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE } from '@/lib/portfolio-demo';
 
 function resolveSafeReturnPath(value: string | null | undefined) {
   if (!value) return '/app/leads';
@@ -55,6 +55,7 @@ function LeadStatusActionForm({
   successRedirectTo,
   label,
   variant,
+  disabled = false,
 }: {
   leadId: string;
   status: 'CONTACTED' | 'BOOKED' | 'LOST';
@@ -62,7 +63,16 @@ function LeadStatusActionForm({
   successRedirectTo: string;
   label: string;
   variant?: 'default' | 'outline' | 'destructive';
+  disabled?: boolean;
 }) {
+  if (disabled) {
+    return (
+      <Button className="w-full" disabled title={PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE} type="button" variant={variant}>
+        {label}
+      </Button>
+    );
+  }
+
   return (
     <form action={updateLeadStatusAction}>
       <input type="hidden" name="leadId" value={leadId} />
@@ -126,6 +136,7 @@ export default async function LeadDetailPage({
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead updated.</div> : null}
+      {demoMode ? <div className="rounded-md border bg-muted/40 p-3 text-sm">{PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE}</div> : null}
       {messageIssues.length > 0 ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           This lead had an SMS delivery issue. Manual follow-up is recommended.
@@ -168,6 +179,7 @@ export default async function LeadDetailPage({
                 successRedirectTo={successRedirectTo}
                 label="Mark contacted"
                 variant="outline"
+                disabled={demoMode}
               />
               <LeadStatusActionForm
                 leadId={lead.id}
@@ -175,6 +187,7 @@ export default async function LeadDetailPage({
                 redirectTo={detailRedirectTo}
                 successRedirectTo={successRedirectTo}
                 label="Mark booked"
+                disabled={demoMode}
               />
               <LeadStatusActionForm
                 leadId={lead.id}
@@ -183,6 +196,7 @@ export default async function LeadDetailPage({
                 successRedirectTo={successRedirectTo}
                 label="Mark lost"
                 variant="destructive"
+                disabled={demoMode}
               />
             </div>
           </div>

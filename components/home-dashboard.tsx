@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getLeadStatusBadgeVariant, leadStatusLabels } from '@/lib/lead-presenters';
+import { PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE } from '@/lib/portfolio-demo';
 import { cn } from '@/lib/utils';
 
 type DashboardFeedback = {
@@ -48,13 +49,23 @@ function LeadStatusActionForm({
   redirectTo,
   label,
   variant,
+  disabled = false,
 }: {
   leadId: string;
   status: 'CONTACTED' | 'BOOKED' | 'LOST';
   redirectTo: string;
   label: string;
   variant?: 'default' | 'outline' | 'destructive';
+  disabled?: boolean;
 }) {
+  if (disabled) {
+    return (
+      <Button disabled size="sm" title={PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE} type="button" variant={variant}>
+        {label}
+      </Button>
+    );
+  }
+
   return (
     <form action={updateLeadStatusAction}>
       <input type="hidden" name="leadId" value={leadId} />
@@ -68,7 +79,7 @@ function LeadStatusActionForm({
   );
 }
 
-function LeadAttentionCard({ lead }: { lead: DashboardLeadCard }) {
+function LeadAttentionCard({ isDemoMode, lead }: { isDemoMode: boolean; lead: DashboardLeadCard }) {
   return (
     <Card className="border-primary/15 bg-card/95">
       <CardHeader className="space-y-3">
@@ -100,9 +111,10 @@ function LeadAttentionCard({ lead }: { lead: DashboardLeadCard }) {
           <Link className={buttonVariants({ size: 'sm', variant: 'outline' })} href={lead.leadHref}>
             Open lead
           </Link>
-          <LeadStatusActionForm leadId={lead.id} label="Mark contacted" redirectTo="/app" status="CONTACTED" variant="outline" />
-          <LeadStatusActionForm leadId={lead.id} label="Mark booked" redirectTo="/app" status="BOOKED" />
+          <LeadStatusActionForm disabled={isDemoMode} leadId={lead.id} label="Mark contacted" redirectTo="/app" status="CONTACTED" variant="outline" />
+          <LeadStatusActionForm disabled={isDemoMode} leadId={lead.id} label="Mark booked" redirectTo="/app" status="BOOKED" />
         </div>
+        {isDemoMode ? <p className="text-xs text-muted-foreground">{PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE}</p> : null}
       </CardContent>
     </Card>
   );
@@ -149,6 +161,7 @@ export function HomeDashboard({
     <div className="space-y-6">
       {feedback.error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{feedback.error}</div> : null}
       {feedback.saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Lead updated.</div> : null}
+      {isDemoMode ? <div className="rounded-md border bg-muted/40 p-3 text-sm">{PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE}</div> : null}
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -220,7 +233,7 @@ export function HomeDashboard({
               ) : (
                 <div className="grid gap-4 2xl:grid-cols-2">
                   {attentionLeads.map((lead) => (
-                    <LeadAttentionCard key={lead.id} lead={lead} />
+                    <LeadAttentionCard key={lead.id} isDemoMode={isDemoMode} lead={lead} />
                   ))}
                 </div>
               )}

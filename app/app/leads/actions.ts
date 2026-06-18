@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 
 import { requireBusiness } from '@/lib/auth';
 import { updateLeadStatusForBusiness } from '@/lib/business-access';
+import { isPortfolioDemoMode, PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE } from '@/lib/portfolio-demo';
 import { leadStatusSchema } from '@/lib/validators';
 
 function resolveSafeAppRedirect(value: FormDataEntryValue | null, fallback: string) {
@@ -19,6 +20,10 @@ export async function updateLeadStatusAction(formData: FormData) {
   const fallbackPath = '/app/leads';
   const redirectTo = resolveSafeAppRedirect(formData.get('redirectTo'), fallbackPath);
   const successRedirectTo = resolveSafeAppRedirect(formData.get('successRedirectTo'), redirectTo);
+
+  if (isPortfolioDemoMode()) {
+    redirect(`${redirectTo}${redirectTo.includes('?') ? '&' : '?'}error=${encodeURIComponent(PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE)}`);
+  }
 
   const business = await requireBusiness();
   const parsed = leadStatusSchema.safeParse(Object.fromEntries(formData));

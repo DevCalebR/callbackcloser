@@ -29,6 +29,8 @@ type LeadDetailRecord = Lead & { call: Call | null; messages: Message[]; ownerNo
 const DEMO_USER_ID = 'user_portfolio_demo';
 const DEMO_BUSINESS_ID = 'biz_portfolio_demo';
 
+export const PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE = 'Demo mode only - actions are disabled.';
+
 export function isPortfolioDemoMode() {
   return process.env.PORTFOLIO_DEMO_MODE === '1';
 }

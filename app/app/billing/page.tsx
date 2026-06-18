@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { requireBusiness } from '@/lib/auth';
 import { getBillingUsageSnapshotForBusiness } from '@/lib/business-access';
 import { db } from '@/lib/db';
-import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { getPortfolioDemoBlockedCount, isPortfolioDemoMode, PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getBillingDisplayLabel } from '@/lib/system-status';
 import { getStripe } from '@/lib/stripe';
@@ -212,6 +212,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
       </div>
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
+      {demoMode ? <div className="rounded-md border bg-muted/40 p-3 text-sm">{PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE}</div> : null}
       {requestedPlan ? (
         <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
           Selected plan: <strong>{requestedPlan === 'starter' ? 'Starter' : 'Growth'}</strong>. Continue with the checkout card below.
@@ -250,7 +251,9 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
             <div className="flex flex-wrap gap-3">
               {business.stripeCustomerId ? (
                 <form action="/api/stripe/portal" method="post">
-                  <Button type="submit">Update Payment Method</Button>
+                  <Button disabled={demoMode} title={demoMode ? PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE : undefined} type="submit">
+                    Update Payment Method
+                  </Button>
                 </form>
               ) : (
                 <Link className={buttonVariants()} href="#plan-options">
@@ -332,7 +335,12 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
               <input type="hidden" name="priceId" value={starterPriceId ?? ''} />
-              <Button type="submit" className="w-full" disabled={!starterPriceId}>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={demoMode || !starterPriceId}
+                title={demoMode ? PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE : undefined}
+              >
                 Choose Starter
               </Button>
             </form>
@@ -351,7 +359,12 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
           <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
               <input type="hidden" name="priceId" value={growthPriceId ?? ''} />
-              <Button type="submit" className="w-full" disabled={!growthPriceId}>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={demoMode || !growthPriceId}
+                title={demoMode ? PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE : undefined}
+              >
                 Choose Growth
               </Button>
             </form>
@@ -372,7 +385,13 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
             </Link>
             {business.stripeCustomerId ? (
               <form action="/api/stripe/portal" method="post" className="w-full">
-                <Button type="submit" variant="outline" className="w-full">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  className="w-full"
+                  disabled={demoMode}
+                  title={demoMode ? PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE : undefined}
+                >
                   Open Billing Portal
                 </Button>
               </form>
