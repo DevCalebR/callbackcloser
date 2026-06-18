@@ -25,6 +25,7 @@ import { averageJobValueDollarsToCents } from '@/lib/business-settings';
 import { db } from '@/lib/db';
 import { formatPhoneDetail, maskSid, recordBusinessOperatorEvent } from '@/lib/operator-events';
 import { maskPhoneForAudit, normalizePhoneNumber, normalizePhoneNumberToE164 } from '@/lib/phone';
+import { isPortfolioDemoMode, PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE } from '@/lib/portfolio-demo';
 import {
   getBusinessTwilioSaveErrorMessage,
   getMessagingComplianceSidValidationError,
@@ -87,6 +88,10 @@ function redirectToSettingsError(message: string): never {
 }
 
 export async function saveBusinessSettingsAction(formData: FormData) {
+  if (isPortfolioDemoMode()) {
+    redirect(`/app/settings?error=${encodeURIComponent(PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE)}`);
+  }
+
   const business = await getBusinessForOwner();
   const parsed = businessSettingsSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {

@@ -5,6 +5,7 @@ import { logAuditEvent } from '@/lib/audit-log';
 import { db } from '@/lib/db';
 import { getConfiguredAppBaseUrl } from '@/lib/env.server';
 import { getCorrelationIdFromRequest, reportApplicationError, withCorrelationIdHeader } from '@/lib/observability';
+import { isPortfolioDemoMode, PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE } from '@/lib/portfolio-demo';
 import { isAllowedRequestOrigin } from '@/lib/request-origin';
 import { getStripe } from '@/lib/stripe';
 import { absoluteUrl } from '@/lib/url';
@@ -19,6 +20,12 @@ export async function POST(request: Request) {
   if (process.env.NODE_ENV === 'production' && !isAllowedRequestOrigin(request, getConfiguredAppBaseUrl())) {
     return withCorrelation(NextResponse.json({ error: 'Invalid request origin' }, { status: 403 }));
   }
+  if (isPortfolioDemoMode()) {
+    return withCorrelation(
+      NextResponse.redirect(absoluteUrl(`/app/billing?error=${encodeURIComponent(PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE)}`), { status: 303 })
+    );
+  }
+
   const { userId } = await auth();
   if (!userId) {
     return withCorrelation(NextResponse.redirect(absoluteUrl('/sign-in'), { status: 303 }));

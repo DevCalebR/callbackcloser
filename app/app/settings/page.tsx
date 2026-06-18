@@ -11,7 +11,7 @@ import { getBusinessNotificationSettingsForBusiness } from '@/lib/business-acces
 import { getBusinessRoutingNumber, getPublicBusinessPhone } from '@/lib/business-phone-setup';
 import { db } from '@/lib/db';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { isPortfolioDemoMode } from '@/lib/portfolio-demo';
+import { isPortfolioDemoMode, PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE } from '@/lib/portfolio-demo';
 import { getCustomerSystemStatus } from '@/lib/system-status';
 
 import { saveBusinessSettingsAction } from './actions';
@@ -133,6 +133,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
 
       {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
       {saved ? <div className="rounded-md border border-accent bg-accent/40 p-3 text-sm">Business settings saved.</div> : null}
+      {demoMode ? <div className="rounded-md border bg-muted/40 p-3 text-sm">{PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE}</div> : null}
 
       <section className="grid gap-4 md:grid-cols-3">
         {statusCards.map((item) => (
@@ -157,6 +158,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
         </CardHeader>
         <CardContent>
           <form action={saveBusinessSettingsAction} className="grid gap-4 md:grid-cols-2">
+            <fieldset disabled={demoMode} className="contents">
             <input type="hidden" name="phoneSetupPath" value={business.phoneSetupPath} />
             <input type="hidden" name="forwardedCallAnswerMode" value={business.forwardedCallAnswerMode} />
             <input type="hidden" name="messagingSetupMode" value={business.messagingSetupMode} />
@@ -239,8 +241,11 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Re
               </div>
             </label>
             <div className="md:col-span-2">
-              <Button type="submit">Save settings</Button>
+              <Button disabled={demoMode} title={demoMode ? PORTFOLIO_DEMO_ACTIONS_DISABLED_MESSAGE : undefined} type="submit">
+                Save settings
+              </Button>
             </div>
+            </fieldset>
           </form>
         </CardContent>
       </Card>
