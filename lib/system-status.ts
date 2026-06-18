@@ -55,16 +55,16 @@ export function getCustomerSystemStatus(business: StatusBusiness, successfulLead
       key: 'live' as const,
       label: 'Live',
       badgeVariant: 'success' as const,
-      description: 'Missed-call recovery is compliant, synced, and ready for another test call.',
+      description: 'Missed-call recovery is live and ready for another test call.',
     };
   }
 
   if (managedSummary.onboardingReady || managedSummary.complianceStarted || phoneSetupGate.complete || hasSuccessfulTestLead) {
     return {
       key: 'activating' as const,
-      label: 'Activating',
+      label: 'Setup pending',
       badgeVariant: 'secondary' as const,
-      description: 'Setup is underway. Finish the remaining activation steps to go live.',
+      description: 'CallbackCloser is finishing the remaining setup before missed-call recovery goes live.',
     };
   }
 

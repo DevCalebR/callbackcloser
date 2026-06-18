@@ -1,9 +1,8 @@
 import { LeadReadiness, LeadStatus } from '@prisma/client';
 
-import { HomeDashboard, type DashboardLeadCard } from '@/components/home-dashboard';
+import { HomeDashboard, type DashboardLeadCard, type DashboardStatusItem, type DashboardSummaryCard } from '@/components/home-dashboard';
 import { requireBusiness } from '@/lib/auth';
 import { listAllDashboardLeadsForBusiness } from '@/lib/business-access';
-import { buildRecoveryMetrics } from '@/lib/dashboard-home';
 import { db } from '@/lib/db';
 import { formatRelativeTime, getLeadLastActivityAt, isLeadOpenStatus } from '@/lib/lead-presenters';
 import { formatPhoneForDisplay } from '@/lib/phone';
@@ -12,10 +11,6 @@ import { getCustomerSystemStatus } from '@/lib/system-status';
 
 function buildLeadDetailHref(leadId: string) {
   return `/app/leads/${leadId}?from=%2Fapp`;
-}
-
-function buildConversationHref(leadId: string) {
-  return `/app/conversations?leadId=${leadId}`;
 }
 
 function getAttentionPriority(lead: {
@@ -61,9 +56,9 @@ function getRecommendedNextAction(lead: {
   readiness: LeadReadiness;
   lastInboundAt: Date | null;
 }) {
-  if (lead.status === LeadStatus.BOOKED) return 'Booked. Keep this lead as proof of recovered revenue.';
+  if (lead.status === LeadStatus.BOOKED) return 'Booked.';
   if (lead.status === LeadStatus.LOST) return 'No further action needed unless the customer comes back.';
-  if (lead.status === LeadStatus.CONTACTED) return 'Follow up again and confirm whether the job is booked.';
+  if (lead.status === LeadStatus.CONTACTED) return 'Follow up and mark booked or lost.';
   if (lead.readiness === LeadReadiness.URGENT) return 'Call now.';
   if (lead.status === LeadStatus.NOTIFIED || lead.status === LeadStatus.QUALIFIED) return 'Call now.';
   if (lead.lastInboundAt) return 'Reply by text, then call if the customer is ready.';
@@ -85,38 +80,29 @@ function toLeadCard(
     summary: string | null;
     status: LeadStatus;
     readiness: LeadReadiness;
-    qualifiedAt: Date | null;
-    notifiedAt: Date | null;
-    ownerNotifiedAt: Date | null;
     createdAt: Date;
     lastInteractionAt: Date | null;
     lastInboundAt: Date | null;
+    lastOutboundAt: Date | null;
   },
-  demoMode: boolean,
 ): DashboardLeadCard {
+  const phone = lead.callerPhoneNormalized || lead.callerPhone;
+
   return {
     id: lead.id,
     customerName: getCustomerName(lead),
+    customerPhone: formatPhoneForDisplay(phone),
     serviceNeeded: lead.serviceType || lead.serviceRequested || 'Service needed not captured yet',
     urgencyLabel: lead.urgency || (lead.readiness === LeadReadiness.URGENT ? 'Urgent' : lead.readiness === LeadReadiness.QUALIFIED ? 'Qualified' : 'Needs reply'),
-    locationLabel: lead.location || lead.zipCode || 'Location pending',
-    timeSinceMissedCall: formatRelativeTime(lead.createdAt),
+    createdLabel: formatRelativeTime(lead.createdAt),
+    lastActivityLabel: formatRelativeTime(getLeadLastActivityAt(lead)),
     summary:
       lead.summary ||
-      'CallbackCloser is still collecting the AI summary for this lead. Open the conversation or call back to keep the lead moving.',
+      'CallbackCloser is still collecting the summary for this lead. Open the lead or call back to keep it moving.',
     recommendedNextAction: getRecommendedNextAction(lead),
     status: lead.status,
-    countsAsRecovered:
-      lead.status === LeadStatus.BOOKED ||
-      lead.status === LeadStatus.CONTACTED ||
-      lead.status === LeadStatus.NOTIFIED ||
-      lead.status === LeadStatus.QUALIFIED ||
-      lead.readiness !== LeadReadiness.PENDING ||
-      Boolean(lead.qualifiedAt || lead.notifiedAt || lead.ownerNotifiedAt),
-    callHref: `tel:${lead.callerPhoneNormalized || lead.callerPhone}`,
-    sendTextHref: buildConversationHref(lead.id),
+    callHref: `tel:${phone}`,
     leadHref: buildLeadDetailHref(lead.id),
-    sourceLabel: demoMode ? 'Demo lead' : null,
   };
 }
 
@@ -127,6 +113,38 @@ function getDateKey(value: Date, timeZone: string) {
     month: '2-digit',
     day: '2-digit',
   }).format(value);
+}
+
+function getStatusItems(input: {
+  ownerAlertsReady: boolean;
+  systemStatus: ReturnType<typeof getCustomerSystemStatus>;
+}): DashboardStatusItem[] {
+  return [
+    {
+      label: 'Texting',
+      value: input.systemStatus.key === 'live' ? 'Active' : input.systemStatus.key === 'activating' ? 'Pending' : 'Not live',
+      detail:
+        input.systemStatus.key === 'live'
+          ? 'Missed callers can receive automatic text replies.'
+          : input.systemStatus.description,
+      tone: input.systemStatus.key === 'live' ? 'success' : input.systemStatus.key === 'activating' ? 'secondary' : 'outline',
+    },
+    {
+      label: 'Owner alerts',
+      value: input.ownerAlertsReady ? 'Active' : 'Needs setup',
+      detail: input.ownerAlertsReady ? 'Lead summaries can reach the owner.' : 'Add an owner phone or email in settings.',
+      tone: input.ownerAlertsReady ? 'success' : 'outline',
+    },
+  ];
+}
+
+function isMissedCallToday(
+  lead: unknown,
+  input: { timeZone: string; todayKey: string },
+) {
+  if (!lead || typeof lead !== 'object' || !('call' in lead)) return false;
+  const call = (lead as { call?: { missed: boolean; createdAt: Date } | null }).call;
+  return Boolean(call?.missed && getDateKey(call.createdAt, input.timeZone) === input.todayKey);
 }
 
 export default async function AppHomePage({
@@ -146,7 +164,11 @@ export default async function AppHomePage({
 
   const successfulLeadCount = allLeads.filter((lead) => lead.ownerNotifiedAt || lead.notifiedAt).length;
   const systemStatus = getCustomerSystemStatus(business, successfulLeadCount);
-  const metrics = buildRecoveryMetrics(allLeads, business.averageJobValueCents);
+  const todayKey = getDateKey(new Date(), business.timezone);
+  const missedCallsToday = allLeads.filter((lead) => isMissedCallToday(lead, { timeZone: business.timezone, todayKey })).length;
+  const needsFollowUpCount = allLeads.filter((lead) => isLeadOpenStatus(lead.status)).length;
+  const newLeadCount = allLeads.filter((lead) => lead.status === LeadStatus.NEW).length;
+  const bookedLeadCount = allLeads.filter((lead) => lead.status === LeadStatus.BOOKED).length;
 
   const attentionLeads = allLeads
     .filter((lead) => isLeadOpenStatus(lead.status))
@@ -164,21 +186,14 @@ export default async function AppHomePage({
 
       return rightPriority.activityAt - leftPriority.activityAt;
     })
-    .slice(0, 4)
-    .map((lead) => toLeadCard(lead, demoMode));
+    .slice(0, 6)
+    .map((lead) => toLeadCard(lead));
 
-  const queueAnchor =
-    demoMode && allLeads.length > 0
-      ? new Date(Math.max(...allLeads.map((lead) => lead.createdAt.getTime())))
-      : new Date();
-  const queueDateKey = getDateKey(queueAnchor, business.timezone);
-  const queueLeads = [...allLeads]
-    .filter((lead) => getDateKey(lead.createdAt, business.timezone) === queueDateKey)
+  const recentLeads = [...allLeads]
     .sort((left, right) => getLeadLastActivityAt(right).getTime() - getLeadLastActivityAt(left).getTime())
     .slice(0, 6)
-    .map((lead) => toLeadCard(lead, demoMode));
+    .map((lead) => toLeadCard(lead));
 
-  const phoneLineConnected = Boolean(business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber);
   const ownerAlertsReady = Boolean(
     business.notifyPhone ||
       notificationSettings?.ownerPhone ||
@@ -186,36 +201,30 @@ export default async function AppHomePage({
       (notificationSettings?.notifyEmail && notificationSettings.ownerEmail),
   );
 
-  const setupChecklistItems = [
+  const summaryCards: DashboardSummaryCard[] = [
     {
-      key: 'phone-line',
-      label: 'Phone line connected',
-      detail: phoneLineConnected
-        ? 'Business line ready.'
-        : 'Connect the line that should trigger missed-call recovery.',
-      state: phoneLineConnected ? ('complete' as const) : ('pending' as const),
+      label: 'New leads',
+      value: newLeadCount,
+      detail: 'Missed callers not worked yet.',
+      href: '/app/leads?status=new',
     },
     {
-      key: 'owner-alerts',
-      label: 'Owner alerts ready',
-      detail: ownerAlertsReady
-        ? 'Owner handoff route ready.'
-        : 'Add an owner phone or email for lead handoffs.',
-      state: ownerAlertsReady ? ('complete' as const) : ('pending' as const),
+      label: 'Needs follow-up',
+      value: needsFollowUpCount,
+      detail: 'Open leads that still need action.',
+      href: '/app/leads?view=attention',
     },
     {
-      key: 'texting-activation',
-      label: 'Texting activation in progress',
-      detail:
-        systemStatus.key === 'live'
-          ? 'Texting is live.'
-          : systemStatus.description,
-      state:
-        systemStatus.key === 'live'
-          ? ('complete' as const)
-          : systemStatus.key === 'activating'
-            ? ('in_progress' as const)
-            : ('pending' as const),
+      label: 'Booked leads',
+      value: bookedLeadCount,
+      detail: 'Leads marked booked.',
+      href: '/app/leads?view=booked',
+    },
+    {
+      label: 'Missed calls today',
+      value: missedCallsToday,
+      detail: 'Missed calls captured today.',
+      href: '/app/leads',
     },
   ];
 
@@ -228,14 +237,11 @@ export default async function AppHomePage({
     <HomeDashboard
       attentionLeads={attentionLeads}
       feedback={feedback}
-      finishActivationHref="/app/settings#twilio-setup-flow"
-      hasRealLeadData={allLeads.length > 0}
       isDemoMode={demoMode}
-      metrics={metrics}
-      queueLeads={queueLeads}
-      setupChecklistItems={setupChecklistItems}
-      showSetupChecklist={systemStatus.key !== 'live'}
+      recentLeads={recentLeads}
       simulatorHref="/simulator"
+      statusItems={getStatusItems({ ownerAlertsReady, systemStatus })}
+      summaryCards={summaryCards}
     />
   );
 }

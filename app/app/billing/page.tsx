@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { requireBusiness } from '@/lib/auth';
 import { getBillingUsageSnapshotForBusiness } from '@/lib/business-access';
 import { db } from '@/lib/db';
-import { getManagedTextingNumber } from '@/lib/managed-twilio';
 import { getPortfolioDemoBlockedCount, isPortfolioDemoMode } from '@/lib/portfolio-demo';
 import { getBusinessBillingAccessState } from '@/lib/subscription';
 import { getBillingDisplayLabel } from '@/lib/system-status';
@@ -165,15 +164,16 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
   const currentPlanLabel = mapPlanLabel(stripeSnapshot?.stripePlanLabel, business.stripePriceId, process.env);
   const billingStatusLabel = getBillingDisplayLabel(business.subscriptionStatus, billingAccess.billingActive);
   const billingNeedsAttention = business.subscriptionStatus === 'PAST_DUE' || business.subscriptionStatus === 'CANCELED' || !subscriptionActive;
+  const hasBusinessTextingNumber = Boolean(business.twilioPrimaryPhoneNumber || business.twilioPhoneNumber);
 
   const summaryItems = [
     { label: 'Current plan', value: currentPlanLabel },
     { label: 'Next charge date', value: stripeSnapshot ? formatDate(stripeSnapshot.nextChargeDate) : 'Shown in Stripe Billing Portal' },
     { label: 'Included usage', value: usage ? `${usage.limit} SMS-qualified conversations / month` : `Unavailable in ${demoModeLabel}` },
-    { label: 'Included number', value: getManagedTextingNumber(business) ? 'One business texting number is included' : 'Provisioned during setup' },
-    { label: 'Overage policy', value: 'One business texting number and standard setup are included. Automation pauses at the limit until you upgrade.' },
+    { label: 'Included number', value: hasBusinessTextingNumber ? 'One business texting number is included' : 'Included once setup is finished' },
+    { label: 'Overage policy', value: 'One business texting number and standard setup are included. Automatic follow-up pauses at the limit until you upgrade.' },
     { label: 'Payment method', value: stripeSnapshot?.paymentMethodLabel || 'Add or update card in Stripe Billing Portal' },
-    { label: 'Billing portal', value: business.stripeCustomerId ? 'Available below' : 'Available after customer setup' },
+    { label: 'Billing portal', value: business.stripeCustomerId ? 'Available below' : 'Available after your account is ready' },
   ];
 
   const usageCards = [
@@ -323,11 +323,11 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className={requestedPlan === 'starter' ? 'border-primary/40 bg-primary/5' : 'bg-card/90'}>
           <CardHeader>
             <CardTitle>Starter</CardTitle>
-            <CardDescription>Cover missed calls with one managed texting number, standard setup, and a clean owner handoff.</CardDescription>
+            <CardDescription>Cover missed calls with one business texting number, standard setup, and a clean owner handoff.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>{planPrice(starterPriceId)}</p>
-            <p>Best for smaller service teams that want missed-call coverage live fast without managing line setup.</p>
+            <p>Best for smaller service teams that want missed-call coverage live fast without managing phone setup.</p>
           </CardContent>
           <CardFooter>
             <form action="/api/stripe/checkout" method="post" className="w-full">
@@ -342,7 +342,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
         <Card className={requestedPlan === 'growth' ? 'border-primary/40 bg-primary/5' : 'bg-card/90'}>
           <CardHeader>
             <CardTitle>Growth</CardTitle>
-            <CardDescription>More follow-up capacity plus managed rollout help for teams with busier inbound traffic.</CardDescription>
+            <CardDescription>More follow-up capacity plus guided rollout help for teams with busier inbound traffic.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>{planPrice(growthPriceId)}</p>
@@ -364,7 +364,7 @@ export default async function BillingPage({ searchParams }: { searchParams?: Rec
             <CardDescription>For operators managing multiple brands, multiple locations, extra numbers, or white-glove launches.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>Talk to us before activation so routing, billing, and onboarding structure match the operating model.</p>
+            <p>Talk to us before going live so routing, billing, and onboarding structure match the operating model.</p>
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
             <Link className={buttonVariants({ className: 'w-full' })} href="/contact">

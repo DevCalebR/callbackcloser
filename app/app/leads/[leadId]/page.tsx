@@ -34,7 +34,7 @@ function resolveSafeReturnPath(value: string | null | undefined) {
 
 function getLeadActionSummary(status: LeadStatus) {
   if (isLeadClosedWonStatus(status)) {
-    return 'This lead is marked Closed (Won). Keep the details here for reference.';
+    return 'This lead is marked booked. Keep the details here for reference.';
   }
 
   if (isLeadLostStatus(status)) {
@@ -45,7 +45,7 @@ function getLeadActionSummary(status: LeadStatus) {
     return 'You have already made contact. Update the final outcome when the customer decides.';
   }
 
-  return 'Call this lead back, then mark it Closed (Won) or Lost so your conversion summary stays accurate.';
+  return 'Call this lead back, then mark it contacted, booked, or lost.';
 }
 
 function LeadStatusActionForm({
@@ -113,6 +113,7 @@ export default async function LeadDetailPage({
   const recordingHref = lead.call?.recordingUrl ? `/api/leads/${lead.id}/recording` : null;
   const nextStepLabel = getLeadNextStepLabel(lead.status);
   const isOpenLead = isLeadOpenStatus(lead.status);
+  const createdLabel = formatDateTime(lead.createdAt);
 
   return (
     <div className="space-y-6">
@@ -173,14 +174,14 @@ export default async function LeadDetailPage({
                 status="BOOKED"
                 redirectTo={detailRedirectTo}
                 successRedirectTo={successRedirectTo}
-                label="Mark as Closed (Won)"
+                label="Mark booked"
               />
               <LeadStatusActionForm
                 leadId={lead.id}
                 status="LOST"
                 redirectTo={detailRedirectTo}
                 successRedirectTo={successRedirectTo}
-                label="Mark as Lost"
+                label="Mark lost"
                 variant="destructive"
               />
             </div>
@@ -192,6 +193,7 @@ export default async function LeadDetailPage({
             <p className="mt-2 font-medium">{customerName}</p>
             <p className="mt-2 text-muted-foreground">{customerPhone}</p>
             <p className="mt-2 text-muted-foreground">Created {formatRelativeTime(lead.createdAt)}.</p>
+            <p className="mt-2 text-muted-foreground">{createdLabel}</p>
           </div>
           <div className="rounded-2xl border bg-background/90 p-4 text-sm">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Service</p>
@@ -229,7 +231,7 @@ export default async function LeadDetailPage({
                   className={`rounded-2xl border p-3 text-sm ${message.direction === MessageDirection.OUTBOUND ? 'bg-primary/5' : 'bg-card'}`}
                 >
                   <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <span>{message.direction === MessageDirection.OUTBOUND ? 'CallbackCloser' : 'Lead'}</span>
+                    <span>{message.direction === MessageDirection.OUTBOUND ? 'CallbackCloser' : 'Caller replied'}</span>
                     <div className="flex items-center gap-2">
                       {message.status && message.status.toLowerCase() !== 'delivered' ? (
                         <Badge variant={isMessageDeliveryIssueStatus(message.status) ? 'destructive' : 'outline'}>
