@@ -1,19 +1,21 @@
 import { auth } from '@clerk/nextjs/server';
-import { SignIn } from '@clerk/nextjs';
+import dynamic from 'next/dynamic';
 import { redirect } from 'next/navigation';
 
 import { getAdminSession } from '@/lib/admin';
 import { getBusinessForOwnerClerkId } from '@/lib/business-access';
 import {
-  DEFAULT_CLERK_AFTER_AUTH_URL,
-  DEFAULT_CLERK_SIGN_IN_URL,
-  DEFAULT_CLERK_SIGN_UP_URL,
-  hasRequiredValidClerkEnv,
+  canUseClerkClientComponents,
 } from '@/lib/clerk-config';
 import { resolveSignedInAppDestination } from '@/lib/public-auth-routing';
 
+const ClerkSignInCard = dynamic(
+  () => import('@/components/auth/clerk-sign-in-card').then((module) => module.ClerkSignInCard),
+  { ssr: false }
+);
+
 export default async function SignInPage() {
-  if (!hasRequiredValidClerkEnv()) {
+  if (!canUseClerkClientComponents()) {
     return (
       <main className="container grid min-h-screen gap-8 py-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
         <section className="space-y-4">
@@ -60,12 +62,7 @@ export default async function SignInPage() {
         </p>
       </section>
       <div className="flex justify-center lg:justify-end">
-        <SignIn
-          path={DEFAULT_CLERK_SIGN_IN_URL}
-          routing="path"
-          signUpUrl={DEFAULT_CLERK_SIGN_UP_URL}
-          fallbackRedirectUrl={DEFAULT_CLERK_AFTER_AUTH_URL}
-        />
+        <ClerkSignInCard />
       </div>
     </main>
   );

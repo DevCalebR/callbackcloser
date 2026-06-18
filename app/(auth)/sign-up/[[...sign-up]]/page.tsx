@@ -1,16 +1,18 @@
 import { auth } from '@clerk/nextjs/server';
-import { SignUp } from '@clerk/nextjs';
+import dynamic from 'next/dynamic';
 import { redirect } from 'next/navigation';
 
 import { getAdminSession } from '@/lib/admin';
 import { getBusinessForOwnerClerkId } from '@/lib/business-access';
 import {
-  DEFAULT_CLERK_AFTER_AUTH_URL,
-  DEFAULT_CLERK_SIGN_IN_URL,
-  DEFAULT_CLERK_SIGN_UP_URL,
-  hasRequiredValidClerkEnv,
+  canUseClerkClientComponents,
 } from '@/lib/clerk-config';
 import { resolveSignedInAppDestination } from '@/lib/public-auth-routing';
+
+const ClerkSignUpCard = dynamic(
+  () => import('@/components/auth/clerk-sign-up-card').then((module) => module.ClerkSignUpCard),
+  { ssr: false }
+);
 
 function getIntentCopy(intent: string | undefined) {
   if (intent === 'pilot') {
@@ -35,7 +37,7 @@ export default async function SignUpPage({
 }: {
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  if (!hasRequiredValidClerkEnv()) {
+  if (!canUseClerkClientComponents()) {
     const intent = typeof searchParams?.intent === 'string' ? searchParams.intent : undefined;
     const copy = getIntentCopy(intent);
 
@@ -90,12 +92,7 @@ export default async function SignUpPage({
         </p>
       </section>
       <div className="flex justify-center lg:justify-end">
-        <SignUp
-          path={DEFAULT_CLERK_SIGN_UP_URL}
-          routing="path"
-          signInUrl={DEFAULT_CLERK_SIGN_IN_URL}
-          fallbackRedirectUrl={DEFAULT_CLERK_AFTER_AUTH_URL}
-        />
+        <ClerkSignUpCard />
       </div>
     </main>
   );

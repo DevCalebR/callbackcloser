@@ -50,8 +50,27 @@ export function hasRequiredValidClerkEnv(env: EnvMap = process.env) {
   );
 }
 
+export function canUseClerkClientComponents(env: EnvMap = process.env) {
+  const publishableKey = env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() ?? '';
+  if (!publishableKey || !isLikelyValidClerkPublishableKey(publishableKey)) {
+    return false;
+  }
+
+  // Localhost cannot use the production Clerk frontend API origin, so prefer the
+  // explicit auth-unavailable fallback instead of mounting broken widgets.
+  if (env.NODE_ENV !== 'production' && publishableKey.startsWith('pk_live_')) {
+    return false;
+  }
+
+  return true;
+}
+
 export function resolveClerkPublishableKey(env: EnvMap = process.env) {
   const configured = env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() ?? '';
+  if (configured && !canUseClerkClientComponents(env)) {
+    return CLERK_PREVIEW_FALLBACK_KEY;
+  }
+
   if (configured && isLikelyValidClerkPublishableKey(configured)) {
     return configured;
   }
