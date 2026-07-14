@@ -6,7 +6,7 @@
 
 **A missed-call recovery system that follows up by SMS, qualifies the request, notifies the business, and keeps the complete conversation in an operator dashboard.**
 
-[Try the simulator](https://callbackcloser.com/simulator) · [Review the architecture](docs/ARCHITECTURE.md) · [Work with RelayWorks](https://getrelayworks.com/contact/)
+[Simulator (hosting remediation pending)](https://callbackcloser.com/simulator) · [Review the architecture](docs/ARCHITECTURE.md) · [Work with RelayWorks](https://getrelayworks.com/contact/)
 
 ![Portfolio](https://img.shields.io/badge/portfolio-RelayWorks-126355) ![Next.js](https://img.shields.io/badge/Next.js-14-111820) ![Tests](https://img.shields.io/badge/tests-71%20files-3178C6)
 
@@ -30,7 +30,7 @@ Service businesses often miss calls while a technician is driving, working, or s
 
 ## Screenshots and demo
 
-The public `/simulator` route is the safest evidence path because it does not send real SMS or modify a customer workspace. A verified screenshot set is not committed yet; the required views and redaction rules are in [`docs/DEMO.md`](docs/DEMO.md).
+The `/simulator` route is the safest evidence path because it does not send real SMS or modify a customer workspace. The production URL is currently unavailable while its hosting configuration is remediated; run the simulator locally in the meantime. A verified screenshot set is not committed yet; the required views and redaction rules are in [`docs/DEMO.md`](docs/DEMO.md).
 
 ## Architecture
 
@@ -114,6 +114,8 @@ Provider and database checks are intentionally separate because they require liv
 npm run db:smoke
 npm run preflight:providers
 ```
+
+The full database-backed test path requires a configured PostgreSQL `DATABASE_URL`. Lint and typecheck remain available without a live database.
 
 ## Deployment
 
