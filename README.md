@@ -30,7 +30,13 @@ Service businesses often miss calls while a technician is driving, working, or s
 
 ## Screenshots and demo
 
-The `/simulator` route is the safest evidence path because it does not send real SMS or modify a customer workspace. The production URL is currently unavailable while its hosting configuration is remediated; run the simulator locally in the meantime. A verified screenshot set is not committed yet; the required views and redaction rules are in [`docs/DEMO.md`](docs/DEMO.md).
+The `/simulator` route is the safest evidence path because it does not send real SMS or modify a customer workspace. The production URL is currently unavailable while its hosting configuration is remediated; run the simulator locally in the meantime. These captures use only the repository's isolated simulator and demo fixtures.
+
+| Qualified missed-call flow | Demo owner dashboard |
+| --- | --- |
+| ![Qualified missed-call flow](docs/assets/screenshots/simulator-qualified-lead-desktop.png) | ![CallbackCloser demo dashboard](docs/assets/screenshots/dashboard-demo-desktop.png) |
+
+[View the lead detail](docs/assets/screenshots/lead-detail-demo-desktop.png) and [mobile simulator](docs/assets/screenshots/simulator-qualified-lead-mobile.png). Reproduction and redaction rules are in [`docs/DEMO.md`](docs/DEMO.md).
 
 ## Architecture
 
