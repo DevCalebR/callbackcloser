@@ -1,19 +1,19 @@
-# Demonstration and screenshot plan
+# Demonstration and screenshot inventory
 
 ## Safe demo path
 
 Use `/simulator` for public demonstrations. It provides an isolated preview flow without touching a real customer workspace or sending a real message. Do not use production phone numbers, recordings, or message history in portfolio captures.
 
-## Required captures
+## Verified captures
 
-Capture these only from seeded or synthetic data:
+The committed captures were produced locally from the self-contained simulator and `PORTFOLIO_DEMO_MODE=1` fixtures:
 
-1. `simulator-missed-call.png` — the public missed-call entry state.
-2. `simulator-qualification.png` — the in-progress SMS qualification conversation.
-3. `dashboard-qualified-lead.png` — a protected dashboard view with synthetic identity and phone data.
-4. `lead-conversation.png` — a complete synthetic transcript and outcome controls.
+1. `simulator-qualified-lead-desktop.png` — completed missed-call qualification using a reserved demo phone number.
+2. `simulator-qualified-lead-mobile.png` — the same isolated flow at 390 × 844.
+3. `dashboard-demo-desktop.png` — owner dashboard populated by repository demo fixtures.
+4. `lead-detail-demo-desktop.png` — synthetic lead detail and conversation context.
 
-Use a 1440-pixel desktop viewport for repository images and add one 390-pixel mobile simulator capture. Verify that no Clerk user data, Twilio identifiers, email addresses, phone numbers, account IDs, or browser-extension content is visible.
+Desktop captures use a 1440 × 1000 viewport. No Clerk user data, real Twilio identifiers, account IDs, or browser-extension content is visible. The simulator masks the reserved synthetic phone number.
 
 ## Evidence script
 
