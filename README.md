@@ -6,7 +6,7 @@
 
 **A missed-call recovery system that follows up by SMS, qualifies the request, notifies the business, and keeps the complete conversation in an operator dashboard.**
 
-[Simulator (hosting remediation pending)](https://callbackcloser.com/simulator) · [Review the architecture](docs/ARCHITECTURE.md) · [Work with RelayWorks](https://getrelayworks.com/contact/)
+**Live simulator unavailable while hosting is remediated.** · [Review the architecture](docs/ARCHITECTURE.md) · [Work with RelayWorks](https://getrelayworks.com/contact/)
 
 ![Portfolio](https://img.shields.io/badge/portfolio-RelayWorks-126355) ![Next.js](https://img.shields.io/badge/Next.js-14-111820) ![Tests](https://img.shields.io/badge/tests-71%20files-3178C6)
 
